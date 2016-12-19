@@ -1,0 +1,22 @@
+#include "winver.h"
+#define RT_MANIFEST  24
+#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
+#define IDI_ICON_S 101
+#define IMG_SET 102
+
+IDI_ICON_S       ICON      "itch.ico"
+IMG_SET        BITMAP        "itchio-avatar.png"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST MOVEABLE PURE
+{
+ "<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>"
+ "<assembly xmlns=""urn:schemas-microsoft-com:asm.v1"" manifestVersion=""1.0"">"
+     "<assemblyIdentity version=""1.0.0.0"" processorArchitecture=""*"" name=""itch Setup"" type=""win32""/>"
+     "<description>Installer for the itch desktop application</description>"
+         "<dependency>"
+             "<dependentAssembly>"
+                 "<assemblyIdentity type=""win32"" name=""Microsoft.Windows.Common-Controls"" version=""6.0.0.0"" processorArchitecture=""*"" publicKeyToken=""6595b64144ccf1df"" language=""*""/>"
+             "</dependentAssembly>"
+         "</dependency>"
+ "</assembly>"
+}
