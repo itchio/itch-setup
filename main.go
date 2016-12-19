@@ -138,13 +138,51 @@ func main() {
 									progress = progress + 25
 									if progress > 100 {
 										go func() {
-											dlg, err := walk.NewDialog(mw)
-											if err != nil {
-												panic(err)
-											}
+											var dlg *walk.Dialog
 
-											dlg.SetTitle("Something wrong happened")
-											dlg.Show()
+											res, err := ui.Dialog{
+												Title:    "Something went wrong",
+												MinSize:  ui.Size{Width: 350},
+												Layout:   ui.VBox{},
+												AssignTo: &dlg,
+												Children: []ui.Widget{
+													ui.Composite{
+														Layout: ui.HBox{
+															MarginsZero: true,
+														},
+														Children: []ui.Widget{
+															ui.Label{
+																Text: "This isn't a real installer yet :)",
+															},
+															ui.HSpacer{},
+														},
+													},
+													ui.VSpacer{Size: 10},
+													ui.Composite{
+														Layout: ui.HBox{
+															MarginsZero: true,
+														},
+														Children: []ui.Widget{
+															ui.HSpacer{},
+															ui.PushButton{
+																Text:    "Okay then!",
+																MaxSize: ui.Size{Width: 1},
+																OnClicked: func() {
+																	dlg.Close(0)
+																},
+															},
+															ui.HSpacer{},
+														},
+													},
+												},
+											}.Run(mw)
+
+											if err != nil {
+												log.Printf("Error in dialog: %s\n", err.Error())
+											}
+											log.Printf("Dialog res: %#v\n", res)
+
+											os.Exit(0)
 										}()
 										return
 									}
