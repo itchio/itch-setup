@@ -4,11 +4,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 	"unsafe"
 
+	humanize "github.com/dustin/go-humanize"
+	itchio "github.com/itchio/go-itchio"
+	"github.com/itchio/go-itchio/itchfs"
+	"github.com/itchio/wharf/archiver"
+	"github.com/itchio/wharf/eos"
+	"github.com/itchio/wharf/state"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -52,32 +60,175 @@ func centerWindow(mw *walk.MainWindow) {
 	}
 }
 
+// ItchSetupAPIKey belongs to a custom-made, empty itch.io account
+const ItchSetupAPIKey = "sX3RL0lp73FZjmb19aEVcqHTuSbDuxT7id2QdZ93"
+
 func main() {
-	var outLabel *walk.LineEdit
+	var installDirLabel *walk.LineEdit
 	var pb *walk.ProgressBar
 	var progressLabel *walk.Label
 	var mw *walk.MainWindow
 	var imageView *walk.ImageView
+	var launchAfterSetup *walk.CheckBox
 
-	var progressComposite, optionsComposite *walk.Composite
+	installDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "itch-experimental")
+
+	var progressComposite, optionsComposite, finishComposite *walk.Composite
 
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
 
-		dlg.Title = "Select an install folder"
+		dlg.Title = "Choose where the itch app should be installed"
+		dlg.FilePath = installDir
 
 		if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
 			log.Println(fmt.Sprintf("ShowBrowserFolder error: %s", err.Error()))
 		} else if !ok {
 			// nothing picked
 		} else {
-			outLabel.SetText(dlg.FilePath)
+			installDir = dlg.FilePath
+			installDirLabel.SetText(installDir)
 		}
 	}
 
-	// imageScaleFactor := 0.6
-	// imageWidth := int(1040.0 * imageScaleFactor)
-	// imageHeight := int(673.0 * imageScaleFactor)
+	showError := func(errMsg string) {
+		var dlg *walk.Dialog
+
+		res, err := ui.Dialog{
+			Title:    "Something went wrong",
+			MinSize:  ui.Size{Width: 350},
+			Layout:   ui.VBox{},
+			AssignTo: &dlg,
+			Children: []ui.Widget{
+				ui.Composite{
+					Layout: ui.HBox{
+						MarginsZero: true,
+					},
+					Children: []ui.Widget{
+						ui.Label{
+							Text: errMsg,
+						},
+						ui.HSpacer{},
+					},
+				},
+				ui.VSpacer{Size: 10},
+				ui.Composite{
+					Layout: ui.HBox{
+						MarginsZero: true,
+					},
+					Children: []ui.Widget{
+						ui.HSpacer{},
+						ui.PushButton{
+							Text:    "Okay :(",
+							MaxSize: ui.Size{Width: 1},
+							OnClicked: func() {
+								dlg.Close(0)
+							},
+						},
+						ui.HSpacer{},
+					},
+				},
+			},
+		}.Run(mw)
+
+		if err != nil {
+			log.Printf("Error in dialog: %s\n", err.Error())
+		}
+		log.Printf("Dialog res: %#v\n", res)
+
+		os.Exit(0)
+	}
+
+	install := func() {
+		eos.RegisterHandler(&itchfs.ItchFS{
+			ItchServer: "https://itch.io",
+		})
+
+		// game ID for fasterthanlime/itch
+		const gameID int64 = 107034
+
+		c := itchio.ClientWithKey(ItchSetupAPIKey)
+		uploads, err := c.GameUploads(gameID)
+		if err != nil {
+			showError(err.Error())
+			return
+		}
+
+		var upload *itchio.Upload
+		for _, candidate := range uploads.Uploads {
+			if candidate.ChannelName == "windows-32" {
+				upload = candidate
+				break
+			}
+		}
+
+		if upload == nil {
+			showError("No windows version found")
+			return
+		}
+
+		if upload.Build == nil {
+			showError("Windows version has no build")
+			return
+		}
+
+		progressLabel.SetText(fmt.Sprintf("Downloading v%s", upload.Build.UserVersion))
+		values := url.Values{}
+		values.Set("api_key", c.Key)
+		archiveURL := fmt.Sprintf("itchfs:///upload/%d/download/builds/%d/%s?%s",
+			upload.ID, upload.Build.ID, "archive", values.Encode())
+
+		archive, err := eos.Open(archiveURL)
+		if err != nil {
+			showError(err.Error())
+			return
+		}
+
+		stats, err := archive.Stat()
+		if err != nil {
+			showError(err.Error())
+			return
+		}
+
+		var uncompressedSize int64
+		startTime := time.Now()
+
+		consumer := &state.Consumer{
+			OnProgress: func(progress float64) {
+				percent := int(progress * 100.0)
+				doneSize := int64(float64(uncompressedSize) * progress)
+				secsSinceStart := time.Since(startTime).Seconds()
+				donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
+
+				progressLabel.SetText(fmt.Sprintf("%d%% done - Downloading and installing @ %s/s",
+					percent,
+					humanize.IBytes(uint64(donePerSec)),
+				))
+				pb.SetValue(percent)
+			},
+		}
+
+		progressLabel.SetText(fmt.Sprintf("Should download %s file", humanize.IBytes(uint64(stats.Size()))))
+
+		xSettings := archiver.ExtractSettings{
+			Consumer: consumer,
+			OnUncompressedSizeKnown: func(size int64) {
+				uncompressedSize = size
+			},
+		}
+		xResult, err := archiver.ExtractZip(archive, stats.Size(), installDir, xSettings)
+
+		if err != nil {
+			showError(fmt.Sprintf("Error while installing: %s", err.Error()))
+		}
+
+		progressLabel.SetText(fmt.Sprintf("Extracted %d files, %s total", xResult.Files, humanize.IBytes(uint64(uncompressedSize))))
+
+		time.Sleep(400 * time.Millisecond)
+
+		finishComposite.SetVisible(true)
+		progressComposite.SetVisible(false)
+	}
 
 	imageWidth := 624
 	imageHeight := 404
@@ -85,9 +236,8 @@ func main() {
 	controlsHeight := 120
 
 	windowSize := ui.Size{
-		Width: imageWidth,
-		// Height: imageHeight + controlsHeight,
-		Height: 562,
+		Width:  imageWidth,
+		Height: 562, // found by trial & error
 	}
 
 	err := ui.MainWindow{
@@ -115,8 +265,8 @@ func main() {
 				},
 				Children: []ui.Widget{
 					ui.LineEdit{
-						AssignTo:    &outLabel,
-						Text:        filepath.Join(os.Getenv("LOCALAPPDATA"), "itch"),
+						AssignTo:    &installDirLabel,
+						Text:        installDir,
 						ToolTipText: "Click to change the install location",
 						OnMouseUp: func(x, y int, button walk.MouseButton) {
 							pickInstallLocation()
@@ -129,65 +279,7 @@ func main() {
 							progressComposite.SetVisible(true)
 							optionsComposite.SetVisible(false)
 
-							go func() {
-								progress := 0
-								for {
-									pb.SetValue(progress)
-									progressLabel.SetText(fmt.Sprintf("Progress: %d%%", progress))
-									time.Sleep(300 * time.Millisecond)
-									progress = progress + 25
-									if progress > 100 {
-										go func() {
-											var dlg *walk.Dialog
-
-											res, err := ui.Dialog{
-												Title:    "Something went wrong",
-												MinSize:  ui.Size{Width: 350},
-												Layout:   ui.VBox{},
-												AssignTo: &dlg,
-												Children: []ui.Widget{
-													ui.Composite{
-														Layout: ui.HBox{
-															MarginsZero: true,
-														},
-														Children: []ui.Widget{
-															ui.Label{
-																Text: "This isn't a real installer yet :)",
-															},
-															ui.HSpacer{},
-														},
-													},
-													ui.VSpacer{Size: 10},
-													ui.Composite{
-														Layout: ui.HBox{
-															MarginsZero: true,
-														},
-														Children: []ui.Widget{
-															ui.HSpacer{},
-															ui.PushButton{
-																Text:    "Okay then!",
-																MaxSize: ui.Size{Width: 1},
-																OnClicked: func() {
-																	dlg.Close(0)
-																},
-															},
-															ui.HSpacer{},
-														},
-													},
-												},
-											}.Run(mw)
-
-											if err != nil {
-												log.Printf("Error in dialog: %s\n", err.Error())
-											}
-											log.Printf("Dialog res: %#v\n", res)
-
-											os.Exit(0)
-										}()
-										return
-									}
-								}
-							}()
+							go install()
 						},
 					},
 				},
@@ -215,6 +307,48 @@ func main() {
 				},
 				Visible:  false,
 				AssignTo: &progressComposite,
+			},
+			ui.Composite{
+				MinSize: ui.Size{Height: controlsHeight},
+				Layout: ui.VBox{
+					MarginsZero: true,
+					SpacingZero: true,
+				},
+				Children: []ui.Widget{
+					ui.Label{
+						Text: "The installation completed successfully!",
+					},
+					ui.Composite{
+						MinSize: ui.Size{Height: 60},
+						Layout: ui.HBox{
+							MarginsZero: true,
+						},
+						Children: []ui.Widget{
+							ui.CheckBox{
+								Text:     "Launch the itch app now",
+								Checked:  true,
+								AssignTo: &launchAfterSetup,
+							},
+							ui.PushButton{
+								MaxSize: ui.Size{Width: 1},
+								Text:    "Finish",
+								OnClicked: func() {
+									if launchAfterSetup.Checked() {
+										itchPath := filepath.Join(installDir, "itch.exe")
+										cmd := exec.Command(itchPath)
+										err := cmd.Start()
+										if err != nil {
+											go showError(err.Error())
+										}
+									}
+									os.Exit(0)
+								},
+							},
+						},
+					},
+				},
+				AssignTo: &finishComposite,
+				Visible:  false,
 			},
 		},
 		AssignTo: &mw,

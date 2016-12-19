@@ -3,6 +3,31 @@
 #define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
 #define IDI_ICON_S 101
 
+1 VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "080904E4"
+    BEGIN
+      VALUE "CompanyName", "itch corp."
+      VALUE "FileDescription", "Installer for the itch app"
+      VALUE "FileVersion", "1.0"
+      VALUE "InternalName", "itchSetup"
+      VALUE "LegalCopyright", "itch corp."
+      VALUE "OriginalFilename", "itchSetup.exe"
+      VALUE "ProductName", "itchSetup"
+      VALUE "ProductVersion", "1.0"
+    END
+  END
+
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x809, 1252
+  END
+END
+
 IDI_ICON_S       ICON      "itch.ico"
 
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST MOVEABLE PURE
