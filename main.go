@@ -64,16 +64,16 @@ func centerWindow(mw *walk.MainWindow) {
 const ItchSetupAPIKey = "sX3RL0lp73FZjmb19aEVcqHTuSbDuxT7id2QdZ93"
 
 func main() {
+	var ni *walk.NotifyIcon
 	var installDirLabel *walk.LineEdit
 	var pb *walk.ProgressBar
 	var progressLabel *walk.Label
 	var mw *walk.MainWindow
 	var imageView *walk.ImageView
-	var launchAfterSetup *walk.CheckBox
 
 	installDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "itch-experimental")
 
-	var progressComposite, optionsComposite, finishComposite *walk.Composite
+	var progressComposite, optionsComposite *walk.Composite
 
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
@@ -216,28 +216,34 @@ func main() {
 				uncompressedSize = size
 			},
 		}
-		xResult, err := archiver.ExtractZip(archive, stats.Size(), installDir, xSettings)
-
+		_, err = archiver.ExtractZip(archive, stats.Size(), installDir, xSettings)
 		if err != nil {
 			showError(fmt.Sprintf("Error while installing: %s", err.Error()))
 		}
 
-		progressLabel.SetText(fmt.Sprintf("Extracted %d files, %s total", xResult.Files, humanize.IBytes(uint64(uncompressedSize))))
+		progressLabel.SetText("All done! Launching itch now...")
+		ni.ShowInfo("itch", "The installation went well, itch is now starting up!")
 
-		time.Sleep(400 * time.Millisecond)
+		itchPath := filepath.Join(installDir, "itch.exe")
+		cmd := exec.Command(itchPath)
+		err = cmd.Start()
+		if err != nil {
+			go showError(err.Error())
+		}
 
-		finishComposite.SetVisible(true)
-		progressComposite.SetVisible(false)
+		time.Sleep(2 * time.Second)
+		os.Exit(0)
 	}
 
-	imageWidth := 624
-	imageHeight := 404
+	imageWidth := 622
+	imageHeight := 301
 
 	controlsHeight := 120
+	windowHeight := imageHeight + 158 // found by trial & error
 
 	windowSize := ui.Size{
 		Width:  imageWidth,
-		Height: 562, // found by trial & error
+		Height: windowHeight,
 	}
 
 	err := ui.MainWindow{
@@ -257,31 +263,45 @@ func main() {
 			},
 			ui.Composite{
 				MinSize: ui.Size{Height: controlsHeight},
-				Layout: ui.HBox{
+				Layout: ui.VBox{
 					Margins: ui.Margins{
 						Left:  30,
 						Right: 30,
 					},
 				},
 				Children: []ui.Widget{
-					ui.LineEdit{
-						AssignTo:    &installDirLabel,
-						Text:        installDir,
-						ToolTipText: "Click to change the install location",
-						OnMouseUp: func(x, y int, button walk.MouseButton) {
-							pickInstallLocation()
-						},
+					ui.VSpacer{},
+					ui.Label{
+						Text: "Welcome to the itch installer! Grab a drink, pick an install location and proceed.",
 					},
-					ui.PushButton{
-						MaxSize: ui.Size{Width: 1},
-						Text:    "Install now",
-						OnClicked: func() {
-							progressComposite.SetVisible(true)
-							optionsComposite.SetVisible(false)
+					ui.VSpacer{},
+					ui.Composite{
+						Layout: ui.HBox{
+							MarginsZero: true,
+						},
+						Children: []ui.Widget{
+							ui.LineEdit{
+								AssignTo:    &installDirLabel,
+								Text:        installDir,
+								ReadOnly:    true,
+								ToolTipText: "Click to change the install location",
+								OnMouseUp: func(x, y int, button walk.MouseButton) {
+									pickInstallLocation()
+								},
+							},
+							ui.PushButton{
+								MaxSize: ui.Size{Width: 1},
+								Text:    "Install now",
+								OnClicked: func() {
+									progressComposite.SetVisible(true)
+									optionsComposite.SetVisible(false)
 
-							go install()
+									go install()
+								},
+							},
 						},
 					},
+					ui.VSpacer{},
 				},
 				AssignTo: &optionsComposite,
 			},
@@ -308,48 +328,6 @@ func main() {
 				Visible:  false,
 				AssignTo: &progressComposite,
 			},
-			ui.Composite{
-				MinSize: ui.Size{Height: controlsHeight},
-				Layout: ui.VBox{
-					MarginsZero: true,
-					SpacingZero: true,
-				},
-				Children: []ui.Widget{
-					ui.Label{
-						Text: "The installation completed successfully!",
-					},
-					ui.Composite{
-						MinSize: ui.Size{Height: 60},
-						Layout: ui.HBox{
-							MarginsZero: true,
-						},
-						Children: []ui.Widget{
-							ui.CheckBox{
-								Text:     "Launch the itch app now",
-								Checked:  true,
-								AssignTo: &launchAfterSetup,
-							},
-							ui.PushButton{
-								MaxSize: ui.Size{Width: 1},
-								Text:    "Finish",
-								OnClicked: func() {
-									if launchAfterSetup.Checked() {
-										itchPath := filepath.Join(installDir, "itch.exe")
-										cmd := exec.Command(itchPath)
-										err := cmd.Start()
-										if err != nil {
-											go showError(err.Error())
-										}
-									}
-									os.Exit(0)
-								},
-							},
-						},
-					},
-				},
-				AssignTo: &finishComposite,
-				Visible:  false,
-			},
 		},
 		AssignTo: &mw,
 		OnSizeChanged: func() {
@@ -365,12 +343,28 @@ func main() {
 		log.Fatal(err)
 	}
 
+	ni, err = walk.NewNotifyIcon()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// see itchSetup.rc
 	ic, err := walk.NewIconFromResourceId(101)
 	if err != nil {
 		log.Println("Could not load icon, oh well")
 	} else {
+		ni.SetIcon(ic)
 		mw.SetIcon(ic)
+	}
+
+	err = ni.SetVisible(true)
+	if err != nil {
+		log.Printf("Could not make notifyicon visible: %s", err.Error())
+	}
+
+	err = ni.ShowInfo("Installing itch any time now!", "")
+	if err != nil {
+		log.Printf("Could not make notifyicon show info: %s", err.Error())
 	}
 
 	// thanks, go-bindata!
