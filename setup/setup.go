@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"runtime"
 	"sync"
 	"time"
 
@@ -73,9 +74,22 @@ func (i *Installer) warmUp() error {
 		return fmt.Errorf("While listing uploads: %s", err.Error())
 	}
 
+	var channelName string
+	if runtime.GOOS == "windows" {
+		channelName = "windows-32"
+	} else if runtime.GOOS == "darwin" {
+		channelName = "mac-64"
+	} else {
+		if runtime.GOARCH == "386" {
+			channelName = "linux-32"
+		} else {
+			channelName = "linux-64"
+		}
+	}
+
 	var upload *itchio.Upload
 	for _, candidate := range uploads.Uploads {
-		if candidate.ChannelName == "windows-32" {
+		if candidate.ChannelName == channelName {
 			upload = candidate
 			break
 		}
