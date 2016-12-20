@@ -3,7 +3,7 @@ package main
 /*
 int StartApp(void);
 void SetLabel(char *cString);
-void SetPercent(int percent);
+void SetProgress(int value);
 */
 import "C"
 
@@ -33,7 +33,7 @@ func StartItchSetup() {
 			done <- true
 		},
 		OnProgress: func(progress float64) {
-			C.SetPercent(C.int(progress * 100.0))
+			C.SetProgress(C.int(progress * 1000.0))
 		},
 		OnProgressLabel: func(label string) {
 			C.SetLabel(C.CString(label))

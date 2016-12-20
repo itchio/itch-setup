@@ -103,7 +103,6 @@ func (i *Installer) warmUp() error {
 		return errors.New("Windows version has no build")
 	}
 
-	i.settings.OnProgressLabel(fmt.Sprintf("Downloading v%s", upload.Build.UserVersion))
 	values := url.Values{}
 	values.Set("api_key", c.Key)
 	archiveURL := fmt.Sprintf("itchfs:///upload/%d/download/builds/%d/%s?%s",

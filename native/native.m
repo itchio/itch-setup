@@ -1,7 +1,7 @@
 #import <Cocoa/Cocoa.h>
 
 NSTextField *label;
-NSProgressIndicator *progress;
+NSProgressIndicator *progressIndicator;
 
 extern void StartItchSetup(void);
 
@@ -26,7 +26,7 @@ int StartApp(void) {
 
   int imageWidth = 622;
   int imageHeight = 301;
-  int windowHeight = imageHeight + 200;
+  int windowHeight = imageHeight + 85;
 
   NSWindow* window = [[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, imageWidth, windowHeight)
     styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable) backing:NSBackingStoreBuffered defer:NO]
@@ -35,29 +35,33 @@ int StartApp(void) {
   // main image
   NSImageView *imageView = [[NSImageView new] autorelease];
   NSImage *image = [NSImage imageNamed:@"installer.png"];
+  [image setSize:NSMakeSize(imageWidth, imageHeight)];
   [imageView setImage:image];
   [imageView setFrame:CGRectMake(0,windowHeight-imageHeight,imageWidth,imageHeight)];
   [window.contentView addSubview:imageView];
 
-  int bottomMargin = 20;
+  int bottomMargin = 10;
+  int labelHeight = 28;
+  int indicatorHeight = 40;
 
   // progress bar
-  progress = [[NSProgressIndicator new] autorelease];
+  progressIndicator = [[NSProgressIndicator new] autorelease];
   int progressMargin = 30;
-  [progress setFrame:CGRectMake(progressMargin,bottomMargin+40,imageWidth-progressMargin*2,60)];
-  [progress setIndeterminate:NO];
-  [progress setMinValue:0.0];
-  [progress setMaxValue:100.0];
-  [window.contentView addSubview:progress];
+  [progressIndicator setFrame:CGRectMake(progressMargin,bottomMargin+labelHeight,imageWidth-progressMargin*2,indicatorHeight)];
+  [progressIndicator setIndeterminate:YES];
+  [progressIndicator setMinValue:0.0];
+  [progressIndicator setMaxValue:1000.0];
+  [window.contentView addSubview:progressIndicator];
 
   // progress label
   label = [[NSTextField new] autorelease];
-  [label setFrame:CGRectMake(0,bottomMargin,imageWidth,40)];
+  [label setFrame:CGRectMake(0,bottomMargin,imageWidth,labelHeight)];
   [label setAlignment:NSTextAlignmentCenter];
   [label setBezeled:NO];
   [label setDrawsBackground:NO];
   [label setEditable:NO];
   [label setSelectable:NO];
+  [label setStringValue:@"Warming up..."];
   [window.contentView addSubview:label];
 
   // finish window setup
@@ -81,11 +85,11 @@ void SetLabel(char *cString) {
   });
 }
 
-void SetPercent(int percent) {
+void SetProgress(int progress) {
   dispatch_async(dispatch_get_main_queue(), ^(void) {
-    double dpercent = (double) percent;
-    [progress setDoubleValue:dpercent];
-    [progress display];
+    [progressIndicator setIndeterminate:NO];
+    double doubleValue = (double) progress;
+    [progressIndicator setDoubleValue:doubleValue];
   });
 }
 
