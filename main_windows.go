@@ -251,6 +251,11 @@ func main() {
 		},
 	}.Create()
 
+	// remove maximize button
+	style := win.GetWindowLong(mw.Handle(), win.GWL_STYLE)
+	style &^= win.WS_MAXIMIZEBOX
+	win.SetWindowLong(mw.Handle(), win.GWL_STYLE, style)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -324,5 +329,6 @@ func main() {
 	})
 
 	centerWindow(mw)
+
 	mw.Run()
 }
