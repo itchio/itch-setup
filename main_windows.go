@@ -4,19 +4,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 	"unsafe"
 
-	humanize "github.com/dustin/go-humanize"
-	itchio "github.com/itchio/go-itchio"
-	"github.com/itchio/go-itchio/itchfs"
-	"github.com/itchio/wharf/archiver"
-	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/state"
+	"github.com/fasterthanlime/itchSetup/setup"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -60,20 +54,18 @@ func centerWindow(mw *walk.MainWindow) {
 	}
 }
 
-// ItchSetupAPIKey belongs to a custom-made, empty itch.io account
-const ItchSetupAPIKey = "sX3RL0lp73FZjmb19aEVcqHTuSbDuxT7id2QdZ93"
-
 func main() {
+	var installer *setup.Installer
+
 	var ni *walk.NotifyIcon
 	var installDirLabel *walk.LineEdit
 	var pb *walk.ProgressBar
 	var progressLabel *walk.Label
 	var mw *walk.MainWindow
 	var imageView *walk.ImageView
+	var progressComposite, optionsComposite *walk.Composite
 
 	installDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "itch-experimental")
-
-	var progressComposite, optionsComposite *walk.Composite
 
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
@@ -139,96 +131,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	install := func() {
-		eos.RegisterHandler(&itchfs.ItchFS{
-			ItchServer: "https://itch.io",
-		})
-
-		// game ID for fasterthanlime/itch
-		const gameID int64 = 107034
-
-		c := itchio.ClientWithKey(ItchSetupAPIKey)
-		uploads, err := c.GameUploads(gameID)
-		if err != nil {
-			showError(err.Error())
-			return
-		}
-
-		var upload *itchio.Upload
-		for _, candidate := range uploads.Uploads {
-			if candidate.ChannelName == "windows-32" {
-				upload = candidate
-				break
-			}
-		}
-
-		if upload == nil {
-			showError("No windows version found")
-			return
-		}
-
-		if upload.Build == nil {
-			showError("Windows version has no build")
-			return
-		}
-
-		progressLabel.SetText(fmt.Sprintf("Downloading v%s", upload.Build.UserVersion))
-		values := url.Values{}
-		values.Set("api_key", c.Key)
-		archiveURL := fmt.Sprintf("itchfs:///upload/%d/download/builds/%d/%s?%s",
-			upload.ID, upload.Build.ID, "archive", values.Encode())
-
-		archive, err := eos.Open(archiveURL)
-		if err != nil {
-			showError(err.Error())
-			return
-		}
-
-		stats, err := archive.Stat()
-		if err != nil {
-			showError(err.Error())
-			return
-		}
-
-		var uncompressedSize int64
-		startTime := time.Now()
-
-		consumer := &state.Consumer{
-			OnProgress: func(progress float64) {
-				percent := int(progress * 100.0)
-				doneSize := int64(float64(uncompressedSize) * progress)
-				secsSinceStart := time.Since(startTime).Seconds()
-				donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
-
-				progressLabel.SetText(fmt.Sprintf("%d%% done - Downloading and installing @ %s/s",
-					percent,
-					humanize.IBytes(uint64(donePerSec)),
-				))
-				pb.SetValue(percent)
-			},
-		}
-
-		progressLabel.SetText(fmt.Sprintf("Should download %s file", humanize.IBytes(uint64(stats.Size()))))
-
-		xSettings := archiver.ExtractSettings{
-			Consumer: consumer,
-			OnUncompressedSizeKnown: func(size int64) {
-				uncompressedSize = size
-			},
-		}
-		_, err = archiver.ExtractZip(archive, stats.Size(), installDir, xSettings)
-		if err != nil {
-			showError(fmt.Sprintf("Error while installing: %s", err.Error()))
-		}
-
-		progressLabel.SetText("All done! Launching itch now...")
+	onFinish := func() {
 		ni.ShowInfo("itch", "The installation went well, itch is now starting up!")
 
 		itchPath := filepath.Join(installDir, "itch.exe")
 		cmd := exec.Command(itchPath)
-		err = cmd.Start()
+		err := cmd.Start()
 		if err != nil {
-			go showError(err.Error())
+			showError(err.Error())
 		}
 
 		time.Sleep(2 * time.Second)
@@ -296,7 +206,7 @@ func main() {
 									progressComposite.SetVisible(true)
 									optionsComposite.SetVisible(false)
 
-									go install()
+									installer.Install(installDir)
 								},
 							},
 						},
@@ -316,6 +226,8 @@ func main() {
 				Children: []ui.Widget{
 					ui.VSpacer{},
 					ui.ProgressBar{
+						MinValue: 0,
+						MaxValue: 1000,
 						AssignTo: &pb,
 					},
 					ui.VSpacer{Size: 10},
@@ -362,11 +274,6 @@ func main() {
 		log.Printf("Could not make notifyicon visible: %s", err.Error())
 	}
 
-	err = ni.ShowInfo("Installing itch any time now!", "")
-	if err != nil {
-		log.Printf("Could not make notifyicon show info: %s", err.Error())
-	}
-
 	// thanks, go-bindata!
 	func() {
 		data, err := dataInstallerPngBytes()
@@ -402,6 +309,19 @@ func main() {
 
 		imageView.SetImage(img)
 	}()
+
+	installer = setup.NewInstaller(setup.InstallerSettings{
+		OnError: func(message string) {
+			go showError(message)
+		},
+		OnProgressLabel: func(label string) {
+			progressLabel.SetText(label)
+		},
+		OnProgress: func(progress float64) {
+			pb.SetValue(int(progress * 1000.0))
+		},
+		OnFinish: onFinish,
+	})
 
 	centerWindow(mw)
 	mw.Run()
