@@ -1,0 +1,10 @@
+
+stages:
+  - build
+
+build:linux:amd64:
+  stage: build
+  script:
+    - export CI_ARCH=amd64
+    - scripts/ci-build-linux.sh
+
