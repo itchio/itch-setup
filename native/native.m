@@ -94,10 +94,30 @@ void SetProgress(int progress) {
 }
 
 void Finish() {
+  NSString* bundlePath = @"/Applications/itch.app";
+  NSURL* bundleURL = [NSURL fileURLWithPath:bundlePath];
   NSBundle* bundle = [NSBundle mainBundle];
+
+  SecStaticCodeRef staticCode = NULL;
+
+  OSStatus result = SecStaticCodeCreateWithPath((__bridge CFURLRef)bundleURL, kSecCSDefaultFlags, &staticCode);
+
+  if (result != noErr) {
+    NSLog(@"Failed to get static code for bundle %@", bundleURL);
+    return;
+  }
+
+  CFErrorRef validityError = NULL;
+  result = SecStaticCodeCheckValidityWithErrors(staticCode, kSecCSCheckAllArchitectures, nil, &validityError);
+
+  if (result != noErr) {
+    NSLog(@"Bundle %@ isn't signed/valid: %@", bundleURL, CFErrorCopyDescription(validityError));
+    return;
+  }
+
   NSString* relaunchPath = [bundle pathForResource:@"relaunch" ofType:nil];
 
-  [NSTask launchedTaskWithLaunchPath:relaunchPath arguments:[NSArray arrayWithObjects:[[NSBundle mainBundle] bundlePath], [NSString stringWithFormat:@"%d", [[NSProcessInfo processInfo] processIdentifier]], nil]];
+  [NSTask launchedTaskWithLaunchPath:relaunchPath arguments:[NSArray arrayWithObjects:bundlePath, [NSString stringWithFormat:@"%d", [[NSProcessInfo processInfo] processIdentifier]], nil]];
   [NSApp terminate:nil];
 }
 
