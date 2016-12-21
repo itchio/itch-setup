@@ -11,7 +11,7 @@ void Quit();
 import "C"
 
 import (
-	"github.com/fasterthanlime/itchSetup/setup"
+	"github.com/itchio/itchSetup/setup"
 	"io/ioutil"
 	"log"
 	"os"
