@@ -93,10 +93,9 @@ void SetProgress(int progress) {
   });
 }
 
-void Finish() {
-  NSString* bundlePath = @"/Applications/itch.app";
+char *ValidateBundle(char *cBundlePath) {
+  id bundlePath = [NSString stringWithUTF8String:cBundlePath];
   NSURL* bundleURL = [NSURL fileURLWithPath:bundlePath];
-  NSBundle* bundle = [NSBundle mainBundle];
 
   SecStaticCodeRef staticCode = NULL;
 
@@ -104,7 +103,7 @@ void Finish() {
 
   if (result != noErr) {
     NSLog(@"Failed to get static code for bundle %@", bundleURL);
-    return;
+    return "Failed to get static code for bundle";
   }
 
   CFErrorRef validityError = NULL;
@@ -112,12 +111,22 @@ void Finish() {
 
   if (result != noErr) {
     NSLog(@"Bundle %@ isn't signed/valid: %@", bundleURL, CFErrorCopyDescription(validityError));
-    return;
+    return "Bundle isn't signed/valid";
   }
 
+  return nil;
+}
+
+void Relaunch(char *cBundlePath) {
+  NSBundle *bundle = [NSBundle mainBundle];
   NSString* relaunchPath = [bundle pathForResource:@"relaunch" ofType:nil];
 
+  id bundlePath = [NSString stringWithUTF8String:cBundlePath];
+
   [NSTask launchedTaskWithLaunchPath:relaunchPath arguments:[NSArray arrayWithObjects:bundlePath, [NSString stringWithFormat:@"%d", [[NSProcessInfo processInfo] processIdentifier]], nil]];
+}
+
+void Quit() {
   [NSApp terminate:nil];
 }
 

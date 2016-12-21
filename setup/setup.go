@@ -103,6 +103,8 @@ func (i *Installer) warmUp() error {
 		return errors.New("Windows version has no build")
 	}
 
+	log.Printf("Will install v%s\n", upload.Build.UserVersion)
+
 	values := url.Values{}
 	values.Set("api_key", c.Key)
 	archiveURL := fmt.Sprintf("itchfs:///upload/%d/download/builds/%d/%s?%s",
@@ -159,6 +161,8 @@ func (i *Installer) doInstall(installDir string) error {
 	}
 
 	i.settings.OnProgressLabel("Warming up...")
+
+	log.Printf("Installing to %s\n", installDir)
 
 	xSettings := archiver.ExtractSettings{
 		Consumer: consumer,
