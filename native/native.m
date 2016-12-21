@@ -29,7 +29,7 @@ int StartApp(void) {
   int windowHeight = imageHeight + 85;
 
   NSWindow* window = [[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, imageWidth, windowHeight)
-    styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable) backing:NSBackingStoreBuffered defer:NO]
+    styleMask:(NSTitledWindowMask | NSClosableWindowMask) backing:NSBackingStoreBuffered defer:NO]
     autorelease];
 
   // main image
