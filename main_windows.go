@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/fasterthanlime/itchSetup/setup"
+	"github.com/itchio/itchSetup/setup"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -131,20 +131,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	onFinish := func() {
-		ni.ShowInfo("itch", "The installation went well, itch is now starting up!")
-
-		itchPath := filepath.Join(installDir, "itch.exe")
-		cmd := exec.Command(itchPath)
-		err := cmd.Start()
-		if err != nil {
-			showError(err.Error())
-		}
-
-		time.Sleep(2 * time.Second)
-		os.Exit(0)
-	}
-
 	imageWidth := 622
 	imageHeight := 301
 
@@ -254,6 +240,7 @@ func main() {
 	// remove maximize button
 	style := win.GetWindowLong(mw.Handle(), win.GWL_STYLE)
 	style &^= win.WS_MAXIMIZEBOX
+	// style &^= win.WS_THICKFRAME
 	win.SetWindowLong(mw.Handle(), win.GWL_STYLE, style)
 
 	if err != nil {
@@ -315,6 +302,8 @@ func main() {
 		imageView.SetImage(img)
 	}()
 
+	var source setup.InstallSource
+
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		OnError: func(message string) {
 			go showError(message)
@@ -325,7 +314,27 @@ func main() {
 		OnProgress: func(progress float64) {
 			pb.SetValue(int(progress * 1000.0))
 		},
-		OnFinish: onFinish,
+		OnSource: func(sourceIn setup.InstallSource) {
+			source = sourceIn
+		},
+		OnFinish: func() {
+			err := CreateUninstallRegistryEntry(installDir, "itch", source.Version)
+			if err != nil {
+				log.Printf("While creating registry entry: %s", err.Error())
+			}
+
+			ni.ShowInfo("itch", "The installation went well, itch is now starting up!")
+
+			itchPath := filepath.Join(installDir, "itch.exe")
+			cmd := exec.Command(itchPath)
+			err = cmd.Start()
+			if err != nil {
+				showError(err.Error())
+			}
+
+			time.Sleep(2 * time.Second)
+			os.Exit(0)
+		},
 	})
 
 	centerWindow(mw)

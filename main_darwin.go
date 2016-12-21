@@ -9,7 +9,7 @@ void Finish();
 import "C"
 
 import (
-	"github.com/fasterthanlime/itchSetup/setup"
+	"github.com/itchio/itchSetup/setup"
 )
 
 func main() {

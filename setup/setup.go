@@ -1,7 +1,6 @@
 package setup
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -24,12 +23,14 @@ type ErrorHandler func(message string)
 type ProgressLabelHandler func(label string)
 type ProgressHandler func(progress float64)
 type FinishHandler func()
+type SourceHandler func(source InstallSource)
 
 type InstallerSettings struct {
 	OnError         ErrorHandler
 	OnProgressLabel ProgressLabelHandler
 	OnProgress      ProgressHandler
 	OnFinish        FinishHandler
+	OnSource        SourceHandler
 }
 
 type Installer struct {
@@ -39,7 +40,8 @@ type Installer struct {
 }
 
 type InstallSource struct {
-	archive eos.File
+	Version string
+	Archive eos.File
 }
 
 var once sync.Once
@@ -100,7 +102,7 @@ func (i *Installer) warmUp() error {
 	}
 
 	if upload.Build == nil {
-		return errors.New("Windows version has no build")
+		return fmt.Errorf("%s version has no build", channelName)
 	}
 
 	values := url.Values{}
@@ -113,9 +115,14 @@ func (i *Installer) warmUp() error {
 		return fmt.Errorf("While starting download: %s", err.Error())
 	}
 
-	i.sourceChan <- InstallSource{
-		archive: archive,
+	source := InstallSource{
+		Version: upload.Build.UserVersion,
+		Archive: archive,
 	}
+	if i.settings.OnSource != nil {
+		i.settings.OnSource(source)
+	}
+	i.sourceChan <- source
 	return nil
 }
 
@@ -132,7 +139,7 @@ func (i *Installer) Install(installDir string) {
 
 func (i *Installer) doInstall(installDir string) error {
 	installSource := <-i.sourceChan
-	archive := installSource.archive
+	archive := installSource.Archive
 
 	stats, err := archive.Stat()
 	if err != nil {
