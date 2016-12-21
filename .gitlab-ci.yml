@@ -5,12 +5,16 @@ stages:
 build:linux:amd64:
   stage: build
   script:
+    - export CI_OS=linux
     - export CI_ARCH=amd64
     - scripts/ci-build-linux.sh
+  tags:
+    - dropsy
 
 build:windows:i386:
   stage: build
   script:
+    - export CI_OS=windows
     - export CI_ARCH=i386
     - scripts/ci-build-windows.sh
   tags:
@@ -19,6 +23,7 @@ build:windows:i386:
 build:darwin:amd64:
   stage: build
   script:
+    - export CI_OS=darwin
     - export CI_ARCH=amd64
     - scripts/ci-build-darwin.sh
   tags: 
