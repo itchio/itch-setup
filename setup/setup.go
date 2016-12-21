@@ -96,7 +96,7 @@ func (i *Installer) warmUp() error {
 	}
 
 	if upload == nil {
-		return errors.New("No windows version found")
+		return fmt.Errorf("No %s version found", channelName)
 	}
 
 	if upload.Build == nil {
