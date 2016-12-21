@@ -56,7 +56,7 @@ int StartApp(void) {
   // progress label
   label = [[NSTextField new] autorelease];
   [label setFrame:CGRectMake(0,bottomMargin,imageWidth,labelHeight)];
-  [label setAlignment:NSTextAlignmentCenter];
+  [label setAlignment:NSCenterTextAlignment];
   [label setBezeled:NO];
   [label setDrawsBackground:NO];
   [label setEditable:NO];
