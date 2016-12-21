@@ -93,3 +93,11 @@ void SetProgress(int progress) {
   });
 }
 
+void Finish() {
+  NSBundle* bundle = [NSBundle mainBundle];
+  NSString* relaunchPath = [bundle pathForResource:@"relaunch" ofType:nil];
+
+  [NSTask launchedTaskWithLaunchPath:relaunchPath arguments:[NSArray arrayWithObjects:[[NSBundle mainBundle] bundlePath], [NSString stringWithFormat:@"%d", [[NSProcessInfo processInfo] processIdentifier]], nil]];
+  [NSApp terminate:nil];
+}
+
