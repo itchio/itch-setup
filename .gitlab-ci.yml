@@ -11,11 +11,11 @@ build:linux:amd64:
   tags:
     - dropsy
 
-build:windows:i386:
+build:windows:386:
   stage: build
   script:
     - export CI_OS=windows
-    - export CI_ARCH=i386
+    - export CI_ARCH=386
     - scripts/ci-build-windows.sh
   tags:
     - windows
