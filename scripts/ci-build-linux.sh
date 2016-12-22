@@ -45,5 +45,5 @@ rsync -a --exclude 'src' . src/$PKG || echo "rsync complained (code $?)"
 GOOS=$CI_OS GOARCH=$CI_ARCH go get -v -d -t $PKG
 
 # compile
-gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -tags gtk_3_4 -output="itchSetup" $PKG
+gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -tags gtk_3_14 -output="itchSetup" $PKG
 
