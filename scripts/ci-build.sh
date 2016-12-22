@@ -16,8 +16,19 @@ export CGO_ENABLED=1
 # set up go cross-compile
 go get github.com/mitchellh/gox
 
+if [ "$CI_OS" = "windows" ]; then
+  if [ "$CI_ARCH" = "386" ]; then
+    TRIPLET="i686-w64-mingw32-"
+  else
+    TRIPLET="x86_64-w64-mingw32-"
+  fi
+else
+  TRIPLET=""
+fi
+
 export CC="${TRIPLET}gcc"
 export CXX="${TRIPLET}g++"
+export WINDRES="${TRIPLET}windres"
 
 export CI_VERSION="head"
 export CI_BUILT_AT="$(date +%s)"
@@ -55,13 +66,21 @@ if [ "$CI_OS" = "linux" ]; then
 fi
 
 if [ "$CI_OS" = "windows" ]; then
-  windres -o itchSetup.syso itchSetup.rc
+  $WINDRES -o itchSetup.syso itchSetup.rc
+  file itchSetup.syso
 fi
 
 # compile
 gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -output="itchSetup" $GOX_TAGS $PKG
 
+file itchSetup.exe
+
+EXT=""
+if [ "$CI_OS" = "windows" ]; then
+  EXT=".exe"
+fi
+
 BINARIES=binaries/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
-cp -rf itchSetup $BINARIES/
+cp -rf itchSetup$EXT $BINARIES/
 
