@@ -59,7 +59,7 @@ if [ "$CI_OS" = "windows" ]; then
 fi
 
 # compile
-gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -output="itchSetup" $PKG $GOX_TAGS
+gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -output="itchSetup" $GOX_TAGS $PKG
 
 BINARIES=binaries/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
