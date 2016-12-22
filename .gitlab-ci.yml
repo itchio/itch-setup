@@ -11,6 +11,15 @@ build:linux:386:
   tags:
     - docker-itchsetup-32
 
+build:linux:amd64:
+  stage: build
+  script:
+    - export CI_OS=linux
+    - export CI_ARCH=amd64
+    - scripts/ci-build-linux.sh
+  tags:
+    - docker-itchsetup-64
+
 build:windows:386:
   stage: build
   script:
