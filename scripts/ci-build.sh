@@ -47,6 +47,11 @@ export PKG=github.com/itchio/itchSetup
 
 mkdir -p src/$PKG
 
+if [ "$CI_OS" = "windows" ]; then
+  $WINDRES -o itchSetup.syso itchSetup.rc
+  file itchSetup.syso
+fi
+
 # rsync will complain about vanishing files sometimes, who knows where they come from
 rsync -a --exclude 'src' . src/$PKG || echo "rsync complained (code $?)"
 
@@ -55,11 +60,6 @@ GOOS=$CI_OS GOARCH=$CI_ARCH go get -v -d -t $PKG
 
 if [ "$CI_OS" = "linux" ]; then
   export GO_TAGS="-tags gtk_3_14"
-fi
-
-if [ "$CI_OS" = "windows" ]; then
-  $WINDRES -o itchSetup.syso itchSetup.rc
-  file itchSetup.syso
 fi
 
 export GOOS=$CI_OS
