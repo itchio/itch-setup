@@ -4,6 +4,8 @@
 // data/itch.ico
 // DO NOT EDIT!
 
+// +build windows linux
+
 package main
 
 import (
@@ -84,7 +86,7 @@ func dataInstallerPng() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/installer.png", size: 8618, mode: os.FileMode(438), modTime: time.Unix(1482255261, 0)}
+	info := bindataFileInfo{name: "data/installer.png", size: 8618, mode: os.FileMode(438), modTime: time.Unix(1482433574, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -104,7 +106,7 @@ func dataItchIco() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/itch.ico", size: 12003, mode: os.FileMode(438), modTime: time.Unix(1482359921, 0)}
+	info := bindataFileInfo{name: "data/itch.ico", size: 12003, mode: os.FileMode(438), modTime: time.Unix(1482433574, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
