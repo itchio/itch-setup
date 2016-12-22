@@ -11,7 +11,8 @@ build:linux:386:
   tags:
     - docker-itchsetup-32
   artifacts:
-    - binaries
+    paths:
+      - binaries
 
 build:linux:amd64:
   stage: build
@@ -22,7 +23,8 @@ build:linux:amd64:
   tags:
     - docker-itchsetup-64
   artifacts:
-    - binaries
+    paths:
+      - binaries
 
 build:windows:386:
   stage: build
@@ -33,7 +35,8 @@ build:windows:386:
   tags:
     - windows
   artifacts:
-    - binaries
+    paths:
+      - binaries
 
 build:darwin:amd64:
   stage: build
@@ -44,5 +47,6 @@ build:darwin:amd64:
   tags: 
     - darwin
   artifacts:
-    - binaries
+    paths:
+      - binaries
 
