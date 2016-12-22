@@ -71,12 +71,12 @@ fi
 # compile
 gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -output="itchSetup" $GOX_TAGS $PKG
 
-file itchSetup.exe
-
 EXT=""
 if [ "$CI_OS" = "windows" ]; then
   EXT=".exe"
 fi
+
+file itchSetup$EXT
 
 BINARIES=binaries/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
