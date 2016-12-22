@@ -68,12 +68,11 @@ export GOARCH=$CI_ARCH
 # compile
 go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS $PKG
 
-EXT=""
-if [ "$CI_OS" = "windows" ]; then
-  EXT=".exe"
-fi
-
 file $TARGET
+
+if [ "$CI_OS" = "windows" -o "$CI_OS" = "linux" ]; then
+  upx -1 $TARGET
+fi
 
 BINARIES=binaries/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
