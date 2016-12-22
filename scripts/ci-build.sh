@@ -38,14 +38,12 @@ if [ "$CI_OS" = "windows" ]; then
   export CI_LDFLAGS="$CI_LDFLAGS -H windowsgui"
 fi
 
-TARGET=butler
+TARGET=itchSetup
 if [ "$CI_OS" = "windows" ]; then
   TARGET=$TARGET.exe
-else
-  export PATH=$PATH:/usr/local/go/bin
 fi
 
-export PKG=github.com/itchio/butler
+export PKG=github.com/itchio/itchSetup
 
 mkdir -p src/$PKG
 
@@ -75,9 +73,9 @@ if [ "$CI_OS" = "windows" ]; then
   EXT=".exe"
 fi
 
-file itchSetup$EXT
+file $TARGET
 
 BINARIES=binaries/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
-cp -rf itchSetup$EXT $BINARIES/
+cp -rf $TARGET $BINARIES/
 
