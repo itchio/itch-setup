@@ -2,6 +2,8 @@
 
 echo "Building for linux-$CI_ARCH"
 
+export PATH="$PATH:/usr/local/go/bin"
+
 go version
 
 export CURRENT_BUILD_PATH=$(pwd)
