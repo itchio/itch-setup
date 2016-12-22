@@ -7,34 +7,42 @@ build:linux:386:
   script:
     - export CI_OS=linux
     - export CI_ARCH=386
-    - scripts/ci-build-linux.sh
+    - scripts/ci-build.sh
   tags:
     - docker-itchsetup-32
+  artifacts:
+    - binaries
 
 build:linux:amd64:
   stage: build
   script:
     - export CI_OS=linux
     - export CI_ARCH=amd64
-    - scripts/ci-build-linux.sh
+    - scripts/ci-build.sh
   tags:
     - docker-itchsetup-64
+  artifacts:
+    - binaries
 
 build:windows:386:
   stage: build
   script:
     - export CI_OS=windows
     - export CI_ARCH=386
-    - scripts/ci-build-windows.sh
+    - scripts/ci-build.sh
   tags:
     - windows
+  artifacts:
+    - binaries
 
 build:darwin:amd64:
   stage: build
   script:
     - export CI_OS=darwin
     - export CI_ARCH=amd64
-    - scripts/ci-build-darwin.sh
+    - scripts/ci-build.sh
   tags: 
     - darwin
+  artifacts:
+    - binaries
 

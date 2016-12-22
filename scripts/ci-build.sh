@@ -1,6 +1,10 @@
 #!/bin/sh -xe
 
-echo "Building for windows-$CI_ARCH"
+echo "Building for $CI_OS-$CI_ARCH"
+
+if [ "$CI_OS" = "linux" ]; then
+  export PATH="$PATH:/usr/local/go/bin"
+fi
 
 go version
 
@@ -23,7 +27,11 @@ elif [ "master" != "$CI_BUILD_REF_NAME" ]; then
   export CI_VERSION="$CI_BUILD_REF_NAME"
 fi
 
-export CI_LDFLAGS="-X main.version=$CI_VERSION -X main.builtAt=$CI_BUILT_AT -X main.commit=$CI_BUILD_REF -H windowsgui"
+export CI_LDFLAGS="-X main.version=$CI_VERSION -X main.builtAt=$CI_BUILT_AT -X main.commit=$CI_BUILD_REF"
+
+if [ "$CI_OS" = "windows" ]; then
+  export CI_LDFLAGS="$CI_LDFLAGS -H windowsgui"
+fi
 
 TARGET=butler
 if [ "$CI_OS" = "windows" ]; then
@@ -42,8 +50,18 @@ rsync -a --exclude 'src' . src/$PKG || echo "rsync complained (code $?)"
 # grab deps
 GOOS=$CI_OS GOARCH=$CI_ARCH go get -v -d -t $PKG
 
-# compile
-windres -o itchSetup.syso itchSetup.rc
-gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -output="itchSetup" $PKG
+if [ "$CI_OS" = "linux" ]; then
+  export GOX_TAGS="-tags gtk_3_14"
+fi
 
+if [ "$CI_OS" = "windows" ]; then
+  windres -o itchSetup.syso itchSetup.rc
+fi
+
+# compile
+gox -osarch "$CI_OS/$CI_ARCH" -ldflags "$CI_LDFLAGS" -cgo -output="itchSetup" $PKG $GOX_TAGS
+
+BINARIES=binaries/$CI_OS-$CI_ARCH
+mkdir -p $BINARIES
+cp -rf itchSetup $BINARIES/
 
