@@ -19,6 +19,7 @@ import (
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
+	ps "github.com/mitchellh/go-ps"
 )
 
 func getUserDirectory(csidl win.CSIDL) (string, error) {
@@ -60,15 +61,77 @@ func SetupMain() {
 	log.Println("AppData roam' path: ", roamingPath)
 	log.Println("Desktop path:       ", desktopPath)
 
-	foundMarker, appDirs, err := pokeExecFolder()
-
-	installDir := filepath.Join(localPath, appName)
+	foundMarker, execFolder, appDirs, err := pokeExecFolder()
 
 	if foundMarker {
 		log.Println("Found marker")
 
 		if *uninstall == true {
 			log.Println("Uninstalling app")
+
+			pathsToKill := []string{}
+			for _, appDir := range appDirs {
+				pathsToKill = append(pathsToKill, filepath.Join(appDir, "itch.exe"))
+			}
+
+			pidsToKill := []int{}
+
+			processes, err := ps.Processes()
+			if err != nil {
+				log.Println("While getting process list", err.Error())
+				log.Println("(Note: this just means we won't be able to kill running instances)")
+			} else {
+				for _, process := range processes {
+					func() {
+						handle, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(process.Pid()))
+						if err != nil {
+							log.Printf("Couldn't open process (pid %d): %s", process.Pid(), err.Error())
+						} else {
+							defer syscall.Close(handle)
+							fullName, err := GetModuleFileName(handle)
+							if err != nil {
+								log.Printf("Couldn't get module file name (pid %d): %s", process.Pid(), err.Error())
+							} else {
+								for _, pathToKill := range pathsToKill {
+									if fullName == pathToKill {
+										log.Printf("Should kill %d", process.Pid())
+										pidsToKill = append(pidsToKill, process.Pid())
+									}
+								}
+							}
+						}
+					}()
+				}
+
+				log.Printf("%d processes to kill", len(pidsToKill))
+				for _, pidToKill := range pidsToKill {
+					func() {
+						p, err := os.FindProcess(pidToKill)
+						if err != nil {
+							// oh well
+							log.Printf("PID %d vanished", pidToKill)
+							return
+						}
+
+						log.Printf("Killing %d...", pidToKill)
+
+						// not even going to bother with the error code - if it works, great! if it doesn't, oh well
+						p.Kill()
+					}()
+				}
+			}
+
+			log.Println("Removing marker")
+			err = os.Remove(filepath.Join(execFolder, MarkerName))
+			if err != nil {
+				log.Println("While removing marker", err.Error())
+			}
+
+			log.Println("Removing icon")
+			err = os.Remove(filepath.Join(execFolder, "app.ico"))
+			if err != nil {
+				log.Println("While removing icon", err.Error())
+			}
 
 			log.Println("Removing shortcut...")
 			err = os.Remove(shortcutPath())
@@ -77,11 +140,19 @@ func SetupMain() {
 				log.Println("(Note: shortcut errors aren't critical)")
 			}
 
-			log.Println("Removing full directory...")
-			err = os.RemoveAll(installDir)
-			if err != nil {
-				log.Println("While removing full directory", err.Error())
-				log.Println("(Note: any itchSetup.exe-related errors are expected)")
+			log.Println("Removing all versions...")
+			for _, appDir := range appDirs {
+				tries := 5
+				for i := 0; i < tries; i++ {
+					err = os.RemoveAll(appDir)
+					if err != nil {
+						log.Println("While removing", filepath.Base(appDir), err.Error())
+						log.Println("Sleeping a bit then retrying")
+						time.Sleep(1 * time.Second)
+						continue
+					}
+					break
+				}
 			}
 
 			log.Println("Removing uninstaller entry...")
@@ -122,12 +193,11 @@ func SetupMain() {
 	}
 
 	log.Println("Showing install GUI")
+	installDir := filepath.Join(localPath, appName)
 	showInstallGUI(installDir)
 }
 
-func pokeExecFolder() (foundMarker bool, appDirs []string, err error) {
-	var execFolder string
-
+func pokeExecFolder() (foundMarker bool, execFolder string, appDirs []string, err error) {
 	execFolder, err = osext.ExecutableFolder()
 	if err != nil {
 		return
