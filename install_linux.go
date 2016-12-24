@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/itchio/itchSetup/setup"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/itchio/itchSetup/setup"
 )
 
-func main() {
+func SetupMain() {
 	gtk.Init(nil)
 
 	imageWidth := 622

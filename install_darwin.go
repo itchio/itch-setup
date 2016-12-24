@@ -11,14 +11,15 @@ void Quit();
 import "C"
 
 import (
-	"github.com/itchio/itchSetup/setup"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/itchio/itchSetup/setup"
 )
 
-func main() {
+func SetupMain() {
 	C.StartApp()
 }
 

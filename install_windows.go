@@ -1,16 +1,21 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
+	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/itchio/itchSetup/setup"
+	"github.com/kardianos/osext"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -34,7 +39,7 @@ func loadImage(filePath string) walk.Image {
 	return img
 }
 
-func centerWindow(mw *walk.MainWindow) {
+func centerWindow(mw *walk.FormBase) {
 	// Center window
 	var mi win.MONITORINFO
 	mi.CbSize = uint32(unsafe.Sizeof(mi))
@@ -54,7 +59,146 @@ func centerWindow(mw *walk.MainWindow) {
 	}
 }
 
-func main() {
+func getUserDirectory(csidl win.CSIDL) (string, error) {
+	localPathPtr := make([]uint16, 65536+2)
+	var hwnd win.HWND
+	success := win.SHGetSpecialFolderPath(hwnd, &localPathPtr[0], csidl, true)
+	if !success {
+		return "", errors.New("Could not get folder path")
+	}
+	return syscall.UTF16ToString(localPathPtr), nil
+}
+
+type ShortcutSettings struct {
+	ShortcutFilePath string
+	TargetPath       string
+	Description      string
+	IconLocation     string
+	WorkingDirectory string
+}
+
+const windowsShortcutContent = `
+	set WshShell = WScript.CreateObject("WScript.Shell")
+	set shellLink = WshShell.CreateShortcut("%v")
+	shellLink.TargetPath = "%v"
+	shellLink.Description = "%v"
+	shellLink.IconLocation = "%v"
+	shellLink.WorkingDirectory = "%v"
+	shellLink.Save`
+
+func createShortcut(settings ShortcutSettings) error {
+	shortcutScript := fmt.Sprintf(windowsShortcutContent,
+		settings.ShortcutFilePath,
+		settings.TargetPath,
+		settings.Description,
+		settings.IconLocation,
+		settings.WorkingDirectory)
+
+	tmpDir, err := ioutil.TempDir("", "itchSetupShortcut")
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(tmpDir, 0755)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpPath := filepath.Join(tmpDir, "makeShortcut.vbs")
+	err = ioutil.WriteFile(tmpPath, []byte(shortcutScript), 0644)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("wscript", "/b", "/nologo", tmpPath)
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SetupMain() {
+	localPath, err := getUserDirectory(win.CSIDL_LOCAL_APPDATA)
+	if err != nil {
+		showError(err.Error(), nil)
+		os.Exit(1)
+	}
+
+	roamingPath, err := getUserDirectory(win.CSIDL_APPDATA)
+	if err != nil {
+		showError(err.Error(), nil)
+		os.Exit(1)
+	}
+
+	desktopPath, err := getUserDirectory(win.CSIDL_DESKTOP)
+	if err != nil {
+		showError(err.Error(), nil)
+		os.Exit(1)
+	}
+
+	log.Println("AppData local path: ", localPath)
+	log.Println("AppData roam' path: ", roamingPath)
+	log.Println("Desktop path:       ", desktopPath)
+
+	if *processStart != "" {
+		log.Println("Should start itch, looking for versions")
+
+		execFolder, err := osext.ExecutableFolder()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		entries, err := ioutil.ReadDir(execFolder)
+		if err != nil {
+			log.Printf("")
+		}
+
+		dirs := []string{}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				log.Println("Skipping non-dir", entry.Name())
+			}
+
+			log.Println("Found dir", entry.Name())
+			dirs = append(dirs, entry.Name())
+		}
+
+		sort.Strings(dirs)
+		log.Printf("Sorted dir entries:\n%s", strings.Join(dirs, "\n"))
+
+		if len(dirs) > 0 {
+			first := dirs[0]
+			cmd := exec.Command(first)
+			cmd.Run()
+
+			log.Printf("App quit")
+			os.Exit(0)
+		}
+	}
+
+	installDir := filepath.Join(localPath, "itch")
+
+	err = createShortcut(ShortcutSettings{
+		ShortcutFilePath: filepath.Join(desktopPath, "itch.lnk"),
+		TargetPath:       filepath.Join(installDir, "itchSetup.exe") + " --processStart",
+		Description:      "The best way to play your itch.io games",
+		IconLocation:     filepath.Join(installDir, "app.ico"),
+		WorkingDirectory: filepath.Join(installDir),
+	})
+	if err != nil {
+		log.Println("While creating shortcut", err)
+		showError(err.Error(), nil)
+		os.Exit(1)
+	}
+
+	install(installDir)
+}
+
+func install(installDirIn string) {
 	var installer *setup.Installer
 
 	var ni *walk.NotifyIcon
@@ -65,7 +209,7 @@ func main() {
 	var imageView *walk.ImageView
 	var progressComposite, optionsComposite *walk.Composite
 
-	installDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "itch-experimental")
+	installDir := installDirIn
 
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
@@ -81,54 +225,6 @@ func main() {
 			installDir = dlg.FilePath
 			installDirLabel.SetText(installDir)
 		}
-	}
-
-	showError := func(errMsg string) {
-		var dlg *walk.Dialog
-
-		res, err := ui.Dialog{
-			Title:    "Something went wrong",
-			MinSize:  ui.Size{Width: 350},
-			Layout:   ui.VBox{},
-			AssignTo: &dlg,
-			Children: []ui.Widget{
-				ui.Composite{
-					Layout: ui.HBox{
-						MarginsZero: true,
-					},
-					Children: []ui.Widget{
-						ui.Label{
-							Text: errMsg,
-						},
-						ui.HSpacer{},
-					},
-				},
-				ui.VSpacer{Size: 10},
-				ui.Composite{
-					Layout: ui.HBox{
-						MarginsZero: true,
-					},
-					Children: []ui.Widget{
-						ui.HSpacer{},
-						ui.PushButton{
-							Text:    "Okay :(",
-							MaxSize: ui.Size{Width: 1},
-							OnClicked: func() {
-								dlg.Close(0)
-							},
-						},
-						ui.HSpacer{},
-					},
-				},
-			},
-		}.Run(mw)
-
-		if err != nil {
-			log.Printf("Error in dialog: %s\n", err.Error())
-		}
-		log.Printf("Dialog res: %#v\n", res)
-
-		os.Exit(0)
 	}
 
 	imageWidth := 622
@@ -306,7 +402,7 @@ func main() {
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		OnError: func(message string) {
-			go showError(message)
+			go showError(message, mw)
 		},
 		OnProgressLabel: func(label string) {
 			progressLabel.SetText(label)
@@ -329,7 +425,7 @@ func main() {
 			cmd := exec.Command(itchPath)
 			err = cmd.Start()
 			if err != nil {
-				showError(err.Error())
+				showError(err.Error(), mw)
 			}
 
 			time.Sleep(2 * time.Second)
@@ -337,7 +433,57 @@ func main() {
 		},
 	})
 
-	centerWindow(mw)
+	centerWindow(mw.AsFormBase())
 
 	mw.Run()
+}
+
+func showError(errMsg string, mw *walk.MainWindow) {
+	var dlg *walk.Dialog
+
+	res, err := ui.Dialog{
+		Title:    "Something went wrong",
+		MinSize:  ui.Size{Width: 350},
+		Layout:   ui.VBox{},
+		AssignTo: &dlg,
+		Children: []ui.Widget{
+			ui.Composite{
+				Layout: ui.HBox{
+					MarginsZero: true,
+				},
+				Children: []ui.Widget{
+					ui.Label{
+						Text: errMsg,
+					},
+					ui.HSpacer{},
+				},
+			},
+			ui.VSpacer{Size: 10},
+			ui.Composite{
+				Layout: ui.HBox{
+					MarginsZero: true,
+				},
+				Children: []ui.Widget{
+					ui.HSpacer{},
+					ui.PushButton{
+						Text:    "Okay :(",
+						MaxSize: ui.Size{Width: 1},
+						OnClicked: func() {
+							dlg.Close(0)
+						},
+					},
+					ui.HSpacer{},
+				},
+			},
+		},
+	}.Run(mw)
+
+	centerWindow(dlg.AsFormBase())
+
+	if err != nil {
+		log.Printf("Error in dialog: %s\n", err.Error())
+	}
+	log.Printf("Dialog res: %#v\n", res)
+
+	os.Exit(0)
 }
