@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -112,13 +113,26 @@ func (i *Installer) warmUp() error {
 	archiveURL := fmt.Sprintf("itchfs:///upload/%d/download/builds/%d/%s?%s",
 		upload.ID, upload.Build.ID, "archive", values.Encode())
 
+	version := upload.Build.UserVersion
+	envVersion := os.Getenv("ITCHSETUP_VERSION")
+	if envVersion != "" {
+		log.Printf("Version overriden by environment: %s", envVersion)
+		version = envVersion
+	}
+
+	envArchive := os.Getenv("ITCHSETUP_ARCHIVE_URL")
+	if envArchive != "" {
+		log.Printf("Archive overriden by environment: %s", envArchive)
+		archiveURL = envArchive
+	}
+
 	archive, err := eos.Open(archiveURL)
 	if err != nil {
 		return fmt.Errorf("While starting download: %s", err.Error())
 	}
 
 	source := InstallSource{
-		Version: upload.Build.UserVersion,
+		Version: version,
 		Archive: archive,
 	}
 	if i.settings.OnSource != nil {
