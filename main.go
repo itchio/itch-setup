@@ -21,6 +21,8 @@ var (
 	versionString = ""     // formatted on boot from 'version' and 'builtAt'
 	app           = kingpin.New("itchSetup", "The itch installer and self-updater")
 	uninstall     = app.Flag("uninstall", "Uninstall the itch app").Bool()
+	relaunch      = app.Flag("relaunch", "Relaunch a new version of the itch app").Bool()
+	relaunchPID   = app.Flag("relaunchPid", "PID to wait for before relaunching").Int()
 )
 
 func must(err error) {

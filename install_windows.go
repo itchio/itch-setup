@@ -60,35 +60,7 @@ func SetupMain() {
 	log.Println("AppData roam' path: ", roamingPath)
 	log.Println("Desktop path:       ", desktopPath)
 
-	log.Println("Should start", appName, ", looking for versions")
-
-	execFolder, err := osext.ExecutableFolder()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	entries, err := ioutil.ReadDir(execFolder)
-	if err != nil {
-		log.Printf("")
-	}
-
-	foundMarker := false
-	dirs := []string{}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			if entry.Name() == MarkerName {
-				foundMarker = true
-			}
-			continue
-		}
-
-		if !strings.HasPrefix(entry.Name(), "app-") {
-			continue
-		}
-
-		dirs = append(dirs, entry.Name())
-	}
+	foundMarker, appDirs, err := pokeExecFolder()
 
 	installDir := filepath.Join(localPath, appName)
 
@@ -121,21 +93,27 @@ func SetupMain() {
 			return
 		}
 
-		log.Println("Launching app")
-		sort.Strings(dirs)
-		log.Printf("Sorted app dirs:\n%s", strings.Join(dirs, "\n"))
-		if len(dirs) > 0 {
-			first := dirs[0]
-			cmd := exec.Command(filepath.Join(first, "itch.exe"))
-			err = cmd.Run()
+		if *relaunch == true {
+			proc, err := os.FindProcess(*relaunchPID)
 			if err != nil {
-				showError(fmt.Sprintf("Encountered a problem whilst launching itch: %s", err.Error()), nil)
+				showError(fmt.Sprintf("Could not find itch app process: %s", err.Error()), nil)
 			}
 
-			log.Printf("App quit")
-			os.Exit(0)
+			state, err := proc.Wait()
+			if err != nil {
+				showError(fmt.Sprintf("Could not wait on itch app: %s", err.Error()), nil)
+			}
+
+			log.Printf("Wait result: success = %v", state.Success())
+
+			tryLaunch(appDirs)
+			return
 		}
-		return
+
+		{
+			tryLaunch(appDirs)
+			return
+		}
 	}
 
 	if *uninstall == true {
@@ -145,6 +123,65 @@ func SetupMain() {
 
 	log.Println("Showing install GUI")
 	showInstallGUI(installDir)
+}
+
+func pokeExecFolder() (foundMarker bool, appDirs []string, err error) {
+	var execFolder string
+
+	execFolder, err = osext.ExecutableFolder()
+	if err != nil {
+		return
+	}
+
+	var entries []os.FileInfo
+
+	entries, err = ioutil.ReadDir(execFolder)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			if entry.Name() == MarkerName {
+				foundMarker = true
+			}
+			continue
+		}
+
+		if !strings.HasPrefix(entry.Name(), "app-") {
+			continue
+		}
+
+		appDirs = append(appDirs, entry.Name())
+	}
+	sort.Strings(appDirs)
+
+	// make all paths absolute
+	for i := range appDirs {
+		appDirs[i] = filepath.Join(execFolder, appDirs[i])
+	}
+
+	return
+}
+
+func tryLaunch(appDirs []string) {
+	log.Println("Launching app")
+
+	log.Printf("Sorted app dirs:\n%s", strings.Join(appDirs, "\n"))
+
+	if len(appDirs) > 0 {
+		first := appDirs[0]
+		cmd := exec.Command(filepath.Join(first, "itch.exe"))
+
+		err := cmd.Start()
+		if err != nil {
+			showError(fmt.Sprintf("Encountered a problem while launching itch: %s", err.Error()), nil)
+		}
+
+		log.Printf("App launched, getting out of the way")
+		os.Exit(0)
+	}
+	return
 }
 
 func showInstallGUI(installDirIn string) {
@@ -359,11 +396,6 @@ func showInstallGUI(installDirIn string) {
 	} else {
 		ni.SetIcon(ic)
 		mw.SetIcon(ic)
-	}
-
-	err = ni.SetVisible(true)
-	if err != nil {
-		log.Printf("Could not make notifyicon visible: %s", err.Error())
 	}
 
 	setInstallerImage(imageView)
