@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/itchio/itchSetup/setup"
 	"github.com/kardianos/osext"
@@ -20,44 +20,6 @@ import (
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 )
-
-func rectangleFromRECT(r win.RECT) walk.Rectangle {
-	return walk.Rectangle{
-		X:      int(r.Left),
-		Y:      int(r.Top),
-		Width:  int(r.Right - r.Left),
-		Height: int(r.Bottom - r.Top),
-	}
-}
-
-func loadImage(filePath string) walk.Image {
-	img, err := walk.NewImageFromFile(filePath)
-	if err != nil {
-		log.Printf("Couldn't load %s: %s\n", filePath, err.Error())
-		return nil
-	}
-	return img
-}
-
-func centerWindow(mw *walk.FormBase) {
-	// Center window
-	var mi win.MONITORINFO
-	mi.CbSize = uint32(unsafe.Sizeof(mi))
-
-	if win.GetMonitorInfo(win.MonitorFromWindow(mw.Handle(), win.MONITOR_DEFAULTTOPRIMARY), &mi) {
-		mon := rectangleFromRECT(mi.RcWork)
-		mon.Height -= int(win.GetSystemMetrics(win.SM_CYCAPTION))
-
-		size := mw.Size()
-
-		mw.SetBounds(walk.Rectangle{
-			X:      mon.X + (mon.Width-size.Width)/2,
-			Y:      mon.Y + (mon.Height-size.Height)/2,
-			Width:  size.Width,
-			Height: size.Height,
-		})
-	}
-}
 
 func getUserDirectory(csidl win.CSIDL) (string, error) {
 	localPathPtr := make([]uint16, 65536+2)
@@ -69,71 +31,26 @@ func getUserDirectory(csidl win.CSIDL) (string, error) {
 	return syscall.UTF16ToString(localPathPtr), nil
 }
 
-type ShortcutSettings struct {
-	ShortcutFilePath string
-	TargetPath       string
-	Description      string
-	IconLocation     string
-	WorkingDirectory string
-}
+const MarkerName = ".itch-marker"
 
-const windowsShortcutContent = `
-	set WshShell = WScript.CreateObject("WScript.Shell")
-	set shellLink = WshShell.CreateShortcut("%v")
-	shellLink.TargetPath = "%v"
-	shellLink.Description = "%v"
-	shellLink.IconLocation = "%v"
-	shellLink.WorkingDirectory = "%v"
-	shellLink.Save`
-
-func createShortcut(settings ShortcutSettings) error {
-	shortcutScript := fmt.Sprintf(windowsShortcutContent,
-		settings.ShortcutFilePath,
-		settings.TargetPath,
-		settings.Description,
-		settings.IconLocation,
-		settings.WorkingDirectory)
-
-	tmpDir, err := ioutil.TempDir("", "itchSetupShortcut")
-	if err != nil {
-		return err
-	}
-
-	err = os.MkdirAll(tmpDir, 0755)
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-
-	tmpPath := filepath.Join(tmpDir, "makeShortcut.vbs")
-	err = ioutil.WriteFile(tmpPath, []byte(shortcutScript), 0644)
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.Command("wscript", "/b", "/nologo", tmpPath)
-	err = cmd.Run()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
+var localPath, roamingPath, desktopPath string
 
 func SetupMain() {
-	localPath, err := getUserDirectory(win.CSIDL_LOCAL_APPDATA)
+	var err error
+
+	localPath, err = getUserDirectory(win.CSIDL_LOCAL_APPDATA)
 	if err != nil {
 		showError(err.Error(), nil)
 		os.Exit(1)
 	}
 
-	roamingPath, err := getUserDirectory(win.CSIDL_APPDATA)
+	roamingPath, err = getUserDirectory(win.CSIDL_APPDATA)
 	if err != nil {
 		showError(err.Error(), nil)
 		os.Exit(1)
 	}
 
-	desktopPath, err := getUserDirectory(win.CSIDL_DESKTOP)
+	desktopPath, err = getUserDirectory(win.CSIDL_DESKTOP)
 	if err != nil {
 		showError(err.Error(), nil)
 		os.Exit(1)
@@ -143,62 +60,94 @@ func SetupMain() {
 	log.Println("AppData roam' path: ", roamingPath)
 	log.Println("Desktop path:       ", desktopPath)
 
-	if *processStart != "" {
-		log.Println("Should start itch, looking for versions")
+	log.Println("Should start", appName, ", looking for versions")
 
-		execFolder, err := osext.ExecutableFolder()
-		if err != nil {
-			log.Fatal(err)
+	execFolder, err := osext.ExecutableFolder()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	entries, err := ioutil.ReadDir(execFolder)
+	if err != nil {
+		log.Printf("")
+	}
+
+	foundMarker := false
+	dirs := []string{}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			if entry.Name() == MarkerName {
+				foundMarker = true
+			}
+			continue
 		}
 
-		entries, err := ioutil.ReadDir(execFolder)
-		if err != nil {
-			log.Printf("")
+		if !strings.HasPrefix(entry.Name(), "app-") {
+			continue
 		}
 
-		dirs := []string{}
+		dirs = append(dirs, entry.Name())
+	}
 
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				log.Println("Skipping non-dir", entry.Name())
+	installDir := filepath.Join(localPath, appName)
+
+	if foundMarker {
+		log.Println("Found marker")
+
+		if *uninstall == true {
+			log.Println("Uninstalling app")
+
+			log.Println("Removing shortcut...")
+			err = os.Remove(shortcutPath())
+			if err != nil {
+				log.Println("While removing full shortcut", err.Error())
+				log.Println("(Note: shortcut errors aren't critical)")
 			}
 
-			log.Println("Found dir", entry.Name())
-			dirs = append(dirs, entry.Name())
+			log.Println("Removing full directory...")
+			err = os.RemoveAll(installDir)
+			if err != nil {
+				log.Println("While removing full directory", err.Error())
+				log.Println("(Note: any itchSetup.exe-related errors are expected)")
+			}
+
+			log.Println("Removing uninstaller entry...")
+			err = RemoveUninstallerRegistryKey(appName)
+			if err != nil {
+				log.Println("While removing uninstaller entry", err.Error())
+				log.Println("(Note: these aren't critical)")
+			}
+			return
 		}
 
+		log.Println("Launching app")
 		sort.Strings(dirs)
-		log.Printf("Sorted dir entries:\n%s", strings.Join(dirs, "\n"))
-
+		log.Printf("Sorted app dirs:\n%s", strings.Join(dirs, "\n"))
 		if len(dirs) > 0 {
 			first := dirs[0]
-			cmd := exec.Command(first)
-			cmd.Run()
+			cmd := exec.Command(filepath.Join(first, "itch.exe"))
+			err = cmd.Run()
+			if err != nil {
+				showError(fmt.Sprintf("Encountered a problem whilst launching itch: %s", err.Error()), nil)
+			}
 
 			log.Printf("App quit")
 			os.Exit(0)
 		}
+		return
 	}
 
-	installDir := filepath.Join(localPath, "itch")
-
-	err = createShortcut(ShortcutSettings{
-		ShortcutFilePath: filepath.Join(desktopPath, "itch.lnk"),
-		TargetPath:       filepath.Join(installDir, "itchSetup.exe") + " --processStart",
-		Description:      "The best way to play your itch.io games",
-		IconLocation:     filepath.Join(installDir, "app.ico"),
-		WorkingDirectory: filepath.Join(installDir),
-	})
-	if err != nil {
-		log.Println("While creating shortcut", err)
-		showError(err.Error(), nil)
-		os.Exit(1)
+	if *uninstall == true {
+		log.Printf("Asked to uninstall but couldn't find marker, just quitting")
+		os.Exit(0)
 	}
 
-	install(installDir)
+	log.Println("Showing install GUI")
+	showInstallGUI(installDir)
 }
 
-func install(installDirIn string) {
+func showInstallGUI(installDirIn string) {
 	var installer *setup.Installer
 
 	var ni *walk.NotifyIcon
@@ -210,6 +159,61 @@ func install(installDirIn string) {
 	var progressComposite, optionsComposite *walk.Composite
 
 	installDir := installDirIn
+	versionInstallDir := ""
+
+	var source setup.InstallSource
+	sourceChan := make(chan setup.InstallSource, 1)
+
+	kickoffInstall := func() {
+		kickErr := func() error {
+			err := os.MkdirAll(installDir, 0755)
+			if err != nil {
+				return err
+			}
+
+			execPath, err := osext.Executable()
+			if err != nil {
+				return err
+			}
+
+			// copy ourselves in install directory
+			copyErr := func() error {
+				installedExecPath := filepath.Join(installDir, "itchSetup.exe")
+				execWriter, err := os.Create(installedExecPath)
+				if err != nil {
+					log.Println("Couldn't open target for writing, maybe already running from install location?")
+					log.Println("Not copying and carrying on...")
+					return nil
+				}
+				defer execWriter.Close()
+
+				execReader, err := os.OpenFile(execPath, os.O_RDONLY, 0)
+				if err != nil {
+					return err
+				}
+				defer execReader.Close()
+
+				_, err = io.Copy(execWriter, execReader)
+				if err != nil {
+					return err
+				}
+				return nil
+			}()
+			if copyErr != nil {
+				return copyErr
+			}
+
+			source := <-sourceChan
+
+			versionInstallDir = filepath.Join(installDir, fmt.Sprintf("app-%s", source.Version))
+			installer.Install(versionInstallDir)
+
+			return nil
+		}()
+		if kickErr != nil {
+			showError(kickErr.Error(), mw)
+		}
+	}
 
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
@@ -288,7 +292,7 @@ func install(installDirIn string) {
 									progressComposite.SetVisible(true)
 									optionsComposite.SetVisible(false)
 
-									installer.Install(installDir)
+									go kickoffInstall()
 								},
 							},
 						},
@@ -362,43 +366,7 @@ func install(installDirIn string) {
 		log.Printf("Could not make notifyicon visible: %s", err.Error())
 	}
 
-	// thanks, go-bindata!
-	func() {
-		data, err := dataInstallerPngBytes()
-		if err != nil {
-			log.Printf("Installer image not found :()")
-			return
-		}
-
-		tf, err := ioutil.TempFile("", "img")
-		if err != nil {
-			log.Printf("Could not create temp file for installer image")
-			return
-		}
-		defer os.Remove(tf.Name())
-
-		_, err = tf.Write(data)
-		if err != nil {
-			log.Printf("Could not write installer image to temp file")
-			return
-		}
-
-		err = tf.Close()
-		if err != nil {
-			log.Printf("Could not finish writing installer image to temp file")
-			return
-		}
-
-		img, err := walk.NewImageFromFile(tf.Name())
-		if err != nil {
-			log.Printf("Could not load installer image to temp file")
-			return
-		}
-
-		imageView.SetImage(img)
-	}()
-
-	var source setup.InstallSource
+	setInstallerImage(imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		OnError: func(message string) {
@@ -411,17 +379,47 @@ func install(installDirIn string) {
 			pb.SetValue(int(progress * 1000.0))
 		},
 		OnSource: func(sourceIn setup.InstallSource) {
+			sourceChan <- sourceIn
 			source = sourceIn
 		},
 		OnFinish: func() {
-			err := CreateUninstallRegistryEntry(installDir, "itch", source.Version)
+			markerPath := filepath.Join(installDir, MarkerName)
+			markerWriter, err := os.Create(markerPath)
+			if err != nil {
+				log.Println("While creating marker", err)
+				showError(err.Error(), mw)
+				os.Exit(1)
+			}
+			err = markerWriter.Close()
+			if err != nil {
+				log.Println("While closing marker", err)
+				showError(err.Error(), mw)
+				os.Exit(1)
+			}
+
+			// this creates $installDir/app.ico
+			err = CreateUninstallRegistryEntry(installDir, "itch", source.Version)
 			if err != nil {
 				log.Printf("While creating registry entry: %s", err.Error())
 			}
 
+			err = CreateShortcut(ShortcutSettings{
+				ShortcutFilePath: shortcutPath(),
+				TargetPath:       filepath.Join(installDir, "itchSetup.exe"),
+				Description:      "The best way to play your itch.io games",
+				IconLocation:     filepath.Join(installDir, "app.ico"),
+				WorkingDirectory: filepath.Join(installDir),
+			})
+
+			if err != nil {
+				log.Println("While creating shortcut", err)
+				showError(err.Error(), mw)
+				os.Exit(1)
+			}
+
 			ni.ShowInfo("itch", "The installation went well, itch is now starting up!")
 
-			itchPath := filepath.Join(installDir, "itch.exe")
+			itchPath := filepath.Join(versionInstallDir, "itch.exe")
 			cmd := exec.Command(itchPath)
 			err = cmd.Start()
 			if err != nil {
@@ -438,7 +436,7 @@ func install(installDirIn string) {
 	mw.Run()
 }
 
-func showError(errMsg string, mw *walk.MainWindow) {
+func showError(errMsg string, parent walk.Form) {
 	var dlg *walk.Dialog
 
 	res, err := ui.Dialog{
@@ -476,7 +474,7 @@ func showError(errMsg string, mw *walk.MainWindow) {
 				},
 			},
 		},
-	}.Run(mw)
+	}.Run(parent)
 
 	centerWindow(dlg.AsFormBase())
 
@@ -486,4 +484,8 @@ func showError(errMsg string, mw *walk.MainWindow) {
 	log.Printf("Dialog res: %#v\n", res)
 
 	os.Exit(0)
+}
+
+func shortcutPath() string {
+	return filepath.Join(desktopPath, "itch.lnk")
 }

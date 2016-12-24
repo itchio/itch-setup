@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -13,13 +12,15 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
+const appName = "itch"
+
 var (
 	version       = "head" // set by command-line on CI release builds
 	builtAt       = ""     // set by command-line on CI release builds
 	commit        = ""     // set by command-line on CI release builds
 	versionString = ""     // formatted on boot from 'version' and 'builtAt'
 	app           = kingpin.New("itchSetup", "The itch installer and self-updater")
-	processStart  *string
+	uninstall     = app.Flag("uninstall", "Uninstall the itch app").Bool()
 )
 
 func must(err error) {
@@ -34,10 +35,6 @@ func must(err error) {
 }
 
 func main() {
-	if runtime.GOOS == "windows" {
-		processStart = app.Arg("processStart", "Start itch").String()
-	}
-
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	app.HelpFlag.Short('h')

@@ -1,9 +1,9 @@
 UPX_LEVEL?=-1
 
 ifeq (GOOS,386)
-GOBIN:=${GOPATH}/bin/
-else
 GOBIN:=${GOPATH}/bin/windows_386/
+else
+GOBIN:=${GOPATH}/bin/
 endif
 
 all:

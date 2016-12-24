@@ -27,23 +27,20 @@ type DWORDValue struct {
 
 // CreateUninstallRegistryEntry creates all registry entries required to
 // have the app show up in Add or Remove software and be uninstalled by the user
-func CreateUninstallRegistryEntry(installDir string, appNameIn string, version string) error {
-	appName := appNameIn + "-experimental"
-
+func CreateUninstallRegistryEntry(installDir string, appName string, version string) error {
 	pk, _, err := registry.CreateKey(registry.CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", registry.CREATE_SUB_KEY)
 	if err != nil {
 		return err
 	}
 	defer pk.Close()
 
-	k, _, err := registry.CreateKey(pk, "itch-experimental", registry.CREATE_SUB_KEY|registry.WRITE)
+	k, _, err := registry.CreateKey(pk, appName, registry.CREATE_SUB_KEY|registry.WRITE)
 	if err != nil {
 		return err
 	}
 	defer k.Close()
 
-	appData := os.Getenv("APPDATA")
-	uninstallCmd := fmt.Sprintf("\"%s\" --uninstall", filepath.Join(appData, appName, "bin", "itchSetup.exe"))
+	uninstallCmd := fmt.Sprintf("\"%s\" --uninstall", filepath.Join(installDir, "itchSetup.exe"))
 
 	strings := []StringValue{
 		{Key: "DisplayName", Value: appName},
@@ -57,7 +54,7 @@ func CreateUninstallRegistryEntry(installDir string, appNameIn string, version s
 	}
 
 	func() {
-		iconPath := filepath.Join(appData, fmt.Sprintf("%s.ico", appName))
+		iconPath := filepath.Join(installDir, "app.ico")
 		icoBytes, err := dataItchIcoBytes()
 		if err != nil {
 			log.Printf("itch ico not found :()")
@@ -97,6 +94,20 @@ func CreateUninstallRegistryEntry(installDir string, appNameIn string, version s
 		}
 	}
 
+	return nil
+}
+
+func RemoveUninstallerRegistryKey(appname string) error {
+	pk, _, err := registry.CreateKey(registry.CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", registry.WRITE)
+	if err != nil {
+		return err
+	}
+	defer pk.Close()
+
+	err = registry.DeleteKey(pk, appName)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
