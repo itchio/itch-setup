@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"io/ioutil"
+
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/itchio/itchSetup/setup"
@@ -35,7 +37,29 @@ func SetupMain() {
 	}
 	win.Add(box)
 
-	i, err := gtk.ImageNewFromFile("data/installer.png")
+	imageBytes, err := dataInstallerPngBytes()
+	if err != nil {
+		log.Fatal("Couldn't load image:", err)
+	}
+
+	tmpDir, err := ioutil.TempDir("", "itchSetupImage")
+	if err != nil {
+		log.Fatal("Couldn't grab temp dir:", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	err = os.MkdirAll(tmpDir, 0755)
+	if err != nil {
+		log.Fatal("Couldn't make temp dir:", err)
+	}
+
+	imagePath := filepath.Join(tmpDir, "installer.png")
+	err = ioutil.WriteFile(imagePath, imageBytes, 0644)
+	if err != nil {
+		log.Fatal("Couldn't make temp dir:", err)
+	}
+
+	i, err := gtk.ImageNewFromFile(imagePath)
 	if err != nil {
 		log.Fatal("Unable to create image:", err)
 	}
@@ -63,7 +87,7 @@ func SetupMain() {
 	// Recursively show all widgets contained in this window.
 	win.ShowAll()
 
-	installDir := filepath.Join(os.Getenv("HOME"), ".itch-experimental/prefix")
+	installDir := filepath.Join(os.Getenv("HOME"), ".itch")
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
 		OnProgress: func(progress float64) {
