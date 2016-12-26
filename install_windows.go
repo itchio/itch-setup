@@ -245,7 +245,7 @@ func tryLaunch(appDirs []string) {
 
 	if len(appDirs) > 0 {
 		first := appDirs[0]
-		cmd := exec.Command(filepath.Join(first, exeName))
+		cmd := exec.Command(filepath.Join(first, exeName()))
 
 		err := cmd.Start()
 		if err != nil {
