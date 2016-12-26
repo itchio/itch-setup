@@ -27,7 +27,7 @@ func SetupMain() {
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
 	}
-	win.SetTitle(fmt.Sprintf("%s Setup"), appName)
+	win.SetTitle(fmt.Sprintf("%s Setup", appName))
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
