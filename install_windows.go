@@ -38,8 +38,6 @@ func getUserDirectory(csidl win.CSIDL) (string, error) {
 	return syscall.UTF16ToString(localPathPtr), nil
 }
 
-const MarkerName = ".itch-marker"
-
 var localPath, roamingPath, desktopPath string
 
 func SetupMain() {
@@ -77,7 +75,7 @@ func SetupMain() {
 
 			pathsToKill := []string{}
 			for _, appDir := range appDirs {
-				pathsToKill = append(pathsToKill, filepath.Join(appDir, "itch.exe"))
+				pathsToKill = append(pathsToKill, filepath.Join(appDir, exeName()))
 			}
 
 			pidsToKill := []int{}
@@ -128,7 +126,7 @@ func SetupMain() {
 			}
 
 			log.Println("Removing marker")
-			err = os.Remove(filepath.Join(execFolder, MarkerName))
+			err = os.Remove(filepath.Join(execFolder, markerName()))
 			if err != nil {
 				log.Println("While removing marker", err.Error())
 			}
@@ -173,12 +171,12 @@ func SetupMain() {
 		if *relaunch == true {
 			proc, err := os.FindProcess(*relaunchPID)
 			if err != nil {
-				showError(fmt.Sprintf("Could not find itch app process: %s", err.Error()), nil)
+				showError(fmt.Sprintf("Could not find %s app process: %s", appName, err.Error()), nil)
 			}
 
 			state, err := proc.Wait()
 			if err != nil {
-				showError(fmt.Sprintf("Could not wait on itch app: %s", err.Error()), nil)
+				showError(fmt.Sprintf("Could not wait on %s app: %s", appName, err.Error()), nil)
 			}
 
 			log.Printf("Wait result: success = %v", state.Success())
@@ -218,7 +216,7 @@ func pokeExecFolder() (foundMarker bool, execFolder string, appDirs []string, er
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			if entry.Name() == MarkerName {
+			if entry.Name() == markerName() {
 				foundMarker = true
 			}
 			continue
@@ -247,11 +245,11 @@ func tryLaunch(appDirs []string) {
 
 	if len(appDirs) > 0 {
 		first := appDirs[0]
-		cmd := exec.Command(filepath.Join(first, "itch.exe"))
+		cmd := exec.Command(filepath.Join(first, exeName))
 
 		err := cmd.Start()
 		if err != nil {
-			showError(fmt.Sprintf("Encountered a problem while launching itch: %s", err.Error()), nil)
+			showError(fmt.Sprintf("Encountered a problem while launching %s: %s", appName, err.Error()), nil)
 		}
 
 		log.Printf("App launched, getting out of the way")
@@ -291,7 +289,7 @@ func showInstallGUI(installDirIn string) {
 
 			// copy ourselves in install directory
 			copyErr := func() error {
-				installedExecPath := filepath.Join(installDir, "itchSetup.exe")
+				installedExecPath := filepath.Join(installDir, setupName())
 				execWriter, err := os.Create(installedExecPath)
 				if err != nil {
 					log.Println("Couldn't open target for writing, maybe already running from install location?")
@@ -331,7 +329,7 @@ func showInstallGUI(installDirIn string) {
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
 
-		dlg.Title = "Choose where the itch app should be installed"
+		dlg.Title = fmt.Sprintf("Choose where the %s app should be installed", appName)
 		dlg.FilePath = installDir
 
 		if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
@@ -356,7 +354,7 @@ func showInstallGUI(installDirIn string) {
 	}
 
 	err := ui.MainWindow{
-		Title:   "itch Setup",
+		Title:   fmt.Sprintf("%s Setup", appName),
 		MinSize: windowSize,
 		MaxSize: windowSize,
 		Size:    windowSize,
@@ -381,7 +379,7 @@ func showInstallGUI(installDirIn string) {
 				Children: []ui.Widget{
 					ui.VSpacer{},
 					ui.Label{
-						Text: "Welcome to the itch installer! Grab a drink, pick an install location and proceed.",
+						Text: fmt.Sprintf("Welcome to the %s installer! Grab a drink, pick an install location and proceed.", appName),
 					},
 					ui.VSpacer{},
 					ui.Composite{
@@ -477,6 +475,7 @@ func showInstallGUI(installDirIn string) {
 	setInstallerImage(imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
+		AppName: appName,
 		OnError: func(message string) {
 			go showError(message, mw)
 		},
@@ -491,7 +490,7 @@ func showInstallGUI(installDirIn string) {
 			source = sourceIn
 		},
 		OnFinish: func() {
-			markerPath := filepath.Join(installDir, MarkerName)
+			markerPath := filepath.Join(installDir, markerName())
 			markerWriter, err := os.Create(markerPath)
 			if err != nil {
 				log.Println("While creating marker", err)
@@ -506,14 +505,14 @@ func showInstallGUI(installDirIn string) {
 			}
 
 			// this creates $installDir/app.ico
-			err = CreateUninstallRegistryEntry(installDir, "itch", source.Version)
+			err = CreateUninstallRegistryEntry(installDir, appName, source.Version)
 			if err != nil {
 				log.Printf("While creating registry entry: %s", err.Error())
 			}
 
 			err = CreateShortcut(ShortcutSettings{
 				ShortcutFilePath: shortcutPath(),
-				TargetPath:       filepath.Join(installDir, "itchSetup.exe"),
+				TargetPath:       filepath.Join(installDir, setupName()),
 				Description:      "The best way to play your itch.io games",
 				IconLocation:     filepath.Join(installDir, "app.ico"),
 				WorkingDirectory: filepath.Join(installDir),
@@ -525,10 +524,10 @@ func showInstallGUI(installDirIn string) {
 				os.Exit(1)
 			}
 
-			ni.ShowInfo("itch", "The installation went well, itch is now starting up!")
+			ni.ShowInfo(appName, fmt.Sprintf("The installation went well, %s is now starting up!", appName))
 
-			itchPath := filepath.Join(versionInstallDir, "itch.exe")
-			cmd := exec.Command(itchPath)
+			exePath := filepath.Join(versionInstallDir, exeName())
+			cmd := exec.Command(exePath)
 			err = cmd.Start()
 			if err != nil {
 				showError(err.Error(), mw)
@@ -595,5 +594,17 @@ func showError(errMsg string, parent walk.Form) {
 }
 
 func shortcutPath() string {
-	return filepath.Join(desktopPath, "itch.lnk")
+	return filepath.Join(desktopPath, fmt.Sprintf("%s.lnk", appName))
+}
+
+func markerName() string {
+	return fmt.Sprintf(".%s-marker", appName)
+}
+
+func exeName() string {
+	return fmt.Sprintf("%s.exe", appName)
+}
+
+func setupName() string {
+	return fmt.Sprintf("%sSetup.exe", appName)
 }

@@ -28,7 +28,7 @@ func SetupMain() {
 func StartItchSetup() {
 	var installer *setup.Installer
 
-	tmpDir, err := ioutil.TempDir("", "itchSetup")
+	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%sSetup", appName))
 	if err != nil {
 		log.Fatal("Could not get temporary directory", err)
 	}
@@ -44,6 +44,7 @@ func StartItchSetup() {
 	installDir := filepath.Join(tmpDir, bundleName)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
+		AppName: appName,
 		OnError: func(message string) {
 			C.SetLabel(C.CString(message))
 		},

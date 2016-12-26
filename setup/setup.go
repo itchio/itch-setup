@@ -27,6 +27,7 @@ type FinishHandler func()
 type SourceHandler func(source InstallSource)
 
 type InstallerSettings struct {
+	AppName         string
 	OnError         ErrorHandler
 	OnProgressLabel ProgressLabelHandler
 	OnProgress      ProgressHandler
@@ -47,6 +48,11 @@ type InstallSource struct {
 
 var once sync.Once
 
+var gameIDMap = map[string]int64{
+	"itch":  107034,
+	"kitch": 108233,
+}
+
 func NewInstaller(settings InstallerSettings) *Installer {
 	once.Do(func() {
 		eos.RegisterHandler(&itchfs.ItchFS{
@@ -54,10 +60,14 @@ func NewInstaller(settings InstallerSettings) *Installer {
 		})
 	})
 
+	gameID, ok := gameIDMap[settings.AppName]
+	if !ok {
+		panic(fmt.Sprintf("Unknown app: %s", settings.AppName))
+	}
+
 	i := &Installer{
-		settings: settings,
-		// game ID for fasterthanlime/itch
-		gameID:     107034,
+		settings:   settings,
+		gameID:     gameID,
 		sourceChan: make(chan InstallSource),
 	}
 	go func() {

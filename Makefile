@@ -23,6 +23,7 @@ all:
 Linux:
 	go get -v -x -tags gtk_3_18
 	upx ${UPX_LEVEL} ${GOBIN}/itchSetup
+	cp -f ${GOBIN}/itchSetup ${GOBIN}/kitchSetup
 
 Windows:
 	windres -o itchSetup.syso itchSetup.rc

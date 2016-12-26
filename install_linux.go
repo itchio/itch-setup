@@ -91,6 +91,7 @@ func SetupMain() {
 	installDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", appName))
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
+		AppName: appName,
 		OnProgress: func(progress float64) {
 			glib.IdleAdd(func() {
 				pb.SetFraction(progress)
