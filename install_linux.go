@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -26,7 +27,7 @@ func SetupMain() {
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
 	}
-	win.SetTitle("itch Setup")
+	win.SetTitle(fmt.Sprintf("%s Setup"), appName)
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
@@ -87,7 +88,7 @@ func SetupMain() {
 	// Recursively show all widgets contained in this window.
 	win.ShowAll()
 
-	installDir := filepath.Join(os.Getenv("HOME"), ".itch")
+	installDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", appName))
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
 		OnProgress: func(progress float64) {
@@ -106,7 +107,7 @@ func SetupMain() {
 			})
 		},
 		OnFinish: func() {
-			itchPath := filepath.Join(installDir, "itch")
+			itchPath := filepath.Join(installDir, appName)
 			cmd := exec.Command(itchPath)
 			err := cmd.Start()
 			if err != nil {

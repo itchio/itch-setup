@@ -22,6 +22,12 @@ import (
 	ps "github.com/mitchellh/go-ps"
 )
 
+var (
+	uninstall   = app.Flag("uninstall", "Uninstall the itch app").Bool()
+	relaunch    = app.Flag("relaunch", "Relaunch a new version of the itch app").Bool()
+	relaunchPID = app.Flag("relaunchPid", "PID to wait for before relaunching").Int()
+)
+
 func getUserDirectory(csidl win.CSIDL) (string, error) {
 	localPathPtr := make([]uint16, 65536+2)
 	var hwnd win.HWND

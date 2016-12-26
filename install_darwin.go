@@ -1,7 +1,7 @@
 package main
 
 /*
-int StartApp(void);
+int StartApp(char *appName);
 void SetLabel(char *cString);
 void SetProgress(int value);
 char *ValidateBundle(char *bundlePath);
@@ -11,6 +11,7 @@ void Quit();
 import "C"
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -20,7 +21,7 @@ import (
 )
 
 func SetupMain() {
-	C.StartApp()
+	C.StartApp(C.CString(appName))
 }
 
 //export StartItchSetup
@@ -39,14 +40,15 @@ func StartItchSetup() {
 		log.Fatal("Could not create temporary directory", err)
 	}
 
-	installDir := filepath.Join(tmpDir, "itch.app")
+	bundleName := fmt.Sprintf("%s.app", appName)
+	installDir := filepath.Join(tmpDir, bundleName)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		OnError: func(message string) {
 			C.SetLabel(C.CString(message))
 		},
 		OnFinish: func() {
-			target := "/Applications/itch.app"
+			target := fmt.Sprintf("/Applications/%s", bundleName)
 
 			log.Printf("Validating new bundle...\n")
 			errMsg := C.ValidateBundle(C.CString(installDir))
@@ -59,7 +61,7 @@ func StartItchSetup() {
 			log.Printf("Setting up (re)launching %s\n", target)
 			C.Relaunch(C.CString(target))
 
-			os.Rename(target, filepath.Join(trash, "itch.app"))
+			os.Rename(target, filepath.Join(trash, bundleName))
 			log.Printf("Trashing existing %s if any\n", target)
 
 			log.Printf("Moving %s into %s\n", installDir, target)

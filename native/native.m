@@ -5,7 +5,7 @@ NSProgressIndicator *progressIndicator;
 
 extern void StartItchSetup(void);
 
-int StartApp(void) {
+int StartApp(char *cAppName) {
   [NSAutoreleasePool new];
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -16,7 +16,7 @@ int StartApp(void) {
   [menubar addItem:appMenuItem];
   [NSApp setMainMenu:menubar];
   id appMenu = [[NSMenu new] autorelease];
-  id appName = @"itch Setup";
+  id appName = [NSString stringWithFormat:@"%s Setup", cAppName];
   id quitTitle = [@"Quit " stringByAppendingString:appName];
   id quitMenuItem = [[[NSMenuItem alloc] initWithTitle:quitTitle
     action:@selector(terminate:) keyEquivalent:@"q"]
