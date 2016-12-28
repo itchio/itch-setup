@@ -18,7 +18,7 @@ endif
 endif
 
 all:
-	-@make $(SETUP_OS)
+	@make $(SETUP_OS)
 
 Linux:
 	go get -v -x -tags gtk_3_18
