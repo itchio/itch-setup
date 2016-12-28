@@ -329,7 +329,7 @@ func showInstallGUI(installDirIn string) {
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
 
-		dlg.Title = fmt.Sprintf("Choose where the %s app should be installed", appName)
+		dlg.Title = localizer.T("setup.tooltip.location")
 		dlg.FilePath = installDir
 
 		if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
@@ -354,7 +354,7 @@ func showInstallGUI(installDirIn string) {
 	}
 
 	err := ui.MainWindow{
-		Title:   fmt.Sprintf("%s Setup", appName),
+		Title:   localizer.T("setup.window.title", map[string]string{"app_name": appName}),
 		MinSize: windowSize,
 		MaxSize: windowSize,
 		Size:    windowSize,
@@ -379,7 +379,7 @@ func showInstallGUI(installDirIn string) {
 				Children: []ui.Widget{
 					ui.VSpacer{},
 					ui.Label{
-						Text: fmt.Sprintf("Welcome to the %s installer! Grab a drink, pick an install location and proceed.", appName),
+						Text: localizer.T("setup.window.welcome", map[string]string{"app_name": appName}),
 					},
 					ui.VSpacer{},
 					ui.Composite{
@@ -391,14 +391,14 @@ func showInstallGUI(installDirIn string) {
 								AssignTo:    &installDirLabel,
 								Text:        installDir,
 								ReadOnly:    true,
-								ToolTipText: "Click to change the install location",
+								ToolTipText: localizer.T("setup.tooltip.location"),
 								OnMouseUp: func(x, y int, button walk.MouseButton) {
 									pickInstallLocation()
 								},
 							},
 							ui.PushButton{
 								MaxSize: ui.Size{Width: 1},
-								Text:    "Install now",
+								Text:    localizer.T("setup.action.install"),
 								OnClicked: func() {
 									progressComposite.SetVisible(true)
 									optionsComposite.SetVisible(false)
@@ -429,7 +429,7 @@ func showInstallGUI(installDirIn string) {
 					},
 					ui.VSpacer{Size: 10},
 					ui.Label{
-						Text:     "Warming up...",
+						Text:     localizer.T("setup.status.preparing"),
 						AssignTo: &progressLabel,
 					},
 					ui.VSpacer{},
@@ -475,7 +475,8 @@ func showInstallGUI(installDirIn string) {
 	setInstallerImage(imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
-		AppName: appName,
+		Localizer: localizer,
+		AppName:   appName,
 		OnError: func(message string) {
 			go showError(message, mw)
 		},
@@ -547,7 +548,7 @@ func showError(errMsg string, parent walk.Form) {
 	var dlg *walk.Dialog
 
 	res, err := ui.Dialog{
-		Title:    "Something went wrong",
+		Title:    localizer.T("setup.error_dialog.title"),
 		MinSize:  ui.Size{Width: 350},
 		Layout:   ui.VBox{},
 		AssignTo: &dlg,
@@ -571,7 +572,7 @@ func showError(errMsg string, parent walk.Form) {
 				Children: []ui.Widget{
 					ui.HSpacer{},
 					ui.PushButton{
-						Text:    "Okay :(",
+						Text:    localizer.T("prompt.action.ok"),
 						MaxSize: ui.Size{Width: 1},
 						OnClicked: func() {
 							dlg.Close(0)

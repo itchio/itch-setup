@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudfoundry-attic/jibber_jabber"
 	"github.com/go-errors/errors"
+	"github.com/itchio/itchSetup/localize"
 
 	"github.com/kardianos/osext"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -57,6 +58,8 @@ func detectAppName() {
 
 const DefaultLocale = "en-US"
 
+var localizer *localize.Localizer
+
 func main() {
 	detectAppName()
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
@@ -84,6 +87,21 @@ func main() {
 	}
 
 	log.Println("Locale: ", userLocale)
+
+	localizer, err = localize.NewLocalizer(Asset)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = localizer.LoadLocale(userLocale)
+	if err != nil {
+		userLocale = userLocale[:2]
+		err = localizer.LoadLocale(userLocale)
+	}
+
+	if err == nil {
+		localizer.SetLang(userLocale)
+	}
 
 	SetupMain()
 }

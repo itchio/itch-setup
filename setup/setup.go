@@ -12,6 +12,7 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	itchio "github.com/itchio/go-itchio"
 	"github.com/itchio/go-itchio/itchfs"
+	"github.com/itchio/itchSetup/localize"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
@@ -28,6 +29,7 @@ type SourceHandler func(source InstallSource)
 
 type InstallerSettings struct {
 	AppName         string
+	Localizer       *localize.Localizer
 	OnError         ErrorHandler
 	OnProgressLabel ProgressLabelHandler
 	OnProgress      ProgressHandler
@@ -164,6 +166,10 @@ func (i *Installer) Install(installDir string) {
 }
 
 func (i *Installer) doInstall(installDir string) error {
+	localizer := i.settings.Localizer
+
+	i.settings.OnProgressLabel(localizer.T("setup.status.preparing"))
+
 	installSource := <-i.sourceChan
 	archive := installSource.Archive
 
@@ -182,16 +188,17 @@ func (i *Installer) doInstall(installDir string) error {
 			secsSinceStart := time.Since(startTime).Seconds()
 			donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
 
-			progressLabel := fmt.Sprintf("%d%% done - Downloading and installing @ %s/s",
-				percent,
-				humanize.IBytes(uint64(donePerSec)),
+			percentStr := fmt.Sprintf("%d%%", percent)
+			speedStr := fmt.Sprintf("%s/s", humanize.IBytes(uint64(donePerSec)))
+
+			progressLabel := fmt.Sprintf("%s - %s",
+				localizer.T("setup.status.progress", map[string]string{"percent": percentStr}),
+				localizer.T("setup.status.installing", map[string]string{"speed": speedStr}),
 			)
 			i.settings.OnProgressLabel(progressLabel)
 			i.settings.OnProgress(progress)
 		},
 	}
-
-	i.settings.OnProgressLabel("Warming up...")
 
 	log.Printf("Installing to %s\n", installDir)
 
@@ -206,6 +213,6 @@ func (i *Installer) doInstall(installDir string) error {
 		return fmt.Errorf("Error while installing: %s", err.Error())
 	}
 
-	i.settings.OnProgressLabel("All done!")
+	i.settings.OnProgressLabel(localizer.T("setup.status.done"))
 	return nil
 }

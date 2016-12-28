@@ -27,7 +27,7 @@ func SetupMain() {
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
 	}
-	win.SetTitle(fmt.Sprintf("%s Setup", appName))
+	win.SetTitle(localizer.T("setup.window.title", map[string]string{"app_name": appName}))
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
@@ -91,7 +91,8 @@ func SetupMain() {
 	installDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", appName))
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
-		AppName: appName,
+		Localizer: localizer,
+		AppName:   appName,
 		OnProgress: func(progress float64) {
 			glib.IdleAdd(func() {
 				pb.SetFraction(progress)

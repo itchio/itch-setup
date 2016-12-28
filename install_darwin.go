@@ -21,7 +21,8 @@ import (
 )
 
 func SetupMain() {
-	C.StartApp(C.CString(appName))
+	setupTitle := localizer.T("setup.window.title", map[string]string{"app_name": appName})
+	C.StartApp(C.CString(setupTitle))
 }
 
 //export StartItchSetup
@@ -44,7 +45,8 @@ func StartItchSetup() {
 	installDir := filepath.Join(tmpDir, bundleName)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
-		AppName: appName,
+		Localizer: localizer,
+		AppName:   appName,
 		OnError: func(message string) {
 			C.SetLabel(C.CString(message))
 		},
