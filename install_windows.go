@@ -429,7 +429,7 @@ func showInstallGUI(installDirIn string) {
 					},
 					ui.VSpacer{Size: 10},
 					ui.Label{
-						Text:     "Starting installation...",
+						Text:     "Warming up...",
 						AssignTo: &progressLabel,
 					},
 					ui.VSpacer{},
