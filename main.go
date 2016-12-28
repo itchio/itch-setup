@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-errors/errors"
-	"github.com/itchio/butler/comm"
 
 	"github.com/kardianos/osext"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -29,9 +28,9 @@ func must(err error) {
 	if err != nil {
 		switch err := err.(type) {
 		case *errors.Error:
-			comm.Die(err.ErrorStack())
+			log.Fatal(err.ErrorStack())
 		default:
-			comm.Die(err.Error())
+			log.Fatal(err.Error())
 		}
 	}
 }
