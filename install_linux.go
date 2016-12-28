@@ -38,33 +38,41 @@ func SetupMain() {
 	}
 	win.Add(box)
 
-	imageBytes, err := dataInstallerPngBytes()
-	if err != nil {
-		log.Fatal("Couldn't load image:", err)
-	}
-
-	tmpDir, err := ioutil.TempDir("", "itchSetupImage")
+	tmpDir, err := ioutil.TempDir("", "itchSetupImages")
 	if err != nil {
 		log.Fatal("Couldn't grab temp dir:", err)
 	}
-	defer os.RemoveAll(tmpDir)
 
 	err = os.MkdirAll(tmpDir, 0755)
 	if err != nil {
 		log.Fatal("Couldn't make temp dir:", err)
 	}
+	defer os.RemoveAll(tmpDir)
 
-	imagePath := filepath.Join(tmpDir, "installer.png")
-	err = ioutil.WriteFile(imagePath, imageBytes, 0644)
-	if err != nil {
-		log.Fatal("Couldn't make temp dir:", err)
+	loadBundledImage := func(path string) string {
+		imageBytes, err := Asset(path)
+		if err != nil {
+			log.Fatal("Couldn't load image:", err)
+		}
+
+		imagePath := filepath.Join(tmpDir, filepath.Base(path))
+		err = ioutil.WriteFile(imagePath, imageBytes, 0644)
+		if err != nil {
+			log.Fatal("Couldn't write image to temp dir:", err)
+		}
+
+		return imagePath
 	}
+
+	imagePath := loadBundledImage("data/installer.png")
 
 	i, err := gtk.ImageNewFromFile(imagePath)
 	if err != nil {
 		log.Fatal("Unable to create image:", err)
 	}
 	box.Add(i)
+
+	win.SetIconFromFile(loadBundledImage("data/itch-icon.png"))
 
 	pb, err := gtk.ProgressBarNew()
 	if err != nil {

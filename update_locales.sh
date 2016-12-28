@@ -8,6 +8,6 @@ parallel --no-notice curl -s ${LOCALES_BASE_URL}/{}.json -o data/locales/{}.json
 
 echo "Regenerating bindata"
 
-go-bindata data/...
+./update_bindata.sh
 
 echo "Done."
