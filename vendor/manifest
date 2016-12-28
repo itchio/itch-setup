@@ -26,6 +26,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/cloudfoundry-attic/jibber_jabber",
+			"repository": "https://github.com/cloudfoundry-attic/jibber_jabber",
+			"vcs": "git",
+			"revision": "bcc4c8345a21301bf47c032ff42dd1aae2fe3027",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/dustin/go-humanize",
 			"repository": "https://github.com/dustin/go-humanize",
 			"vcs": "git",

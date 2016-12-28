@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cloudfoundry-attic/jibber_jabber"
 	"github.com/go-errors/errors"
 
 	"github.com/kardianos/osext"
@@ -54,6 +55,8 @@ func detectAppName() {
 	app.Name = fmt.Sprintf("%sSetup", appName)
 }
 
+const DefaultLocale = "en-US"
+
 func main() {
 	detectAppName()
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
@@ -73,6 +76,14 @@ func main() {
 
 	_, err := app.Parse(os.Args[1:])
 	must(err)
+
+	userLocale, err := jibber_jabber.DetectIETF()
+	if err != nil {
+		log.Println("Couldn't detect locale, falling back to default", DefaultLocale)
+		userLocale = "en-US"
+	}
+
+	log.Println("Locale: ", userLocale)
 
 	SetupMain()
 }
