@@ -7,11 +7,14 @@ import (
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/pwr/drip"
+	"github.com/itchio/wharf/pwr/onclose"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
 )
 
-type OnFileValidatedFunc func(fileIndex int64)
+type OnCloseFunc func(fileIndex int64)
+
+type WoundsFilterFunc func(wounds chan *Wound) chan *Wound
 
 // A ValidatingPool will check files against their hashes, but doesn't
 // check directories or symlinks
@@ -23,9 +26,10 @@ type ValidatingPool struct {
 	Container *tlc.Container
 	Signature *SignatureInfo
 
-	Wounds chan *Wound
+	Wounds       chan *Wound
+	WoundsFilter WoundsFilterFunc
 
-	OnFileValidated OnFileValidatedFunc
+	OnClose OnCloseFunc
 
 	// private //
 
@@ -54,6 +58,28 @@ func (vp *ValidatingPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) 
 // pool's writer. It tries really hard to be transparent, but does buffer some data,
 // which means some writing is only done when the returned writer is closed.
 func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
+	var wounds chan *Wound
+	var woundsDone chan bool
+
+	if vp.Wounds != nil {
+		wounds = make(chan *Wound)
+		originalWounds := wounds
+		if vp.WoundsFilter != nil {
+			wounds = vp.WoundsFilter(wounds)
+		}
+
+		woundsDone = make(chan bool)
+
+		go func() {
+			for wound := range originalWounds {
+				if vp.Wounds != nil {
+					vp.Wounds <- wound
+				}
+			}
+			woundsDone <- true
+		}()
+	}
+
 	if vp.hashGroups == nil {
 		err := vp.makeHashGroups()
 		if err != nil {
@@ -78,13 +104,13 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 		size := ComputeBlockSize(fileSize, blockIndex)
 
 		if blockIndex >= int64(len(hashGroup)) {
-			if vp.Wounds == nil {
+			if wounds == nil {
 				err := fmt.Errorf("%s: too large (%d blocks, tried to look up hash %d)",
 					file.Path, len(hashGroup), blockIndex)
 				return errors.Wrap(err, 1)
 			}
 
-			vp.Wounds <- &Wound{
+			wounds <- &Wound{
 				Kind:  WoundKind_FILE,
 				Index: fileIndex,
 				Start: start,
@@ -94,37 +120,37 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 			bh := hashGroup[blockIndex]
 
 			if bh.WeakHash != weakHash {
-				if vp.Wounds == nil {
+				if wounds == nil {
 					err := fmt.Errorf("%s: at block %d, expected weak hash %x, got %x", file.Path, blockIndex, bh.WeakHash, weakHash)
 					return errors.Wrap(err, 1)
 				}
 
-				vp.Wounds <- &Wound{
+				wounds <- &Wound{
 					Kind:  WoundKind_FILE,
 					Index: fileIndex,
 					Start: start,
 					End:   start + size,
 				}
 			} else if !bytes.Equal(bh.StrongHash, strongHash) {
-				if vp.Wounds == nil {
+				if wounds == nil {
 					err := fmt.Errorf("%s: at block %d, expected strong hash %x, got %x", file.Path, blockIndex, bh.StrongHash, strongHash)
 					return errors.Wrap(err, 1)
 				}
 
-				vp.Wounds <- &Wound{
+				wounds <- &Wound{
 					Kind:  WoundKind_FILE,
 					Index: fileIndex,
 					Start: start,
 					End:   start + size,
 				}
-			}
-
-			if vp.Wounds != nil {
-				vp.Wounds <- &Wound{
-					Kind:  WoundKind_CLOSED_FILE,
-					Index: fileIndex,
-					Start: start,
-					End:   start + size,
+			} else {
+				if wounds != nil {
+					wounds <- &Wound{
+						Kind:  WoundKind_CLOSED_FILE,
+						Index: fileIndex,
+						Start: start,
+						End:   start + size,
+					}
 				}
 			}
 		}
@@ -133,8 +159,23 @@ func (vp *ValidatingPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 		return nil
 	}
 
+	ocw := &onclose.Writer{
+		Writer: w,
+		BeforeClose: func() {
+			if wounds != nil {
+				close(wounds)
+				<-woundsDone
+			}
+		},
+		AfterClose: func() {
+			if vp.OnClose != nil {
+				vp.OnClose(fileIndex)
+			}
+		},
+	}
+
 	dw := &drip.Writer{
-		Writer:   w,
+		Writer:   ocw,
 		Buffer:   make([]byte, BlockSize),
 		Validate: validate,
 	}

@@ -1,13 +1,14 @@
 package pwr
 
 import (
-	"github.com/itchio/arkive/zip"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync/atomic"
+
+	"github.com/itchio/arkive/zip"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
@@ -41,6 +42,8 @@ type ArchiveHealer struct {
 	hasWounds      bool
 
 	container *tlc.Container
+
+	lockMap LockMap
 }
 
 var _ Healer = (*ArchiveHealer)(nil)
@@ -52,7 +55,7 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	ah.container = container
 
 	files := make(map[int64]bool)
-	fileIndices := make(chan int64)
+	fileIndices := make(chan int64, len(container.Files))
 
 	if ah.NumWorkers == 0 {
 		ah.NumWorkers = runtime.NumCPU() + 1
@@ -147,6 +150,7 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 				// whole file was healthy
 				if wound.End == fileSize {
 					atomic.AddInt64(&ah.totalHealthy, fileSize)
+					ah.updateProgress()
 				}
 			}
 
@@ -221,6 +225,11 @@ func (ah *ArchiveHealer) heal(container *tlc.Container, zipReader *zip.Reader, z
 }
 
 func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.WritablePool, fileIndex int64, chunkHealed chunkHealedFunc) error {
+	if ah.lockMap != nil {
+		lock := ah.lockMap[fileIndex]
+		<-lock
+	}
+
 	var err error
 	var reader io.Reader
 	var writer io.WriteCloser
@@ -297,4 +306,8 @@ func (ah *ArchiveHealer) updateProgress() {
 
 	progress := float64(totalHealthy+totalHealed) / float64(ah.container.Size)
 	ah.Consumer.Progress(progress)
+}
+
+func (ah *ArchiveHealer) SetLockMap(lockMap LockMap) {
+	ah.lockMap = lockMap
 }

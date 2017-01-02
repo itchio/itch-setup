@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync/atomic"
 
 	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
@@ -67,6 +68,7 @@ type ApplyContext struct {
 	OutputPool      wsync.WritablePool
 
 	WoundsPath     string
+	HealPath       string
 	WoundsConsumer WoundsConsumer
 
 	VetApply VetApplyFunc
@@ -221,6 +223,10 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *SignatureInfo) (retErr error) {
 	sourceContainer := actx.SourceContainer
 
+	relayWoundsProgress := int64(0)
+	initialHealerProgress := int64(0)
+	const initialHealerFactor = float64(100 * 1000)
+
 	var validatingPool *ValidatingPool
 	consumerErrs := make(chan error, 1)
 
@@ -237,10 +243,39 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		}
 
 		if actx.WoundsPath != "" {
+			if actx.HealPath != "" {
+				return errors.New("apply: HealPath and WoundsPath cannot be specified at the same time")
+			}
+
 			validatingPool.Wounds = make(chan *Wound)
 
 			actx.WoundsConsumer = &WoundsWriter{
 				WoundsPath: actx.WoundsPath,
+			}
+		} else if actx.HealPath != "" {
+			validatingPool.Wounds = make(chan *Wound)
+
+			healer, err := NewHealer(actx.HealPath, actx.OutputPath)
+			if err != nil {
+				return err
+			}
+			actx.WoundsConsumer = healer
+
+			healer.SetConsumer(&state.Consumer{
+				OnProgress: func(progress float64) {
+					if atomic.LoadInt64(&relayWoundsProgress) == 1 {
+						actx.Consumer.Progress(progress)
+					} else {
+						atomic.StoreInt64(&initialHealerProgress, int64(progress*initialHealerFactor))
+					}
+				},
+			})
+
+			lockMap := NewLockMap(actx.SourceContainer)
+			healer.SetLockMap(lockMap)
+
+			validatingPool.OnClose = func(fileIndex int64) {
+				close(lockMap[fileIndex])
 			}
 		}
 
@@ -307,6 +342,12 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		}
 
 		if actx.WoundsConsumer != nil {
+			actx.Consumer.PauseProgress()
+			actx.Consumer.Progress(float64(atomic.LoadInt64(&initialHealerProgress)) / initialHealerFactor)
+			actx.Consumer.ProgressLabel("Healing...")
+			actx.Consumer.ResumeProgress()
+			atomic.StoreInt64(&relayWoundsProgress, 1)
+
 			taskErr := <-consumerErrs
 			if taskErr != nil {
 				if retErr == nil {
@@ -343,7 +384,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 
 		go readOps(patchWire, ops, errc)
 
-		bytesWritten, transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
+		transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
 		if err != nil {
 			select {
 			case nestedErr := <-errc:
@@ -362,10 +403,6 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 			transpositions[transposition.TargetPath] = append(transpositions[transposition.TargetPath], transposition)
 		} else {
 			actx.Stats.TouchedFiles++
-			if bytesWritten != f.Size {
-				retErr = fmt.Errorf("%s: expected to write %d bytes, wrote %d bytes", f.Path, f.Size, bytesWritten)
-				return
-			}
 		}
 
 		// using errc to signal the end of processing, rather than having a separate
@@ -395,7 +432,85 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 		return fmt.Errorf("internal error: found transpositions but not applying in-place")
 	}
 
+	applyMultipleTranspositions := func(targetPath string, group []*Transposition) error {
+		// a file got duplicated!
+		var noop *Transposition
+		for _, transpo := range group {
+			if targetPath == transpo.OutputPath {
+				noop = transpo
+				break
+			}
+		}
+
+		for i, transpo := range group {
+			if noop == nil {
+				if i == 0 {
+					// arbitrary pick first transposition as being the rename - do
+					// all the others as copies first
+					continue
+				}
+			} else if transpo == noop {
+				// no need to copy for the noop
+				continue
+			}
+
+			oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(targetPath))
+			newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
+			err := actx.copy(oldAbsolutePath, newAbsolutePath, mkdirBehaviorIfNeeded)
+			if err != nil {
+				return err
+			}
+			actx.Stats.TouchedFiles++
+		}
+
+		if noop == nil {
+			// we treated the first transpo as being the rename, gotta do it now
+			transpo := group[0]
+			oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(targetPath))
+			newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
+			err := actx.move(oldAbsolutePath, newAbsolutePath)
+			if err != nil {
+				return err
+			}
+			actx.Stats.MovedFiles++
+		} else {
+			actx.Stats.NoopFiles++
+		}
+
+		return nil
+	}
+
+	cleanupRenames := []*Transposition{}
+	alreadyDone := make(map[string]bool)
+	renameSeed := int64(0)
+
 	for _, group := range transpositions {
+		for _, transpo := range group {
+			if transpo.TargetPath == transpo.OutputPath {
+				// no-ops can't clash
+				continue
+			}
+
+			if _, ok := transpositions[transpo.OutputPath]; ok {
+				// transpo is writing to the source of swapBuddy, this will blow shit up
+				// make it write to a safe path instead, then rename it to the correct path
+				renameSeed++
+				safePath := transpo.OutputPath + fmt.Sprintf(".butler-rename-%d", renameSeed)
+				cleanupRenames = append(cleanupRenames, &Transposition{
+					TargetPath: safePath,
+					OutputPath: transpo.OutputPath,
+				})
+				transpo.OutputPath = safePath
+			}
+		}
+	}
+
+	for groupTargetPath, group := range transpositions {
+		if alreadyDone[groupTargetPath] {
+			continue
+		}
+		alreadyDone[groupTargetPath] = true
+
 		if len(group) == 1 {
 			transpo := group[0]
 			if transpo.TargetPath == transpo.OutputPath {
@@ -412,49 +527,19 @@ func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Trans
 				actx.Stats.MovedFiles++
 			}
 		} else {
-			// a file got duplicated!
-			var noop *Transposition
-			for _, transpo := range group {
-				if transpo.TargetPath == transpo.OutputPath {
-					noop = transpo
-					break
-				}
+			err := applyMultipleTranspositions(groupTargetPath, group)
+			if err != nil {
+				return err
 			}
+		}
+	}
 
-			for i, transpo := range group {
-				if noop == nil {
-					if i == 0 {
-						// arbitrary pick first transposition as being the rename - do
-						// all the others as copies first
-						continue
-					}
-				} else if transpo == noop {
-					// no need to copy for the noop
-					continue
-				}
-
-				oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.TargetPath))
-				newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
-				err := actx.copy(oldAbsolutePath, newAbsolutePath, mkdirBehaviorIfNeeded)
-				if err != nil {
-					return err
-				}
-				actx.Stats.TouchedFiles++
-			}
-
-			if noop == nil {
-				// we treated the first transpo as being the rename, gotta do it now
-				transpo := group[0]
-				oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.TargetPath))
-				newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(transpo.OutputPath))
-				err := actx.move(oldAbsolutePath, newAbsolutePath)
-				if err != nil {
-					return err
-				}
-				actx.Stats.MovedFiles++
-			} else {
-				actx.Stats.NoopFiles++
-			}
+	for _, rename := range cleanupRenames {
+		oldAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(rename.TargetPath))
+		newAbsolutePath := filepath.Join(actx.actualOutputPath, filepath.FromSlash(rename.OutputPath))
+		err := actx.move(oldAbsolutePath, newAbsolutePath)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -660,7 +745,7 @@ type Transposition struct {
 }
 
 func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *tlc.Container, targetPool wsync.Pool, outputContainer *tlc.Container, outputPool wsync.WritablePool,
-	fileIndex int64, onSourceWrite counter.CountCallback, ops chan wsync.Operation, inplace bool) (written int64, transposition *Transposition, err error) {
+	fileIndex int64, onSourceWrite counter.CountCallback, ops chan wsync.Operation, inplace bool) (transposition *Transposition, err error) {
 
 	var writer io.WriteCloser
 
@@ -706,7 +791,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 
 				writer, err = outputPool.GetWriter(fileIndex)
 				if err != nil {
-					return 0, nil, errors.Wrap(err, 1)
+					return nil, errors.Wrap(err, 1)
 				}
 				writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
 
@@ -722,7 +807,6 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 						return
 					}
 
-					written = writeCounter.Count()
 					errs <- nil
 				}()
 			}
@@ -734,7 +818,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 			case cErr := <-errs:
 				// if we get an error here, ApplyPatch failed so we no longer need to close realops
 				if cErr != nil {
-					return 0, nil, errors.Wrap(cErr, 1)
+					return nil, errors.Wrap(cErr, 1)
 				}
 			case realops <- op:
 				// muffin
@@ -754,7 +838,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 
 	err = <-errs
 	if err != nil {
-		return 0, nil, errors.Wrap(err, 1)
+		return nil, errors.Wrap(err, 1)
 	}
 
 	return
