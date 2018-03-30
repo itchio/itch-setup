@@ -167,7 +167,7 @@ func SetupMain() {
 			return
 		}
 
-		if *relaunch == true {
+		if *relaunch {
 			proc, err := os.FindProcess(*relaunchPID)
 			if err != nil {
 				showError(fmt.Sprintf("Could not find %s app process: %s", appName, err.Error()), nil)
@@ -190,7 +190,7 @@ func SetupMain() {
 		}
 	}
 
-	if *uninstall == true {
+	if *uninstall {
 		log.Printf("Asked to uninstall but couldn't find marker, just quitting")
 		os.Exit(0)
 	}
@@ -257,7 +257,6 @@ func tryLaunch(appDirs []string) {
 		log.Printf("App launched, getting out of the way")
 		os.Exit(0)
 	}
-	return
 }
 
 func showInstallGUI(installDirIn string) {
@@ -307,10 +306,7 @@ func showInstallGUI(installDirIn string) {
 				defer execReader.Close()
 
 				_, err = io.Copy(execWriter, execReader)
-				if err != nil {
-					return err
-				}
-				return nil
+				return err
 			}()
 			if copyErr != nil {
 				return copyErr
@@ -355,8 +351,10 @@ func showInstallGUI(installDirIn string) {
 		Height: windowHeight,
 	}
 
+	baseTitle := localizer.T("setup.window.title", map[string]string{"app_name": appName})
+
 	err := ui.MainWindow{
-		Title:   localizer.T("setup.window.title", map[string]string{"app_name": appName}),
+		Title:   baseTitle,
 		MinSize: windowSize,
 		MaxSize: windowSize,
 		Size:    windowSize,
@@ -488,6 +486,7 @@ func showInstallGUI(installDirIn string) {
 			pb.SetValue(int(progress * 1000.0))
 		},
 		OnSource: func(sourceIn setup.InstallSource) {
+			mw.SetTitle(fmt.Sprintf("%s - %s", baseTitle, sourceIn.Version))
 			sourceChan <- sourceIn
 			source = sourceIn
 		},
