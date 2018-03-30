@@ -38,6 +38,42 @@ toGObject(void *p)
 	return (G_OBJECT(p));
 }
 
+static GAction *
+toGAction(void *p)
+{
+	return (G_ACTION(p));
+}
+
+static GActionGroup *
+toGActionGroup(void *p)
+{
+	return (G_ACTION_GROUP(p));
+}
+
+static GActionMap *
+toGActionMap(void *p)
+{
+	return (G_ACTION_MAP(p));
+}
+
+static GSimpleAction *
+toGSimpleAction(void *p)
+{
+	return (G_SIMPLE_ACTION(p));
+}
+
+static GSimpleActionGroup *
+toGSimpleActionGroup(void *p)
+{
+	return (G_SIMPLE_ACTION_GROUP(p));
+}
+
+static GPropertyAction *
+toGPropertyAction(void *p)
+{
+	return (G_PROPERTY_ACTION(p));
+}
+
 static GMenuModel *
 toGMenuModel(void *p)
 {
@@ -80,6 +116,11 @@ toGSettingsBackend(void *p)
 	return (G_SETTINGS_BACKEND(p));
 }
 
+static GBinding*
+toGBinding(void *p)
+{
+        return (G_BINDING(p));
+}
 
 static GType
 _g_type_from_instance(gpointer instance)
@@ -179,12 +220,11 @@ _g_closure_add_finalize_notifier(GClosure *closure)
 static inline guint _g_signal_new(const gchar *name) {
 	return g_signal_new(name,
 		G_TYPE_OBJECT,
-		G_SIGNAL_RUN_FIRST,
+		G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
 		0, NULL, NULL,
 		g_cclosure_marshal_VOID__POINTER,
 		G_TYPE_NONE,
-		1,
-		G_TYPE_POINTER);
+		0);
 }
 
 static void init_i18n(const char *domain, const char *dir) {

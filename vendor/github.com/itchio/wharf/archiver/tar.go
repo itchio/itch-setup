@@ -8,15 +8,15 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
+	"github.com/pkg/errors"
 )
 
 // Does not preserve users, nor permission, except the executable bit
 func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractResult, error) {
-	settings.Consumer.Infof("Extracting %s to %s", archive, dir)
+	settings.Consumer.Infof("Extracting %s to %s", eos.Redact(archive), dir)
 
 	dirCount := 0
 	regCount := 0
@@ -24,25 +24,30 @@ func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractR
 
 	file, err := eos.Open(archive)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	defer file.Close()
 
 	err = Mkdir(dir)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
-	tarReader := tar.NewReader(file)
+	stats, err := file.Stat()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	countingReader := counter.NewReaderCallback(settings.Consumer.CountCallback(stats.Size()), file)
+	tarReader := tar.NewReader(countingReader)
 
 	for {
 		header, err := tarReader.Next()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Cause(err) == io.EOF {
 				break
 			}
-			return nil, errors.Wrap(err, 1)
+			return nil, errors.WithStack(err)
 		}
 
 		rel := header.Name
@@ -52,7 +57,7 @@ func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractR
 		case tar.TypeDir:
 			err = Mkdir(filename)
 			if err != nil {
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 			dirCount++
 
@@ -60,14 +65,14 @@ func ExtractTar(archive string, dir string, settings ExtractSettings) (*ExtractR
 			settings.Consumer.Debugf("extract %s", filename)
 			err = CopyFile(filename, os.FileMode(header.Mode&LuckyMode|ModeMask), tarReader)
 			if err != nil {
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 			regCount++
 
 		case tar.TypeSymlink:
 			err = Symlink(header.Linkname, filename, settings.Consumer)
 			if err != nil {
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 			symlinkCount++
 
@@ -95,7 +100,7 @@ func CompressTar(archiveWriter io.Writer, dir string, consumer *state.Consumer) 
 	defer func() {
 		if tarWriter != nil {
 			if zErr := tarWriter.Close(); err == nil && zErr != nil {
-				err = errors.Wrap(zErr, 1)
+				err = errors.WithStack(zErr)
 			}
 		}
 	}()
@@ -163,7 +168,7 @@ func CompressTar(archiveWriter io.Writer, dir string, consumer *state.Consumer) 
 
 	err = tarWriter.Close()
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 	tarWriter = nil
 

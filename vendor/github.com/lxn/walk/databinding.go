@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 )
 
 var (
@@ -29,6 +30,8 @@ type DataBinder struct {
 	errorPresenter            ErrorPresenter
 	canSubmitChangedPublisher EventPublisher
 	submittedPublisher        EventPublisher
+	autoSubmitDelay           time.Duration
+	autoSubmitTimer           *time.Timer
 	autoSubmit                bool
 	canSubmit                 bool
 	inReset                   bool
@@ -45,6 +48,17 @@ func (db *DataBinder) AutoSubmit() bool {
 
 func (db *DataBinder) SetAutoSubmit(autoSubmit bool) {
 	db.autoSubmit = autoSubmit
+	if autoSubmit {
+		db.canSubmit = true
+	}
+}
+
+func (db *DataBinder) AutoSubmitDelay() time.Duration {
+	return db.autoSubmitDelay
+}
+
+func (db *DataBinder) SetAutoSubmitDelay(delay time.Duration) {
+	db.autoSubmitDelay = delay
 }
 
 func (db *DataBinder) Submitted() *Event {
@@ -98,21 +112,29 @@ func (db *DataBinder) SetBoundWidgets(boundWidgets []Widget) {
 				db.dirty = true
 
 				if db.autoSubmit {
-					if prop.Get() == nil {
-						return
-					}
+					if db.autoSubmitDelay > 0 {
+						if db.autoSubmitTimer == nil {
+							db.autoSubmitTimer = time.AfterFunc(db.autoSubmitDelay, func() {
+								synchronize(func() {
+									db.Submit()
+								})
+							})
+						} else {
+							db.autoSubmitTimer.Reset(db.autoSubmitDelay)
+						}
+					} else {
+						v := reflect.ValueOf(db.dataSource)
+						field := db.fieldBoundToProperty(v, prop)
+						if field == nil {
+							return
+						}
 
-					v := reflect.ValueOf(db.dataSource)
-					field := db.fieldBoundToProperty(v, prop)
-					if field == nil {
-						return
-					}
+						if err := db.submitProperty(prop, field); err != nil {
+							return
+						}
 
-					if err := db.submitProperty(prop, field); err != nil {
-						return
+						db.submittedPublisher.Publish()
 					}
-
-					db.submittedPublisher.Publish()
 				} else {
 					if !db.inReset {
 						db.validateProperties()
@@ -215,7 +237,7 @@ func (db *DataBinder) Reset() error {
 				f64 = float64(v)
 
 			default:
-				return newError(fmt.Sprintf("Field '%s': Can't convert %t to float64.", prop.Source().(string), field.Get()))
+				return newError(fmt.Sprintf("Field '%s': Can't convert %T to float64.", prop.Source().(string), field.Get()))
 			}
 
 			if err := prop.Set(f64); err != nil {
@@ -269,9 +291,11 @@ func (db *DataBinder) submitProperty(prop Property, field DataField) error {
 
 	value := prop.Get()
 	if value == nil {
-		// This happens e.g. if CurrentIndex() of a ComboBox returns -1.
-		// FIXME: Should we handle this differently?
-		return nil
+		if _, ok := db.property2Widget[prop].(*RadioButton); ok {
+			return nil
+		}
+
+		return field.Set(field.Zero())
 	}
 	if err, ok := value.(error); ok {
 		return err
@@ -288,6 +312,9 @@ func (db *DataBinder) forEach(f func(prop Property, field DataField) error) erro
 
 	for _, prop := range db.properties {
 		field := db.fieldBoundToProperty(dsv, prop)
+		if field == nil {
+			continue
+		}
 
 		if err := f(prop, field); err != nil {
 			return err
@@ -298,7 +325,10 @@ func (db *DataBinder) forEach(f func(prop Property, field DataField) error) erro
 }
 
 func (db *DataBinder) fieldBoundToProperty(v reflect.Value, prop Property) DataField {
-	source := prop.Source().(string)
+	source, ok := prop.Source().(string)
+	if !ok || source == "" {
+		return nil
+	}
 
 	f, err := dataFieldFromPath(v, source)
 	if err != nil {
@@ -317,6 +347,7 @@ type DataField interface {
 	CanSet() bool
 	Get() interface{}
 	Set(interface{}) error
+	Zero() interface{}
 }
 
 func dataFieldFromPath(root reflect.Value, path string) (DataField, error) {
@@ -341,7 +372,7 @@ func reflectValueFromPath(root reflect.Value, path string) (reflect.Value, error
 		name, path = nextPathPart(path)
 
 		var p reflect.Value
-		for v.Kind() == reflect.Ptr {
+		for v.Kind() == reflect.Interface || v.Kind() == reflect.Ptr {
 			p = v
 			v = v.Elem()
 		}
@@ -437,4 +468,8 @@ func (f reflectField) Set(value interface{}) error {
 	v.Set(reflect.ValueOf(value))
 
 	return nil
+}
+
+func (f reflectField) Zero() interface{} {
+	return reflect.Zero(reflect.Value(f).Type()).Interface()
 }

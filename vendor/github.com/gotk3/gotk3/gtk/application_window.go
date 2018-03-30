@@ -19,25 +19,31 @@ import (
 // ApplicationWindow is a representation of GTK's GtkApplicationWindow.
 type ApplicationWindow struct {
 	Window
+
+	// Interfaces
+	glib.IActionMap
+	glib.IActionGroup
 }
 
 // native returns a pointer to the underlying GtkApplicationWindow.
 func (v *ApplicationWindow) native() *C.GtkApplicationWindow {
-	if v == nil || v.GObject == nil {
+	if v == nil || v.Window.GObject == nil { // v.Window is necessary because v.GObject would be ambiguous
 		return nil
 	}
-	p := unsafe.Pointer(v.GObject)
+	p := unsafe.Pointer(v.Window.GObject)
 	return C.toGtkApplicationWindow(p)
 }
 
 func marshalApplicationWindow(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapApplicationWindow(obj), nil
 }
 
 func wrapApplicationWindow(obj *glib.Object) *ApplicationWindow {
-	return &ApplicationWindow{Window{Bin{Container{Widget{glib.InitiallyUnowned{obj}}}}}}
+	am := &glib.ActionMap{obj}
+	ag := &glib.ActionGroup{obj}
+	return &ApplicationWindow{Window{Bin{Container{Widget{glib.InitiallyUnowned{obj}}}}}, am, ag}
 }
 
 // ApplicationWindowNew is a wrapper around gtk_application_window_new().
@@ -46,7 +52,7 @@ func ApplicationWindowNew(app *Application) (*ApplicationWindow, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapApplicationWindow(wrapObject(unsafe.Pointer(c))), nil
+	return wrapApplicationWindow(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // SetShowMenubar is a wrapper around gtk_application_window_set_show_menubar().

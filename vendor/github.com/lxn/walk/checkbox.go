@@ -7,6 +7,9 @@
 package walk
 
 import (
+	"strconv"
+	"syscall"
+
 	"github.com/lxn/win"
 )
 
@@ -18,9 +21,10 @@ const (
 	CheckIndeterminate CheckState = win.BST_INDETERMINATE
 )
 
+var checkBoxCheckSize Size
+
 type CheckBox struct {
 	Button
-
 	checkStateChangedPublisher EventPublisher
 }
 
@@ -37,6 +41,11 @@ func NewCheckBox(parent Container) (*CheckBox, error) {
 	}
 
 	cb.Button.init()
+
+	cb.SetBackground(nullBrushSingleton)
+
+	cb.GraphicsEffects().Add(InteractionEffect)
+	cb.GraphicsEffects().Add(FocusEffect)
 
 	cb.MustRegisterProperty("CheckState", NewProperty(
 		func() interface{} {
@@ -57,11 +66,33 @@ func (*CheckBox) LayoutFlags() LayoutFlags {
 }
 
 func (cb *CheckBox) MinSizeHint() Size {
+	if checkBoxCheckSize.Width == 0 {
+		if win.IsAppThemed() {
+			hTheme := win.OpenThemeData(cb.hWnd, syscall.StringToUTF16Ptr("Button"))
+			defer win.CloseThemeData(hTheme)
+
+			hdc := win.GetDC(cb.hWnd)
+			defer win.ReleaseDC(cb.hWnd, hdc)
+
+			var s win.SIZE
+			if win.S_OK == win.GetThemePartSize(hTheme, hdc, win.BP_CHECKBOX, win.CBS_UNCHECKEDNORMAL, nil, win.TS_TRUE, &s) {
+				checkBoxCheckSize.Width = int(s.CX)
+				checkBoxCheckSize.Height = int(s.CY)
+			}
+		} else {
+			checkBoxCheckSize.Width = 12
+			checkBoxCheckSize.Height = 12
+		}
+	}
+
+	if cb.Text() == "" {
+		return checkBoxCheckSize
+	}
+
 	defaultSize := cb.dialogBaseUnitsToPixels(Size{50, 10})
 	textSize := cb.calculateTextSizeImpl("n" + windowText(cb.hWnd))
 
-	// FIXME: Use GetThemePartSize instead of GetSystemMetrics?
-	w := textSize.Width + int(win.GetSystemMetrics(win.SM_CXMENUCHECK))
+	w := textSize.Width + checkBoxCheckSize.Width
 	h := maxi(defaultSize.Height, textSize.Height)
 
 	return Size{w, h}
@@ -69,6 +100,14 @@ func (cb *CheckBox) MinSizeHint() Size {
 
 func (cb *CheckBox) SizeHint() Size {
 	return cb.MinSizeHint()
+}
+
+func (cb *CheckBox) TextOnLeftSide() bool {
+	return cb.hasStyleBits(win.BS_LEFTTEXT)
+}
+
+func (cb *CheckBox) SetTextOnLeftSide(textLeft bool) error {
+	return cb.ensureStyleBits(win.BS_LEFTTEXT, textLeft)
 }
 
 func (cb *CheckBox) setChecked(checked bool) {
@@ -109,6 +148,26 @@ func (cb *CheckBox) SetCheckState(state CheckState) {
 
 func (cb *CheckBox) CheckStateChanged() *Event {
 	return cb.checkStateChangedPublisher.Event()
+}
+
+func (cb *CheckBox) SaveState() error {
+	return cb.WriteState(strconv.Itoa(int(cb.CheckState())))
+}
+
+func (cb *CheckBox) RestoreState() error {
+	s, err := cb.ReadState()
+	if err != nil {
+		return err
+	}
+
+	cs, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+
+	cb.SetCheckState(CheckState(cs))
+
+	return nil
 }
 
 func (cb *CheckBox) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {

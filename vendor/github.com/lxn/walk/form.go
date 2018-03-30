@@ -14,6 +14,8 @@ import (
 )
 
 import (
+	"strconv"
+
 	"github.com/lxn/win"
 )
 
@@ -59,6 +61,30 @@ type Form interface {
 	Container
 	AsFormBase() *FormBase
 	Run() int
+	Starting() *Event
+	Closing() *CloseEvent
+	Activating() *Event
+	Deactivating() *Event
+	Activate() error
+	Show()
+	Hide()
+	Title() string
+	SetTitle(title string) error
+	TitleChanged() *Event
+	Icon() *Icon
+	SetIcon(icon *Icon)
+	IconChanged() *Event
+	Owner() Form
+	SetOwner(owner Form) error
+	ProgressIndicator() *ProgressIndicator
+
+	// RightToLeftLayout returns whether coordinates on the x axis of the
+	// Form increase from right to left.
+	RightToLeftLayout() bool
+
+	// SetRightToLeftLayout sets whether coordinates on the x axis of the
+	// Form increase from right to left.
+	SetRightToLeftLayout(rtl bool) error
 }
 
 type FormBase struct {
@@ -66,12 +92,16 @@ type FormBase struct {
 	clientComposite       *Composite
 	owner                 Form
 	closingPublisher      CloseEventPublisher
+	activatingPublisher   EventPublisher
+	deactivatingPublisher EventPublisher
 	startingPublisher     EventPublisher
 	titleChangedPublisher EventPublisher
+	iconChangedPublisher  EventPublisher
 	progressIndicator     *ProgressIndicator
 	icon                  *Icon
 	prevFocusHWnd         win.HWND
 	isInRestoreState      bool
+	started               bool
 	closeReason           CloseReason
 }
 
@@ -81,8 +111,42 @@ func (fb *FormBase) init(form Form) error {
 		return err
 	}
 	fb.clientComposite.SetName("clientComposite")
+	fb.clientComposite.background = nil
 
 	fb.clientComposite.children.observer = form.AsFormBase()
+
+	fb.MustRegisterProperty("Icon", NewProperty(
+		func() interface{} {
+			return fb.Icon()
+		},
+		func(v interface{}) error {
+			var icon *Icon
+
+			switch val := v.(type) {
+			case *Icon:
+				icon = val
+
+			case int:
+				var err error
+				if icon, err = Resources.Icon(strconv.Itoa(val)); err != nil {
+					return err
+				}
+
+			case string:
+				var err error
+				if icon, err = Resources.Icon(val); err != nil {
+					return err
+				}
+
+			default:
+				return ErrInvalidType
+			}
+
+			fb.SetIcon(icon)
+
+			return nil
+		},
+		fb.iconChangedPublisher.Event()))
 
 	fb.MustRegisterProperty("Title", NewProperty(
 		func() interface{} {
@@ -136,6 +200,39 @@ func (fb *FormBase) SetLayout(value Layout) error {
 	return fb.clientComposite.SetLayout(value)
 }
 
+func (fb *FormBase) SetBounds(bounds Rectangle) error {
+	if layout := fb.Layout(); layout != nil {
+		minSize := fb.sizeFromClientSize(layout.MinSize())
+
+		if bounds.Width < minSize.Width {
+			bounds.Width = minSize.Width
+		}
+		if bounds.Height < minSize.Height {
+			bounds.Height = minSize.Height
+		}
+	}
+
+	if err := fb.WindowBase.SetBounds(bounds); err != nil {
+		return err
+	}
+
+	walkDescendants(fb, func(wnd Window) bool {
+		if container, ok := wnd.(Container); ok {
+			if layout := container.Layout(); layout != nil {
+				layout.Update(false)
+			}
+		}
+
+		return true
+	})
+
+	return nil
+}
+
+func (fb *FormBase) fixedSize() bool {
+	return !fb.hasStyleBits(win.WS_THICKFRAME)
+}
+
 func (fb *FormBase) DataBinder() *DataBinder {
 	return fb.clientComposite.DataBinder()
 }
@@ -171,7 +268,7 @@ func (fb *FormBase) onInsertingWidget(index int, widget Widget) error {
 func (fb *FormBase) onInsertedWidget(index int, widget Widget) error {
 	err := fb.clientComposite.onInsertedWidget(index, widget)
 	if err == nil {
-		if layout := fb.Layout(); layout != nil {
+		if layout := fb.Layout(); layout != nil && !fb.Suspended() {
 			minClientSize := fb.Layout().MinSize()
 			clientSize := fb.clientComposite.Size()
 
@@ -220,6 +317,14 @@ func (fb *FormBase) applyFont(font *Font) {
 	fb.clientComposite.applyFont(font)
 }
 
+func (fb *FormBase) Background() Brush {
+	return fb.clientComposite.Background()
+}
+
+func (fb *FormBase) SetBackground(background Brush) {
+	fb.clientComposite.SetBackground(background)
+}
+
 func (fb *FormBase) Title() string {
 	return windowText(fb.hWnd)
 }
@@ -228,7 +333,47 @@ func (fb *FormBase) SetTitle(value string) error {
 	return setWindowText(fb.hWnd, value)
 }
 
+func (fb *FormBase) TitleChanged() *Event {
+	return fb.titleChangedPublisher.Event()
+}
+
+// RightToLeftLayout returns whether coordinates on the x axis of the
+// FormBase increase from right to left.
+func (fb *FormBase) RightToLeftLayout() bool {
+	return fb.hasExtendedStyleBits(win.WS_EX_LAYOUTRTL)
+}
+
+// SetRightToLeftLayout sets whether coordinates on the x axis of the
+// FormBase increase from right to left.
+func (fb *FormBase) SetRightToLeftLayout(rtl bool) error {
+	return fb.ensureExtendedStyleBits(win.WS_EX_LAYOUTRTL, rtl)
+}
+
 func (fb *FormBase) Run() int {
+	if fb.owner != nil {
+		win.EnableWindow(fb.owner.Handle(), false)
+
+		invalidateDescendentBorders := func() {
+			walkDescendants(fb.owner, func(wnd Window) bool {
+				if widget, ok := wnd.(Widget); ok {
+					widget.AsWidgetBase().invalidateBorderInParent()
+				}
+
+				return true
+			})
+		}
+
+		invalidateDescendentBorders()
+		defer invalidateDescendentBorders()
+	}
+
+	if layout := fb.Layout(); layout != nil {
+		layout.Update(false)
+	}
+
+	fb.focusFirstCandidateDescendant()
+
+	fb.started = true
 	fb.startingPublisher.Publish()
 
 	var msg win.MSG
@@ -255,6 +400,22 @@ func (fb *FormBase) Run() int {
 
 func (fb *FormBase) Starting() *Event {
 	return fb.startingPublisher.Event()
+}
+
+func (fb *FormBase) Activating() *Event {
+	return fb.activatingPublisher.Event()
+}
+
+func (fb *FormBase) Deactivating() *Event {
+	return fb.deactivatingPublisher.Event()
+}
+
+func (fb *FormBase) Activate() error {
+	if hwndPrevActive := win.SetActiveWindow(fb.hWnd); hwndPrevActive == 0 {
+		return lastError("SetActiveWindow")
+	}
+
+	return nil
 }
 
 func (fb *FormBase) Owner() Form {
@@ -295,6 +456,12 @@ func (fb *FormBase) SetIcon(icon *Icon) {
 
 	fb.SendMessage(win.WM_SETICON, 0, hIcon)
 	fb.SendMessage(win.WM_SETICON, 1, hIcon)
+
+	fb.iconChangedPublisher.Publish()
+}
+
+func (fb *FormBase) IconChanged() *Event {
+	return fb.iconChangedPublisher.Event()
 }
 
 func (fb *FormBase) Hide() {
@@ -353,7 +520,7 @@ func (fb *FormBase) SaveState() error {
 		wp.RcNormalPosition.Left, wp.RcNormalPosition.Top,
 		wp.RcNormalPosition.Right, wp.RcNormalPosition.Bottom)
 
-	if err := fb.putState(state); err != nil {
+	if err := fb.WriteState(state); err != nil {
 		return err
 	}
 
@@ -369,7 +536,7 @@ func (fb *FormBase) RestoreState() error {
 		fb.isInRestoreState = false
 	}()
 
-	state, err := fb.getState()
+	state, err := fb.ReadState()
 	if err != nil {
 		return err
 	}
@@ -389,6 +556,13 @@ func (fb *FormBase) RestoreState() error {
 	}
 
 	wp.Length = uint32(unsafe.Sizeof(wp))
+
+	if layout := fb.Layout(); layout != nil && fb.fixedSize() {
+		minSize := fb.sizeFromClientSize(layout.MinSize())
+
+		wp.RcNormalPosition.Right = wp.RcNormalPosition.Left + int32(minSize.Width) - 1
+		wp.RcNormalPosition.Bottom = wp.RcNormalPosition.Top + int32(minSize.Height) - 1
+	}
 
 	if !win.SetWindowPlacement(fb.hWnd, &wp) {
 		return lastError("SetWindowPlacement")
@@ -414,9 +588,18 @@ func (fb *FormBase) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) u
 				win.SetFocus(fb.prevFocusHWnd)
 			}
 
+			appSingleton.activeForm = fb.window.(Form)
+
+			fb.activatingPublisher.Publish()
+
 		case win.WA_INACTIVE:
 			fb.prevFocusHWnd = win.GetFocus()
+
+			appSingleton.activeForm = nil
+
+			fb.deactivatingPublisher.Publish()
 		}
+
 		return 0
 
 	case win.WM_CLOSE:
@@ -425,7 +608,7 @@ func (fb *FormBase) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) u
 		fb.closingPublisher.Publish(&canceled, fb.closeReason)
 		if !canceled {
 			if fb.owner != nil {
-				fb.owner.SetEnabled(true)
+				win.EnableWindow(fb.owner.Handle(), true)
 				if !win.SetWindowPos(fb.owner.Handle(), win.HWND_NOTOPMOST, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE|win.SWP_SHOWWINDOW) {
 					lastError("SetWindowPos")
 				}
@@ -439,6 +622,10 @@ func (fb *FormBase) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) u
 		return fb.clientComposite.WndProc(hwnd, msg, wParam, lParam)
 
 	case win.WM_GETMINMAXINFO:
+		if fb.Suspended() {
+			break
+		}
+
 		mmi := (*win.MINMAXINFO)(unsafe.Pointer(lParam))
 
 		layout := fb.clientComposite.Layout()
@@ -479,4 +666,56 @@ func (fb *FormBase) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) u
 	}
 
 	return fb.WindowBase.WndProc(hwnd, msg, wParam, lParam)
+}
+
+func (fb *FormBase) focusFirstCandidateDescendant() {
+	window := firstFocusableDescendant(fb)
+	if window == nil {
+		return
+	}
+
+	if err := window.SetFocus(); err != nil {
+		return
+	}
+
+	if textSel, ok := window.(textSelectable); ok {
+		textSel.SetTextSelection(0, -1)
+	}
+}
+
+func firstFocusableDescendantCallback(hwnd win.HWND, lParam uintptr) uintptr {
+	widget := windowFromHandle(hwnd)
+
+	if widget == nil || !widget.Visible() || !widget.Enabled() {
+		return 1
+	}
+
+	if _, ok := widget.(*RadioButton); ok {
+		return 1
+	}
+
+	style := uint(win.GetWindowLong(hwnd, win.GWL_STYLE))
+	// FIXME: Ugly workaround for NumberEdit
+	_, isTextSelectable := widget.(textSelectable)
+	if style&win.WS_TABSTOP > 0 || isTextSelectable {
+		hwndPtr := (*win.HWND)(unsafe.Pointer(lParam))
+		*hwndPtr = hwnd
+		return 0
+	}
+
+	return 1
+}
+
+var firstFocusableDescendantCallbackPtr = syscall.NewCallback(firstFocusableDescendantCallback)
+
+func firstFocusableDescendant(container Container) Window {
+	var hwnd win.HWND
+
+	win.EnumChildWindows(container.Handle(), firstFocusableDescendantCallbackPtr, uintptr(unsafe.Pointer(&hwnd)))
+
+	return windowFromHandle(hwnd)
+}
+
+type textSelectable interface {
+	SetTextSelection(start, end int)
 }

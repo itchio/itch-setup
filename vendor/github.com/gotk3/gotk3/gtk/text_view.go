@@ -44,7 +44,7 @@ func (v *TextView) native() *C.GtkTextView {
 
 func marshalTextView(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapTextView(obj), nil
 }
 
@@ -58,14 +58,14 @@ func TextViewNew() (*TextView, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapTextView(wrapObject(unsafe.Pointer(c))), nil
+	return wrapTextView(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // TextViewNewWithBuffer is a wrapper around gtk_text_view_new_with_buffer().
 func TextViewNewWithBuffer(buf *TextBuffer) (*TextView, error) {
 	cbuf := buf.native()
 	c := C.gtk_text_view_new_with_buffer(cbuf)
-	return wrapTextView(wrapObject(unsafe.Pointer(c))), nil
+	return wrapTextView(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // GetBuffer is a wrapper around gtk_text_view_get_buffer().
@@ -74,7 +74,7 @@ func (v *TextView) GetBuffer() (*TextBuffer, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapTextBuffer(wrapObject(unsafe.Pointer(c))), nil
+	return wrapTextBuffer(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // SetBuffer is a wrapper around gtk_text_view_set_buffer().
@@ -300,19 +300,17 @@ func (v *TextView) GetLineYrange(iter *TextIter) (y, height int) {
 
 // GetIterAtLocation is a wrapper around gtk_text_view_get_iter_at_location().
 func (v *TextView) GetIterAtLocation(x, y int) *TextIter {
-	var iter TextIter
-	iiter := (C.GtkTextIter)(iter)
-	C.gtk_text_view_get_iter_at_location(v.native(), &iiter, C.gint(x), C.gint(y))
-	return &iter
+	var iter C.GtkTextIter
+	C.gtk_text_view_get_iter_at_location(v.native(), &iter, C.gint(x), C.gint(y))
+	return (*TextIter)(&iter)
 }
 
 // GetIterAtPosition is a wrapper around gtk_text_view_get_iter_at_position().
 func (v *TextView) GetIterAtPosition(x, y int) (*TextIter, int) {
-	var iter TextIter
+	var iter C.GtkTextIter
 	var trailing C.gint
-	iiter := (C.GtkTextIter)(iter)
-	C.gtk_text_view_get_iter_at_position(v.native(), &iiter, &trailing, C.gint(x), C.gint(y))
-	return &iter, int(trailing)
+	C.gtk_text_view_get_iter_at_position(v.native(), &iter, &trailing, C.gint(x), C.gint(y))
+	return (*TextIter)(&iter), int(trailing)
 }
 
 // BufferToWindowCoords is a wrapper around gtk_text_view_buffer_to_window_coords().
@@ -335,7 +333,7 @@ func (v *TextView) GetWindow(win TextWindowType) *gdk.Window {
 	if c == nil {
 		return nil
 	}
-	return &gdk.Window{wrapObject(unsafe.Pointer(c))}
+	return &gdk.Window{glib.Take(unsafe.Pointer(c))}
 }
 
 // GetWindowType is a wrapper around gtk_text_view_get_window_type().

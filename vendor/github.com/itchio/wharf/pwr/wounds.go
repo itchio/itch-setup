@@ -5,10 +5,10 @@ import (
 	"os"
 
 	humanize "github.com/dustin/go-humanize"
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
+	"github.com/pkg/errors"
 )
 
 // A WoundsConsumer takes file corruption information as input,
@@ -40,6 +40,17 @@ type WoundsGuardian struct {
 
 var _ WoundsConsumer = (*WoundsGuardian)(nil)
 
+type ErrHasWound struct {
+	Wound     *Wound
+	Container *tlc.Container
+}
+
+var _ error = (*ErrHasWound)(nil)
+
+func (e *ErrHasWound) Error() string {
+	return e.Wound.PrettyString(e.Container)
+}
+
 // Do returns an error on the first wound received. If no wounds are ever received,
 // it returns nil (no error)
 func (wg *WoundsGuardian) Do(container *tlc.Container, wounds chan *Wound) error {
@@ -50,7 +61,10 @@ func (wg *WoundsGuardian) Do(container *tlc.Container, wounds chan *Wound) error
 
 		wg.hasWounds = true
 		wg.totalCorrupted += wound.Size()
-		return fmt.Errorf(wound.PrettyString(container))
+		return &ErrHasWound{
+			Wound:     wound,
+			Container: container,
+		}
 	}
 
 	return nil
@@ -104,33 +118,33 @@ func (ww *WoundsWriter) Do(container *tlc.Container, wounds chan *Wound) error {
 			var err error
 			fw, err = os.Create(ww.WoundsPath)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 
 			wc = wire.NewWriteContext(fw)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 
 			err = wc.WriteMagic(WoundsMagic)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 
 			err = wc.WriteMessage(&WoundsHeader{})
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 
 			err = wc.WriteMessage(container)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 		}
 
 		err := wc.WriteMessage(wound)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 
 		return nil

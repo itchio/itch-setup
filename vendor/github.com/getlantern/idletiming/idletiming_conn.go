@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getlantern/golog"
+	"github.com/getlantern/mtime"
 )
 
 var (
@@ -37,7 +38,7 @@ func Conn(conn net.Conn, idleTimeout time.Duration, onIdle func()) *IdleTimingCo
 		halfIdleTimeout:  time.Duration(idleTimeout.Nanoseconds() / 2),
 		activeCh:         make(chan bool, 1),
 		closedCh:         make(chan bool, 1),
-		lastActivityTime: int64(time.Now().UnixNano()),
+		lastActivityTime: uint64(mtime.Now()),
 	}
 
 	go func() {
@@ -48,7 +49,7 @@ func Conn(conn net.Conn, idleTimeout time.Duration, onIdle func()) *IdleTimingCo
 			case <-c.activeCh:
 				// We're active, continue
 				timer.Reset(idleTimeout)
-				atomic.StoreInt64(&c.lastActivityTime, time.Now().UnixNano())
+				atomic.StoreUint64(&c.lastActivityTime, uint64(mtime.Now()))
 				continue
 			case <-timer.C:
 				c.Close()
@@ -70,7 +71,7 @@ func Conn(conn net.Conn, idleTimeout time.Duration, onIdle func()) *IdleTimingCo
 type IdleTimingConn struct {
 	// Keep it at the top to make sure 64-bit alignment, see
 	// https://golang.org/pkg/sync/atomic/#pkg-note-BUG
-	lastActivityTime int64
+	lastActivityTime uint64
 	readDeadline     guardedTime
 	writeDeadline    guardedTime
 
@@ -87,13 +88,7 @@ type IdleTimingConn struct {
 // TimesOutIn returns how much time is left before this connection will time
 // out, assuming there is no further activity.
 func (c *IdleTimingConn) TimesOutIn() time.Duration {
-	return c.TimesOutAt().Sub(time.Now())
-}
-
-// TimesOutAt returns the time at which this connection will time out, assuming
-// there is no further activity
-func (c *IdleTimingConn) TimesOutAt() time.Time {
-	return time.Unix(0, atomic.LoadInt64(&c.lastActivityTime)).Add(c.idleTimeout)
+	return c.idleTimeout - mtime.Now().Sub(mtime.Instant(atomic.LoadUint64(&c.lastActivityTime)))
 }
 
 // Read implements the method from io.Reader
@@ -266,6 +261,11 @@ func (c *IdleTimingConn) SetWriteDeadline(t time.Time) error {
 
 	c.writeDeadline.Set(t)
 	return nil
+}
+
+// Wrapped implements the interface netx.WrappedConn
+func (c *IdleTimingConn) Wrapped() net.Conn {
+	return c.conn
 }
 
 func (c *IdleTimingConn) markActive(n int) bool {

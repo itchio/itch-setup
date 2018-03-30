@@ -8,14 +8,17 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/go-errors/errors"
+	"github.com/itchio/savior"
+	"github.com/itchio/wharf/bsdiff"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/wharf/pools/nullpool"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -60,7 +63,10 @@ type ApplyContext struct {
 
 	TargetPath string
 	OutputPath string
-	InPlace    bool
+	// if set, will patch files in-place rather than in a new directory
+	InPlace bool
+	// if set, will apply to a nullpool (not writing anything to disk)
+	DryRun bool
 
 	TargetContainer *tlc.Container
 	TargetPool      wsync.Pool
@@ -71,11 +77,18 @@ type ApplyContext struct {
 	HealPath       string
 	WoundsConsumer WoundsConsumer
 
+	// StagePath is the folder butler will use to store temporary files
+	// when operating in-place
+	StagePath string
+
 	VetApply VetApplyFunc
 
 	Signature *SignatureInfo
 
 	Stats ApplyStats
+
+	// optional, for checking
+	SourceIndexWhiteList map[int64]bool
 
 	// internal
 	actualOutputPath string
@@ -113,18 +126,26 @@ type Ghost struct {
 }
 
 // ApplyPatch reads a patch, parses it, and generates the new file tree
-func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
+func (actx *ApplyContext) ApplyPatch(patchReader savior.SeekSource) error {
 	actx.actualOutputPath = actx.OutputPath
 	if actx.OutputPool == nil {
-		if actx.InPlace {
+		if actx.DryRun {
+			if actx.actualOutputPath != "" {
+				return fmt.Errorf("cannot specify both OutputPath and DryRun")
+			}
+		} else if actx.InPlace {
 			// applying in-place is a bit tricky: we can't overwrite files in the
 			// target directory (old) while we're reading the patch otherwise
 			// we might be copying new bytes instead of old bytes into later files
 			// so, we rebuild 'touched' files in a staging area
-			stagePath := actx.actualOutputPath + "-stage"
+			stagePath := actx.StagePath
+			if stagePath == "" {
+				stagePath = actx.actualOutputPath + "-stage"
+				actx.Consumer.Infof("No staging path specified, using: %s", stagePath)
+			}
 			err := os.MkdirAll(stagePath, os.FileMode(0755))
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 
 			defer os.RemoveAll(stagePath)
@@ -141,38 +162,38 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 	rawPatchWire := wire.NewReadContext(patchReader)
 	err := rawPatchWire.ExpectMagic(PatchMagic)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 
 	header := &PatchHeader{}
 	err = rawPatchWire.ReadMessage(header)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 
 	patchWire, err := DecompressWire(rawPatchWire, header.Compression)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 
 	targetContainer := &tlc.Container{}
 	err = patchWire.ReadMessage(targetContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 	actx.TargetContainer = targetContainer
 
 	sourceContainer := &tlc.Container{}
 	err = patchWire.ReadMessage(sourceContainer)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 	actx.SourceContainer = sourceContainer
 
 	if actx.VetApply != nil {
 		err = actx.VetApply(actx)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 	}
 
@@ -180,7 +201,9 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 
 	// when not working with a custom output pool
 	if actx.OutputPool == nil {
-		if actx.InPlace {
+		if actx.DryRun {
+			actx.OutputPool = nullpool.New(actx.SourceContainer)
+		} else if actx.InPlace {
 			// when working in-place, we have to keep track of which files were deleted
 			// from one version to the other, so that we too may delete them in the end.
 			ghosts = detectGhosts(actx.SourceContainer, actx.TargetContainer)
@@ -189,30 +212,32 @@ func (actx *ApplyContext) ApplyPatch(patchReader io.Reader) error {
 			// deleted files, because they won't even exist in the first place.
 			err = sourceContainer.Prepare(actx.OutputPath)
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 		}
 	}
 
 	err = actx.patchAll(patchWire, actx.Signature)
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 
-	if actx.InPlace {
+	if actx.DryRun {
+		// muffin to do
+	} else if actx.InPlace {
 		err = actx.ensureDirsAndSymlinks(actx.actualOutputPath)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 
 		actx.Stats.StageSize, err = actx.mergeFolders(actx.actualOutputPath, actx.OutputPath)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 
 		err = actx.deleteGhosts(actx.actualOutputPath, ghosts)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 		actx.OutputPath = actx.actualOutputPath
 	}
@@ -313,6 +338,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 	}
 
 	sctx := mksync()
+	bctx := bsdiff.NewPatchContext()
 	sh := &SyncHeader{}
 
 	// transpositions, indexed by TargetPath
@@ -324,14 +350,14 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		closeErr = targetPool.Close()
 		if closeErr != nil {
 			if retErr == nil {
-				retErr = errors.Wrap(closeErr, 1)
+				retErr = errors.WithStack(closeErr)
 			}
 		}
 
 		closeErr = outputPool.Close()
 		if closeErr != nil {
 			if retErr == nil {
-				retErr = errors.Wrap(closeErr, 1)
+				retErr = errors.WithStack(closeErr)
 			}
 		}
 
@@ -351,7 +377,7 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 			taskErr := <-consumerErrs
 			if taskErr != nil {
 				if retErr == nil {
-					retErr = errors.Wrap(taskErr, 1)
+					retErr = errors.WithStack(taskErr)
 				}
 			}
 		}
@@ -369,48 +395,134 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 		sh.Reset()
 		err := patchWire.ReadMessage(sh)
 		if err != nil {
-			retErr = errors.Wrap(err, 1)
+			retErr = errors.WithStack(err)
 			return
 		}
 
 		if sh.FileIndex != int64(fileIndex) {
 			fmt.Printf("expected fileIndex = %d, got fileIndex %d\n", fileIndex, sh.FileIndex)
-			retErr = errors.Wrap(ErrMalformedPatch, 1)
+			retErr = errors.WithStack(ErrMalformedPatch)
 			return
 		}
 
-		ops := make(chan wsync.Operation)
-		errc := make(chan error, 1)
+		skip := false
+		if actx.SourceIndexWhiteList != nil && !actx.SourceIndexWhiteList[int64(fileIndex)] {
+			skip = true
+		}
 
-		go readOps(patchWire, ops, errc)
-
-		transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
-		if err != nil {
-			select {
-			case nestedErr := <-errc:
-				if nestedErr != nil {
-					actx.Consumer.Debugf("Had an error while reading ops: %s", nestedErr.Error())
-				}
-			default:
-				// no nested error
+		if sh.Type == SyncHeader_BSDIFF {
+			if skip {
+				retErr = errors.WithStack(fmt.Errorf("don't know how to skip bsdiff entry"))
+				return
 			}
 
-			retErr = errors.Wrap(err, 1)
-			return
-		}
+			bh := &BsdiffHeader{}
+			err := patchWire.ReadMessage(bh)
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
 
-		if transposition != nil {
-			transpositions[transposition.TargetPath] = append(transpositions[transposition.TargetPath], transposition)
-		} else {
+			targetReader, err := targetPool.GetReadSeeker(bh.TargetIndex)
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			_, err = targetReader.Seek(0, io.SeekStart)
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			sourceWriter, err := outputPool.GetWriter(sh.FileIndex)
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			writeCounter := counter.NewWriterCallback(onSourceWrite, sourceWriter)
+
+			newSize := actx.SourceContainer.Files[sh.FileIndex].Size
+
+			err = bctx.Patch(targetReader, writeCounter, newSize, patchWire.ReadMessage)
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			err = sourceWriter.Close()
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			rop := &SyncOp{}
+			err = patchWire.ReadMessage(rop)
+			if err != nil {
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			if rop.Type != SyncOp_HEY_YOU_DID_IT {
+				fmt.Printf("expected HEY_YOU_DID_IT, got %d\n", rop.Type)
+				retErr = errors.WithStack(ErrMalformedPatch)
+				return
+			}
+
 			actx.Stats.TouchedFiles++
-		}
+		} else if sh.Type == SyncHeader_RSYNC {
+			if skip {
+				rop := &SyncOp{}
 
-		// using errc to signal the end of processing, rather than having a separate
-		// done channel. not sure if there's any upside to either
-		err = <-errc
-		if err != nil {
-			retErr = err
-			return
+				for {
+					err = patchWire.ReadMessage(rop)
+					if err != nil {
+						retErr = errors.WithStack(err)
+						return
+					}
+
+					if rop.Type == SyncOp_HEY_YOU_DID_IT {
+						break
+					}
+				}
+
+				continue
+			}
+
+			errc := make(chan error, 1)
+			ops := make(chan wsync.Operation)
+
+			go readOps(patchWire, ops, errc)
+
+			transposition, err := actx.lazilyPatchFile(sctx, targetContainer, targetPool, sourceContainer, outputPool, sh.FileIndex, onSourceWrite, ops, actx.InPlace)
+			if err != nil {
+				select {
+				case nestedErr := <-errc:
+					if nestedErr != nil {
+						actx.Consumer.Debugf("Had an error while reading ops: %s", nestedErr.Error())
+					}
+				default:
+					// no nested error
+				}
+
+				retErr = errors.WithStack(err)
+				return
+			}
+
+			if transposition != nil {
+				transpositions[transposition.TargetPath] = append(transpositions[transposition.TargetPath], transposition)
+			} else {
+				actx.Stats.TouchedFiles++
+			}
+
+			// using errc to signal the end of processing, rather than having a separate
+			// done channel. not sure if there's any upside to either
+			err = <-errc
+			if err != nil {
+				retErr = err
+				return
+			}
 		}
 	}
 
@@ -425,6 +537,11 @@ func (actx *ApplyContext) patchAll(patchWire *wire.ReadContext, signature *Signa
 
 func (actx *ApplyContext) applyTranspositions(transpositions map[string][]*Transposition) error {
 	if len(transpositions) == 0 {
+		return nil
+	}
+
+	if actx.DryRun {
+		actx.Consumer.Infof("Doing a dry-run, ignoring %d transpositions", len(transpositions))
 		return nil
 	}
 
@@ -550,13 +667,13 @@ func (actx *ApplyContext) move(oldAbsolutePath string, newAbsolutePath string) e
 	err := os.Remove(newAbsolutePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 	}
 
 	err = os.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 
 	if actx.debugBrokenRename {
@@ -590,7 +707,7 @@ func (actx *ApplyContext) copy(oldAbsolutePath string, newAbsolutePath string, m
 	if mkdirBehavior == mkdirBehaviorIfNeeded {
 		err := os.MkdirAll(filepath.Dir(newAbsolutePath), os.FileMode(0755))
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 	}
 
@@ -667,9 +784,9 @@ func (actx *ApplyContext) mergeFolders(outPath string, stagePath string) (int64,
 		return true
 	}
 
-	stageContainer, err := tlc.WalkDir(stagePath, filter)
+	stageContainer, err := tlc.WalkDir(stagePath, &tlc.WalkOpts{Filter: filter})
 	if err != nil {
-		return 0, errors.Wrap(err, 1)
+		return 0, errors.WithStack(err)
 	}
 
 	for _, f := range stageContainer.Files {
@@ -679,7 +796,7 @@ func (actx *ApplyContext) mergeFolders(outPath string, stagePath string) (int64,
 
 		err := actx.move(sp, op)
 		if err != nil {
-			return 0, errors.Wrap(err, 1)
+			return 0, errors.WithStack(err)
 		}
 	}
 
@@ -727,7 +844,7 @@ func (actx *ApplyContext) deleteGhosts(outPath string, ghosts []Ghost) error {
 				// sometimes we can't delete directories, it's okay
 				actx.Stats.LeftDirs++
 			} else {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 		}
 	}
@@ -791,7 +908,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 
 				writer, err = outputPool.GetWriter(fileIndex)
 				if err != nil {
-					return nil, errors.Wrap(err, 1)
+					return nil, errors.WithStack(err)
 				}
 				writeCounter := counter.NewWriterCallback(onSourceWrite, writer)
 
@@ -818,7 +935,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 			case cErr := <-errs:
 				// if we get an error here, ApplyPatch failed so we no longer need to close realops
 				if cErr != nil {
-					return nil, errors.Wrap(cErr, 1)
+					return nil, errors.WithStack(cErr)
 				}
 			case realops <- op:
 				// muffin
@@ -838,7 +955,7 @@ func (actx *ApplyContext) lazilyPatchFile(sctx *wsync.Context, targetContainer *
 
 	err = <-errs
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	return
@@ -854,7 +971,7 @@ func readOps(rc *wire.ReadContext, ops chan wsync.Operation, errc chan error) {
 		err := rc.ReadMessage(rop)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "readOps error: %s", err.Error())
-			errc <- errors.Wrap(err, 1)
+			errc <- errors.WithStack(err)
 			return
 		}
 
@@ -881,7 +998,7 @@ func readOps(rc *wire.ReadContext, ops chan wsync.Operation, errc chan error) {
 				// safety measures are cheap and reassuring.
 				readingOps = false
 			default:
-				errc <- errors.Wrap(ErrMalformedPatch, 1)
+				errc <- errors.WithStack(ErrMalformedPatch)
 				return
 			}
 		}

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cloudfoundry-attic/jibber_jabber"
-	"github.com/go-errors/errors"
 	"github.com/itchio/itchSetup/localize"
 
 	"github.com/kardianos/osext"
@@ -28,12 +27,7 @@ var (
 
 func must(err error) {
 	if err != nil {
-		switch err := err.(type) {
-		case *errors.Error:
-			log.Fatal(err.ErrorStack())
-		default:
-			log.Fatal(err.Error())
-		}
+		log.Fatal("%+v", err)
 	}
 }
 

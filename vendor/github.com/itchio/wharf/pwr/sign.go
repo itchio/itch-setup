@@ -3,12 +3,13 @@ package pwr
 import (
 	"io"
 
-	"github.com/go-errors/errors"
+	"github.com/itchio/savior"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wire"
 	"github.com/itchio/wharf/wsync"
+	"github.com/pkg/errors"
 )
 
 // A SignatureInfo contains all the hashes for small-blocks of a given container
@@ -28,7 +29,7 @@ func ComputeSignature(container *tlc.Container, pool wsync.Pool, consumer *state
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	return signature, nil
@@ -41,7 +42,7 @@ func ComputeSignatureToWriter(container *tlc.Container, pool wsync.Pool, consume
 
 	defer func() {
 		if pErr := pool.Close(); pErr != nil && err == nil {
-			err = errors.Wrap(pErr, 1)
+			err = errors.WithStack(pErr)
 		}
 	}()
 
@@ -61,49 +62,49 @@ func ComputeSignatureToWriter(container *tlc.Container, pool wsync.Pool, consume
 		var reader io.Reader
 		reader, err = pool.GetReader(int64(fileIndex))
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 
 		cr := counter.NewReaderCallback(onRead, reader)
 		err = sctx.CreateSignature(int64(fileIndex), cr, sigWriter)
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 	}
 
 	if err != nil {
-		return errors.Wrap(err, 1)
+		return errors.WithStack(err)
 	}
 	return nil
 }
 
 // ReadSignature reads the hashes from all files of a given container, from a
 // wharf signature file.
-func ReadSignature(signatureReader io.Reader) (*SignatureInfo, error) {
+func ReadSignature(signatureReader savior.SeekSource) (*SignatureInfo, error) {
 	rawSigWire := wire.NewReadContext(signatureReader)
 	err := rawSigWire.ExpectMagic(SignatureMagic)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	header := &SignatureHeader{}
 	err = rawSigWire.ReadMessage(header)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	sigWire, err := DecompressWire(rawSigWire, header.Compression)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	container := &tlc.Container{}
 	err = sigWire.ReadMessage(container)
 	if err != nil {
-		if errors.Is(err, io.EOF) {
+		if errors.Cause(err) == io.EOF {
 			// ok
 		} else {
-			return nil, errors.Wrap(err, 1)
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -117,10 +118,10 @@ func ReadSignature(signatureReader io.Reader) (*SignatureInfo, error) {
 			err = sigWire.ReadMessage(hash)
 
 			if err != nil {
-				if errors.Is(err, io.EOF) {
+				if errors.Cause(err) == io.EOF {
 					break
 				}
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 
 			// empty files have a 0-length shortblock for historical reasons.
@@ -141,10 +142,10 @@ func ReadSignature(signatureReader io.Reader) (*SignatureInfo, error) {
 			err = sigWire.ReadMessage(hash)
 
 			if err != nil {
-				if errors.Is(err, io.EOF) {
+				if errors.Cause(err) == io.EOF {
 					break
 				}
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 
 			// full blocks have a shortSize of 0, for more compact storage

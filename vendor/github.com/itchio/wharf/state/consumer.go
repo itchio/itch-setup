@@ -2,12 +2,59 @@ package state
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"strings"
 
 	"github.com/itchio/wharf/counter"
 )
 
+// ProgressTheme contains all the characters we need to show progress
+type ProgressTheme struct {
+	BarStart        string
+	BarEnd          string
+	Current         string
+	CurrentHalfTone string
+	Empty           string
+	OpSign          string
+	StatSign        string
+}
+
+var themes = map[string]*ProgressTheme{
+	"unicode": {"▐", "▌", "▓", "▒", "░", "•", "✓"},
+	"ascii":   {"|", "|", "#", "=", "-", ">", "<"},
+	"cp437":   {"▐", "▌", "█", "▒", "░", "∙", "√"},
+}
+
+func EnableBeepsForAdam() {
+	// this character emits a system bell sound. Adam loves it.
+	themes["cp437"].OpSign = "•"
+}
+
+func getCharset() string {
+	if runtime.GOOS == "windows" && os.Getenv("OS") != "CYGWIN" {
+		return "cp437"
+	}
+
+	var utf8 = ".UTF-8"
+	if strings.Contains(os.Getenv("LC_ALL"), utf8) ||
+		os.Getenv("LC_CTYPE") == "UTF-8" ||
+		strings.Contains(os.Getenv("LANG"), utf8) {
+		return "unicode"
+	}
+
+	return "ascii"
+}
+
+var theme = themes[getCharset()]
+
+// GetTheme returns the theme used to show progress
+func GetTheme() *ProgressTheme {
+	return theme
+}
+
 // ProgressCallback is called periodically to announce the degree of completeness of an operation
-type ProgressCallback func(percent float64)
+type ProgressCallback func(alpha float64)
 
 // ProgressLabelCallback is called when the progress label should be changed
 type ProgressLabelCallback func(label string)
@@ -82,6 +129,19 @@ func (c *Consumer) Infof(msg string, args ...interface{}) {
 	}
 }
 
+// Alias for Infof
+func (c *Consumer) Logf(msg string, args ...interface{}) {
+	c.Infof(msg, args...)
+}
+
+func (c *Consumer) Opf(msg string, args ...interface{}) {
+	c.Infof("%s %s", GetTheme().OpSign, fmt.Sprintf(msg, args...))
+}
+
+func (c *Consumer) Statf(msg string, args ...interface{}) {
+	c.Infof("%s %s", GetTheme().StatSign, fmt.Sprintf(msg, args...))
+}
+
 // Warn logs warning-level messages
 func (c *Consumer) Warn(msg string) {
 	if c.OnMessage != nil {
@@ -93,6 +153,20 @@ func (c *Consumer) Warn(msg string) {
 func (c *Consumer) Warnf(msg string, args ...interface{}) {
 	if c.OnMessage != nil {
 		c.OnMessage("warning", fmt.Sprintf(msg, args...))
+	}
+}
+
+// Error logs error-level messages
+func (c *Consumer) Error(msg string) {
+	if c.OnMessage != nil {
+		c.OnMessage("error", msg)
+	}
+}
+
+// Errorf is a formatted version of Error
+func (c *Consumer) Errorf(msg string, args ...interface{}) {
+	if c.OnMessage != nil {
+		c.OnMessage("error", fmt.Sprintf(msg, args...))
 	}
 }
 

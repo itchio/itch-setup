@@ -299,26 +299,7 @@ func sourceAttach(src *C.struct__GSource, rf reflect.Value, args ...interface{})
 	// f returns false.  The error is ignored here, as this will
 	// always be a function.
 	var closure *C.GClosure
-	closure, _ = ClosureNew(func() {
-		// Create a slice of reflect.Values arguments to call the func.
-		rargs := make([]reflect.Value, len(args))
-		for i := range args {
-			rargs[i] = reflect.ValueOf(args[i])
-		}
-
-		// Call func with args. The callback will be removed, unless
-		// it returns exactly one return value of true.
-		rv := rf.Call(rargs)
-		if len(rv) == 1 {
-			if rv[0].Kind() == reflect.Bool {
-				if rv[0].Bool() {
-					return
-				}
-			}
-		}
-		C.g_closure_invalidate(closure)
-		C.g_source_destroy(src)
-	})
+	closure, _ = ClosureNew(rf.Interface(), args...)
 
 	// Remove closure context when closure is finalized.
 	C._g_closure_add_finalize_notifier(closure)
@@ -335,6 +316,36 @@ func sourceAttach(src *C.struct__GSource, rf reflect.Value, args ...interface{})
 /*
  * Miscellaneous Utility Functions
  */
+
+// GetHomeDir is a wrapper around g_get_home_dir().
+func GetHomeDir() string {
+	c := C.g_get_home_dir()
+	return C.GoString((*C.char)(c))
+}
+
+// GetUserCacheDir is a wrapper around g_get_user_cache_dir().
+func GetUserCacheDir() string {
+	c := C.g_get_user_cache_dir()
+	return C.GoString((*C.char)(c))
+}
+
+// GetUserDataDir is a wrapper around g_get_user_data_dir().
+func GetUserDataDir() string {
+	c := C.g_get_user_data_dir()
+	return C.GoString((*C.char)(c))
+}
+
+// GetUserConfigDir is a wrapper around g_get_user_config_dir().
+func GetUserConfigDir() string {
+	c := C.g_get_user_config_dir()
+	return C.GoString((*C.char)(c))
+}
+
+// GetUserRuntimeDir is a wrapper around g_get_user_runtime_dir().
+func GetUserRuntimeDir() string {
+	c := C.g_get_user_runtime_dir()
+	return C.GoString((*C.char)(c))
+}
 
 // GetUserSpecialDir is a wrapper around g_get_user_special_dir().  A
 // non-nil error is returned in the case that g_get_user_special_dir()
@@ -387,6 +398,22 @@ func (v *Object) native() *C.GObject {
 	}
 	p := unsafe.Pointer(v.GObject)
 	return C.toGObject(p)
+}
+
+// Take wraps a unsafe.Pointer as a glib.Object, taking ownership of it.
+// This function is exported for visibility in other gotk3 packages and
+// is not meant to be used by applications.
+func Take(ptr unsafe.Pointer) *Object {
+	obj := newObject(ToGObject(ptr))
+
+	if obj.IsFloating() {
+		obj.RefSink()
+	} else {
+		obj.Ref()
+	}
+
+	runtime.SetFinalizer(obj, (*Object).Unref)
+	return obj
 }
 
 // Native returns a pointer to the underlying GObject.

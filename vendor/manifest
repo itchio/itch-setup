@@ -5,7 +5,7 @@
 			"importpath": "github.com/Datadog/zstd",
 			"repository": "https://github.com/Datadog/zstd",
 			"vcs": "git",
-			"revision": "add9e2ca52c03c1f6f8deffa22fcc7667dcb4ae2",
+			"revision": "ca64c66abfc5796b3291ca2fd30574fa938d84ea",
 			"branch": "1.x",
 			"notests": true
 		},
@@ -37,7 +37,7 @@
 			"importpath": "github.com/dustin/go-humanize",
 			"repository": "https://github.com/dustin/go-humanize",
 			"vcs": "git",
-			"revision": "ef638b6c2e62b857442c6443dace9366a48c0ee2",
+			"revision": "bb3d318650d48840a39aa21a027c6630e198e626",
 			"branch": "master",
 			"notests": true
 		},
@@ -53,7 +53,7 @@
 			"importpath": "github.com/getlantern/errors",
 			"repository": "https://github.com/getlantern/errors",
 			"vcs": "git",
-			"revision": "99fa440517e8f3d1e4cd8d6dbed6b41f4c1ed3d6",
+			"revision": "e9c0296368b736086adb20832549567064224854",
 			"branch": "master",
 			"notests": true
 		},
@@ -61,7 +61,7 @@
 			"importpath": "github.com/getlantern/golog",
 			"repository": "https://github.com/getlantern/golog",
 			"vcs": "git",
-			"revision": "e69a4a00c012e476efd814128cdcd4e04e641dc7",
+			"revision": "cca714f7feb5df8e455f409b549d384441ac4578",
 			"branch": "master",
 			"notests": true
 		},
@@ -85,7 +85,7 @@
 			"importpath": "github.com/getlantern/idletiming",
 			"repository": "https://github.com/getlantern/idletiming",
 			"vcs": "git",
-			"revision": "e4b1cdde2256c2bb3871a7490bef9bd13532108f",
+			"revision": "7a71d2e71cf253f64b9610ce7aa9ddfc58aa9b2a",
 			"branch": "master",
 			"notests": true
 		},
@@ -93,7 +93,7 @@
 			"importpath": "github.com/getlantern/ops",
 			"repository": "https://github.com/getlantern/ops",
 			"vcs": "git",
-			"revision": "b70875f5d689a9438bca72aefd7142a2af889b18",
+			"revision": "37353306c90844c8e0591956f56611f46299d202",
 			"branch": "master",
 			"notests": true
 		},
@@ -109,7 +109,7 @@
 			"importpath": "github.com/go-errors/errors",
 			"repository": "https://github.com/go-errors/errors",
 			"vcs": "git",
-			"revision": "8fa88b06e5974e97fbf9899a7f86a344bfd1f105",
+			"revision": "a6af135bd4e28680facf08a3d206b454abc877a4",
 			"branch": "master",
 			"notests": true
 		},
@@ -117,7 +117,7 @@
 			"importpath": "github.com/golang/protobuf/proto",
 			"repository": "https://github.com/golang/protobuf",
 			"vcs": "git",
-			"revision": "8ee79997227bf9b34611aee7946ae64735e6fd93",
+			"revision": "e09c5db296004fbe3f74490e84dcd62c3c5ddb1b",
 			"branch": "master",
 			"path": "/proto",
 			"notests": true
@@ -126,7 +126,7 @@
 			"importpath": "github.com/golang/protobuf/ptypes/any",
 			"repository": "https://github.com/golang/protobuf",
 			"vcs": "git",
-			"revision": "8ee79997227bf9b34611aee7946ae64735e6fd93",
+			"revision": "e09c5db296004fbe3f74490e84dcd62c3c5ddb1b",
 			"branch": "master",
 			"path": "ptypes/any",
 			"notests": true
@@ -135,7 +135,7 @@
 			"importpath": "github.com/gotk3/gotk3",
 			"repository": "https://github.com/gotk3/gotk3",
 			"vcs": "git",
-			"revision": "d894a809f8eef7609dd81d2ef7d850911da6bf40",
+			"revision": "20f8fb3a44ae5e35909ada530100811b64913390",
 			"branch": "master",
 			"notests": true
 		},
@@ -143,24 +143,16 @@
 			"importpath": "github.com/itchio/arkive/zip",
 			"repository": "https://github.com/itchio/arkive",
 			"vcs": "git",
-			"revision": "7dd15456cb7d0e24c26bf4f632fcd31cda4d3903",
+			"revision": "6b2a30e5a4b832a1e7f0692b2f17654688478917",
 			"branch": "master",
 			"path": "/zip",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/itchio/go-itchio",
-			"repository": "https://github.com/itchio/go-itchio",
-			"vcs": "git",
-			"revision": "e168e708263929077d3dfefa983df7b580f2698e",
-			"branch": "master",
 			"notests": true
 		},
 		{
 			"importpath": "github.com/itchio/httpkit",
 			"repository": "https://github.com/itchio/httpkit",
 			"vcs": "git",
-			"revision": "0427b134a79c8ddbfa037151f987085b95c26ab3",
+			"revision": "7c17a3276a5727772c1c5b0899d01dbda95b2063",
 			"branch": "master",
 			"notests": true
 		},
@@ -168,7 +160,7 @@
 			"importpath": "github.com/itchio/wharf",
 			"repository": "https://github.com/itchio/wharf",
 			"vcs": "git",
-			"revision": "21d5ffd0f4e2b9b0c34426016a1fe6b8d28fa66c",
+			"revision": "6ff5a506015e512afef01a772d29bacd2ac067cc",
 			"branch": "master",
 			"notests": true
 		},
@@ -176,7 +168,7 @@
 			"importpath": "github.com/kardianos/osext",
 			"repository": "https://github.com/kardianos/osext",
 			"vcs": "git",
-			"revision": "c2c54e542fb797ad986b31721e1baedf214ca413",
+			"revision": "ae77be60afb1dcacde03767a8c37337fad28ac14",
 			"branch": "master",
 			"notests": true
 		},
@@ -184,7 +176,7 @@
 			"importpath": "github.com/lxn/walk",
 			"repository": "https://github.com/lxn/walk",
 			"vcs": "git",
-			"revision": "765f1657380e994529d22000a97b046bba4f3291",
+			"revision": "3a419a3e75d50588a20963991569f4680e2b970d",
 			"branch": "master",
 			"notests": true
 		},
@@ -192,7 +184,7 @@
 			"importpath": "github.com/lxn/win",
 			"repository": "https://github.com/lxn/win",
 			"vcs": "git",
-			"revision": "8855eceee83ca086d647feb3d359a1d2ab6c7ccf",
+			"revision": "d3b5b63dbde2ccbcad21970eb7080e90c2d631b3",
 			"branch": "master",
 			"notests": true
 		},
@@ -225,7 +217,7 @@
 			"importpath": "github.com/satori/go.uuid",
 			"repository": "https://github.com/satori/go.uuid",
 			"vcs": "git",
-			"revision": "b061729afc07e77a8aa4fad0a2fd840958f1942a",
+			"revision": "36e9d2ebbde5e3f13ab2e25625fd453271d6522e",
 			"branch": "master",
 			"notests": true
 		},
@@ -233,7 +225,7 @@
 			"importpath": "golang.org/x/crypto/sha3",
 			"repository": "https://go.googlesource.com/crypto",
 			"vcs": "git",
-			"revision": "f6b343c37ca80bfa8ea539da67a0b621f84fab1d",
+			"revision": "88942b9c40a4c9d203b82b3731787b672d6e809b",
 			"branch": "master",
 			"path": "/sha3",
 			"notests": true
@@ -242,7 +234,7 @@
 			"importpath": "gopkg.in/alecthomas/kingpin.v2",
 			"repository": "https://gopkg.in/alecthomas/kingpin.v2",
 			"vcs": "git",
-			"revision": "e9044be3ab2a8e11d4e1f418d12f0790d57e8d70",
+			"revision": "947dcec5ba9c011838740e680966fd7087a71d0d",
 			"branch": "master",
 			"notests": true
 		},
@@ -250,7 +242,7 @@
 			"importpath": "gopkg.in/kothar/brotli-go.v0/dec",
 			"repository": "https://gopkg.in/kothar/brotli-go.v0",
 			"vcs": "git",
-			"revision": "34bde402ce950e61aa10b78de09c9d64ad314934",
+			"revision": "771231d473d6c4896e97c2b6e3855f1afc0cdada",
 			"branch": "master",
 			"path": "dec",
 			"notests": true
@@ -259,7 +251,7 @@
 			"importpath": "gopkg.in/kothar/brotli-go.v0/enc",
 			"repository": "https://gopkg.in/kothar/brotli-go.v0",
 			"vcs": "git",
-			"revision": "34bde402ce950e61aa10b78de09c9d64ad314934",
+			"revision": "771231d473d6c4896e97c2b6e3855f1afc0cdada",
 			"branch": "master",
 			"path": "/enc",
 			"notests": true
@@ -268,7 +260,7 @@
 			"importpath": "gopkg.in/kothar/brotli-go.v0/shared",
 			"repository": "https://gopkg.in/kothar/brotli-go.v0",
 			"vcs": "git",
-			"revision": "34bde402ce950e61aa10b78de09c9d64ad314934",
+			"revision": "771231d473d6c4896e97c2b6e3855f1afc0cdada",
 			"branch": "master",
 			"path": "shared",
 			"notests": true

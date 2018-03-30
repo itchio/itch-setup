@@ -318,12 +318,18 @@ func (l *BoxLayout) Update(reset bool) error {
 		return nil
 	}
 
+	if !performingScheduledLayouts && scheduleLayout(l) {
+		return nil
+	}
+
 	if l.resetNeeded {
 		l.resetNeeded = false
 
 		// Make GC happy.
 		l.cleanupStretchFactors()
 	}
+
+	ifContainerIsScrollViewDoCoolSpecialLayoutStuff(l)
 
 	// Begin by finding out which widgets we care about.
 	widgets := l.widgets()
@@ -350,15 +356,13 @@ func (l *BoxLayout) Update(reset bool) error {
 
 		flags := widget.LayoutFlags()
 
-		min := widget.MinSize()
 		max := widget.MaxSize()
-		minHint := widget.MinSizeHint()
 		pref := widget.SizeHint()
 
 		if l.orientation == Horizontal {
 			growable2[i] = flags&GrowableVert > 0
 
-			minSizes[i] = maxi(min.Width, minHint.Width)
+			minSizes[i] = minSizeEffective(widget).Width
 
 			if max.Width > 0 {
 				maxSizes[i] = max.Width
@@ -374,7 +378,7 @@ func (l *BoxLayout) Update(reset bool) error {
 		} else {
 			growable2[i] = flags&GrowableHorz > 0
 
-			minSizes[i] = maxi(min.Height, minHint.Height)
+			minSizes[i] = minSizeEffective(widget).Height
 
 			if max.Height > 0 {
 				maxSizes[i] = max.Height
@@ -492,6 +496,22 @@ func (l *BoxLayout) Update(reset bool) error {
 			x, y, w, h = p2, p1, s2, s1
 		}
 
+		p1 += s1 + l.spacing
+
+		if b := widget.Bounds(); b.X == x && b.Y == y && b.Width == w {
+			if _, ok := widget.(*ComboBox); ok {
+				if b.Height+1 == h {
+					continue
+				}
+			} else if b.Height == h {
+				continue
+			}
+		}
+
+		if widget.GraphicsEffects().Len() > 0 {
+			widget.AsWidgetBase().invalidateBorderInParent()
+		}
+
 		if hdwp = win.DeferWindowPos(
 			hdwp,
 			widget.Handle(),
@@ -504,12 +524,18 @@ func (l *BoxLayout) Update(reset bool) error {
 
 			return lastError("DeferWindowPos")
 		}
-
-		p1 += s1 + l.spacing
 	}
 
 	if !win.EndDeferWindowPos(hdwp) {
 		return lastError("EndDeferWindowPos")
+	}
+
+	for _, widget := range widgets {
+		if widget.GraphicsEffects().Len() == 0 {
+			continue
+		}
+
+		widget.AsWidgetBase().invalidateBorderInParent()
 	}
 
 	return nil

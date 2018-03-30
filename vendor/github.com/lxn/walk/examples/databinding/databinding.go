@@ -16,6 +16,10 @@ import (
 )
 
 func main() {
+	walk.FocusEffect, _ = walk.NewBorderGlowEffect(walk.RGB(0, 63, 255))
+	walk.InteractionEffect, _ = walk.NewDropShadowEffect(walk.RGB(63, 63, 63))
+	walk.ValidationErrorEffect, _ = walk.NewBorderGlowEffect(walk.RGB(255, 0, 0))
+
 	var mw *walk.MainWindow
 	var outTE *walk.TextEdit
 
@@ -96,6 +100,7 @@ func (f *DurationField) Set(v interface{}) error {
 	}
 	return err
 }
+func (f *DurationField) Zero() interface{} { return "" }
 
 type Sex byte
 
@@ -108,7 +113,6 @@ const (
 func RunAnimalDialog(owner walk.Form, animal *Animal) (int, error) {
 	var dlg *walk.Dialog
 	var db *walk.DataBinder
-	var ep walk.ErrorPresenter
 	var acceptPB, cancelPB *walk.PushButton
 
 	return Dialog{
@@ -119,7 +123,7 @@ func RunAnimalDialog(owner walk.Form, animal *Animal) (int, error) {
 		DataBinder: DataBinder{
 			AssignTo:       &db,
 			DataSource:     animal,
-			ErrorPresenter: ErrorPresenterRef{&ep},
+			ErrorPresenter: ToolTipErrorPresenter{},
 		},
 		MinSize: Size{300, 300},
 		Layout:  VBox{},
@@ -217,11 +221,6 @@ func RunAnimalDialog(owner walk.Form, animal *Animal) (int, error) {
 					LineEdit{
 						ColumnSpan: 2,
 						Text:       Bind("PatienceField"),
-					},
-
-					LineErrorPresenter{
-						AssignTo:   &ep,
-						ColumnSpan: 2,
 					},
 				},
 			},

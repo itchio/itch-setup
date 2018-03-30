@@ -8,13 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
-	"github.com/go-errors/errors"
 	"github.com/itchio/httpkit/httpfile"
 	"github.com/itchio/wharf/eos/option"
+	"github.com/pkg/errors"
 )
 
-var debugHttpFile = os.Getenv("HTTPFILE_DEBUG") == "1"
+var httpFileLogLevel = os.Getenv("HTTPFILE_DEBUG")
+var httpFileCheck = os.Getenv("HTTPFILE_CHECK") == "1"
 
 type File interface {
 	io.Reader
@@ -60,6 +62,29 @@ func (shr *simpleHTTPResource) NeedsRenewal(res *http.Response, body []byte) boo
 }
 
 func Open(name string, opts ...option.Option) (File, error) {
+	f, err := realOpen(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if hf, ok := f.(*httpfile.HTTPFile); ok && httpFileCheck {
+		hf.ForbidBacktracking = true
+
+		f2, err := realOpen(name, opts...)
+		if err != nil {
+			return nil, err
+		}
+
+		return &CheckingFile{
+			Reference: f,
+			Trainee:   f2,
+		}, nil
+	}
+
+	return f, err
+}
+
+func realOpen(name string, opts ...option.Option) (File, error) {
 	settings := option.DefaultSettings()
 
 	for _, opt := range opts {
@@ -72,7 +97,7 @@ func Open(name string, opts ...option.Option) (File, error) {
 
 	u, err := url.Parse(name)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	switch u.Scheme {
@@ -86,11 +111,7 @@ func Open(name string, opts ...option.Option) (File, error) {
 			return nil, err
 		}
 
-		if debugHttpFile {
-			hf.Log = func(msg string) {
-				fmt.Fprintf(os.Stderr, "[hf] %s\n", msg)
-			}
-		}
+		setupHttpFileDebug(hf)
 
 		return hf, nil
 	default:
@@ -101,7 +122,7 @@ func Open(name string, opts ...option.Option) (File, error) {
 
 		getURL, needsRenewal, err := handler.MakeResource(u)
 		if err != nil {
-			return nil, errors.Wrap(err, 1)
+			return nil, errors.WithStack(err)
 		}
 
 		hf, err := httpfile.New(getURL, needsRenewal, &httpfile.Settings{
@@ -112,12 +133,34 @@ func Open(name string, opts ...option.Option) (File, error) {
 			return nil, err
 		}
 
-		if debugHttpFile {
-			hf.Log = func(msg string) {
-				fmt.Fprintf(os.Stderr, "[hf] %s\n", msg)
-			}
-		}
+		setupHttpFileDebug(hf)
 
 		return hf, nil
+	}
+}
+
+func Redact(name string) string {
+	u, err := url.Parse(name)
+	if err != nil {
+		return name
+	}
+
+	return u.Path
+}
+
+var hfSeed = 0
+
+func setupHttpFileDebug(hf *httpfile.HTTPFile) {
+	hfSeed += 1
+	hfIndex := hfSeed
+
+	if httpFileLogLevel != "" {
+		hf.Log = func(msg string) {
+			fmt.Fprintf(os.Stderr, "[hf%d] %s\n", hfIndex, msg)
+		}
+		numericLevel, err := strconv.ParseInt(httpFileLogLevel, 10, 64)
+		if err == nil {
+			hf.LogLevel = int(numericLevel)
+		}
 	}
 }

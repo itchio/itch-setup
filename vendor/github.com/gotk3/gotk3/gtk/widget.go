@@ -62,7 +62,7 @@ func (v *Widget) toWidget() *C.GtkWidget {
 
 func marshalWidget(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapWidget(obj), nil
 }
 
@@ -336,7 +336,7 @@ func (v *Widget) GetParent() (*Widget, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapWidget(wrapObject(unsafe.Pointer(c))), nil
+	return wrapWidget(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // SetSizeRequest is a wrapper around gtk_widget_set_size_request().
@@ -364,7 +364,7 @@ func (v *Widget) GetParentWindow() (*gdk.Window, error) {
 		return nil, nilPtrErr
 	}
 
-	w := &gdk.Window{wrapObject(unsafe.Pointer(c))}
+	w := &gdk.Window{glib.Take(unsafe.Pointer(c))}
 	return w, nil
 }
 
@@ -456,7 +456,7 @@ func (v *Widget) GetToplevel() (*Widget, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapWidget(wrapObject(unsafe.Pointer(c))), nil
+	return wrapWidget(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // GetTooltipText is a wrapper around gtk_widget_get_tooltip_text().
@@ -607,7 +607,7 @@ func (v *Widget) GetWindow() (*gdk.Window, error) {
 		return nil, nilPtrErr
 	}
 
-	w := &gdk.Window{wrapObject(unsafe.Pointer(c))}
+	w := &gdk.Window{glib.Take(unsafe.Pointer(c))}
 	return w, nil
 }
 
@@ -623,4 +623,8 @@ func (v *Widget) GetPreferredWidth() (int, int) {
 	var minimum, natural C.gint
 	C.gtk_widget_get_preferred_width(v.native(), &minimum, &natural)
 	return int(minimum), int(natural)
+}
+
+func (v *Widget) InsertActionGroup(name string, group glib.IActionGroup) {
+	C.gtk_widget_insert_action_group(v.native(), (*C.gchar)(C.CString(name)), C.toGActionGroup(unsafe.Pointer(group.Native())))
 }

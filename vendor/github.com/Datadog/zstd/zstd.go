@@ -12,73 +12,34 @@ import (
 	"unsafe"
 )
 
-// ErrorCode is an error returned by the zstd library.
-type ErrorCode int
-
-func (e ErrorCode) Error() string {
-	if C.ZSTD_isError(C.size_t(e)) != C.uint(0) {
-		return C.GoString(C.ZSTD_getErrorName(C.size_t(e)))
-	}
-
-	return ""
-}
-
+// Defines best and standard values for zstd cli
 const (
-	BestSpeed       = 1
-	BestCompression = 20
+	BestSpeed          = 1
+	BestCompression    = 20
+	DefaultCompression = 5
 )
 
-// FIXME: this is very fragile, must map 1-to-1 with zstd's
-// error_public.h. They have no problem with adding error codes,
-// renumbering errors, etc.
 var (
-	ErrGeneric                           ErrorCode = -1
-	ErrPrefixUnknown                     ErrorCode = -2
-	ErrVersionUnsupported                ErrorCode = -3
-	ErrParameterUnknown                  ErrorCode = -4
-	ErrFrameParameterUnsupported         ErrorCode = -5
-	ErrFrameParameterUnsupportedBy32bits ErrorCode = -6
-	ErrCompressionParameterUnsupported   ErrorCode = -7
-	ErrInitMissing                       ErrorCode = -8
-	ErrMemoryAllocation                  ErrorCode = -9
-	ErrStageWrong                        ErrorCode = -10
-	ErrDstSizeTooSmall                   ErrorCode = -11
-	ErrSrcSizeWrong                      ErrorCode = -12
-	ErrCorruptionDetected                ErrorCode = -13
-	ErrChecksumWrong                     ErrorCode = -14
-	ErrTableLogTooLarge                  ErrorCode = -15
-	ErrMaxSymbolValueTooLarge            ErrorCode = -16
-	ErrMaxSymbolValueTooSmall            ErrorCode = -17
-	ErrDictionaryCorrupted               ErrorCode = -18
-	ErrDictionaryWrong                   ErrorCode = -19
-	ErrMaxCode                           ErrorCode = -20
-	ErrEmptySlice                                  = errors.New("Bytes slice is empty")
-
-	DefaultCompression = 5
+	// ErrEmptySlice is returned when there is nothing to compress
+	ErrEmptySlice = errors.New("Bytes slice is empty")
 )
 
 // CompressBound returns the worst case size needed for a destination buffer,
 // which can be used to preallocate a destination buffer or select a previously
 // allocated buffer from a pool.
+// See zstd.h to mirror implementation of ZSTD_COMPRESSBOUND
 func CompressBound(srcSize int) int {
-	return 512 + srcSize + (srcSize >> 7) + 12
+	lowLimit := 128 << 10 // 128 kB
+	var margin int
+	if srcSize < lowLimit {
+		margin = (lowLimit - srcSize) >> 11
+	}
+	return srcSize + (srcSize >> 8) + margin
 }
 
 // cCompressBound is a cgo call to check the go implementation above against the c code.
 func cCompressBound(srcSize int) int {
 	return int(C.ZSTD_compressBound(C.size_t(srcSize)))
-}
-
-// getError returns an error for the return code, or nil if it's not an error
-func getError(code int) error {
-	if code < 0 && code > int(ErrMaxCode) {
-		return ErrorCode(code)
-	}
-	return nil
-}
-
-func cIsError(code int) bool {
-	return int(C.ZSTD_isError(C.size_t(code))) != 0
 }
 
 // Compress src into dst.  If you have a buffer to use, you can pass it to
@@ -151,7 +112,7 @@ func Decompress(dst, src []byte) ([]byte, error) {
 	}
 	for i := 0; i < 3; i++ { // 3 tries to allocate a bigger buffer
 		result, err := decompress(dst, src)
-		if err != ErrDstSizeTooSmall {
+		if !IsDstSizeTooSmallError(err) {
 			return result, err
 		}
 		dst = make([]byte, len(dst)*2) // Grow buffer by 2

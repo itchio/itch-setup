@@ -50,6 +50,9 @@ type Widget interface {
 	// Form returns the root ancestor Form of the Widget.
 	Form() Form
 
+	// GraphicsEffects returns a list of WidgetGraphicsEffects that are applied to the Widget.
+	GraphicsEffects() *WidgetGraphicsEffectList
+
 	// LayoutFlags returns a combination of LayoutFlags that specify how the
 	// Widget wants to be treated by Layout implementations.
 	LayoutFlags() LayoutFlags
@@ -84,6 +87,7 @@ type WidgetBase struct {
 	parent                      Container
 	toolTipTextProperty         Property
 	toolTipTextChangedPublisher EventPublisher
+	graphicsEffects             *WidgetGraphicsEffectList
 	alwaysConsumeSpace          bool
 }
 
@@ -114,6 +118,8 @@ func InitWidget(widget Widget, parent Window, className string, style, exStyle u
 }
 
 func (wb *WidgetBase) init(widget Widget) error {
+	wb.graphicsEffects = newWidgetGraphicsEffectList(wb)
+
 	if err := globalToolTip.AddTool(wb); err != nil {
 		return err
 	}
@@ -206,6 +212,18 @@ func (wb *WidgetBase) Form() Form {
 // WidgetBase wants to be treated by Layout implementations.
 func (wb *WidgetBase) LayoutFlags() LayoutFlags {
 	return 0
+}
+
+// SetMinMaxSize sets the minimum and maximum outer Size of the *WidgetBase,
+// including decorations.
+//
+// Use walk.Size{} to make the respective limit be ignored.
+func (wb *WidgetBase) SetMinMaxSize(min, max Size) (err error) {
+	err = wb.WindowBase.SetMinMaxSize(min, max)
+
+	wb.updateParentLayout()
+
+	return
 }
 
 // AlwaysConsumeSpace returns if the Widget should consume space even if it is
@@ -334,12 +352,103 @@ func (wb *WidgetBase) SetToolTipText(s string) error {
 	return nil
 }
 
+// GraphicsEffects returns a list of WidgetGraphicsEffects that are applied to the WidgetBase.
+func (wb *WidgetBase) GraphicsEffects() *WidgetGraphicsEffectList {
+	return wb.graphicsEffects
+}
+
+func (wb *WidgetBase) onInsertedGraphicsEffect(index int, effect WidgetGraphicsEffect) error {
+	wb.invalidateBorderInParent()
+
+	return nil
+}
+
+func (wb *WidgetBase) onRemovedGraphicsEffect(index int, effect WidgetGraphicsEffect) error {
+	wb.invalidateBorderInParent()
+
+	return nil
+}
+
+func (wb *WidgetBase) onClearedGraphicsEffects() error {
+	wb.invalidateBorderInParent()
+
+	return nil
+}
+
+func (wb *WidgetBase) invalidateBorderInParent() {
+	if wb.parent != nil && wb.parent.Layout() != nil {
+		//if _, ok := wb.parent.(*Splitter); ok {
+		//	return
+		//}
+
+		b := wb.Bounds().toRECT()
+		s := int32(wb.parent.Layout().Spacing())
+
+		hwnd := wb.parent.Handle()
+
+		rc := win.RECT{Left: b.Left - s, Top: b.Top - s, Right: b.Left, Bottom: b.Bottom + s}
+		win.InvalidateRect(hwnd, &rc, true)
+
+		rc = win.RECT{Left: b.Right, Top: b.Top - s, Right: b.Right + s, Bottom: b.Bottom + s}
+		win.InvalidateRect(hwnd, &rc, true)
+
+		rc = win.RECT{Left: b.Left, Top: b.Top - s, Right: b.Right, Bottom: b.Top}
+		win.InvalidateRect(hwnd, &rc, true)
+
+		rc = win.RECT{Left: b.Left, Top: b.Bottom, Right: b.Right, Bottom: b.Bottom + s}
+		win.InvalidateRect(hwnd, &rc, true)
+	}
+}
+
 func (wb *WidgetBase) updateParentLayout() error {
-	if wb.parent == nil || wb.parent.Layout() == nil || wb.parent.Suspended() {
+	parent := wb.window.(Widget).Parent()
+
+	if parent == nil || parent.Layout() == nil || parent.Suspended() || !parent.Visible() {
 		return nil
 	}
 
-	return wb.parent.Layout().Update(false)
+	layout := parent.Layout()
+
+	if !formResizeScheduled || len(inProgressEventsByForm[appSingleton.activeForm]) == 0 {
+		clientSize := parent.ClientBounds().Size()
+		minSize := layout.MinSize()
+
+		if clientSize.Width < minSize.Width || clientSize.Height < minSize.Height {
+			switch wnd := parent.(type) {
+			case *ScrollView:
+				ifContainerIsScrollViewDoCoolSpecialLayoutStuff(layout)
+				return nil
+
+			case Widget:
+				return wnd.AsWidgetBase().updateParentLayout()
+
+			case Form:
+				if len(inProgressEventsByForm[appSingleton.activeForm]) > 0 {
+					formResizeScheduled = true
+				} else {
+					bounds := wnd.Bounds()
+
+					if wnd.AsFormBase().fixedSize() {
+						bounds.Width, bounds.Height = 0, 0
+					}
+
+					wnd.SetBounds(bounds)
+
+					return nil
+				}
+			}
+		}
+	}
+
+	layout.Update(false)
+
+	if FocusEffect != nil {
+		if focusedWnd := windowFromHandle(win.GetFocus()); focusedWnd != nil && win.GetParent(focusedWnd.Handle()) == parent.Handle() {
+			focusedWnd.(Widget).AsWidgetBase().invalidateBorderInParent()
+		}
+	}
+
+	return nil
 }
 
 func ancestor(w Widget) Form {
@@ -354,5 +463,15 @@ func ancestor(w Widget) Form {
 }
 
 func minSizeEffective(w Widget) Size {
-	return maxSize(w.MinSize(), w.MinSizeHint())
+	s := maxSize(w.MinSize(), w.MinSizeHint())
+
+	max := w.MaxSize()
+	if max.Width > 0 && s.Width > max.Width {
+		s.Width = max.Width
+	}
+	if max.Height > 0 && s.Height > max.Height {
+		s.Height = max.Height
+	}
+
+	return s
 }

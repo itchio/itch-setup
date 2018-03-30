@@ -1,0 +1,331 @@
+package pwr
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync/atomic"
+
+	"github.com/itchio/arkive/zip"
+
+	humanize "github.com/dustin/go-humanize"
+
+	"github.com/itchio/wharf/counter"
+	"github.com/itchio/wharf/eos"
+	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/wharf/pools/zippool"
+	"github.com/itchio/wharf/state"
+	"github.com/itchio/wharf/tlc"
+	"github.com/itchio/wharf/wsync"
+	"github.com/pkg/errors"
+)
+
+// An ArchiveHealer can repair from a .zip file (remote or local)
+type ArchiveHealer struct {
+	// the directory we should heal
+	Target string
+
+	// an eos path for the archive
+	ArchivePath string
+
+	// number of workers running in parallel
+	NumWorkers int
+
+	// A consumer to report progress to
+	Consumer *state.Consumer
+
+	// internal
+	totalCorrupted int64
+	totalHealing   int64
+	totalHealed    int64
+	totalHealthy   int64
+	hasWounds      bool
+
+	container *tlc.Container
+
+	lockMap LockMap
+}
+
+var _ Healer = (*ArchiveHealer)(nil)
+
+type chunkHealedFunc func(chunkHealed int64)
+
+// Do starts receiving from the wounds channel and healing
+func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error {
+	ah.container = container
+
+	files := make(map[int64]bool)
+	fileIndices := make(chan int64, len(container.Files))
+
+	if ah.NumWorkers == 0 {
+		// use a sensible default I/O-wise (whether we're reading from disk or network)
+		ah.NumWorkers = 2
+	}
+	if ah.Consumer != nil {
+		ah.Consumer.Debugf("archive healer: using %d workers", ah.NumWorkers)
+	}
+
+	targetPool := fspool.New(container, ah.Target)
+
+	errs := make(chan error, ah.NumWorkers)
+	cancelled := make(chan struct{})
+
+	onChunkHealed := func(healedChunk int64) {
+		atomic.AddInt64(&ah.totalHealed, healedChunk)
+		ah.updateProgress()
+	}
+
+	for i := 0; i < ah.NumWorkers; i++ {
+		go func() {
+			errs <- ah.heal(container, targetPool, fileIndices, cancelled, onChunkHealed)
+		}()
+	}
+
+	processWound := func(wound *Wound) error {
+		if ah.Consumer != nil {
+			ah.Consumer.Debugf("processing wound: %s", wound)
+		}
+
+		if !wound.Healthy() {
+			ah.totalCorrupted += wound.Size()
+			ah.hasWounds = true
+		}
+
+		switch wound.Kind {
+		case WoundKind_DIR:
+			dirEntry := container.Dirs[wound.Index]
+			path := filepath.Join(ah.Target, filepath.FromSlash(dirEntry.Path))
+
+			pErr := os.MkdirAll(path, 0755)
+			if pErr != nil {
+				return pErr
+			}
+
+		case WoundKind_SYMLINK:
+			symlinkEntry := container.Symlinks[wound.Index]
+			path := filepath.Join(ah.Target, filepath.FromSlash(symlinkEntry.Path))
+
+			dir := filepath.Dir(path)
+			pErr := os.MkdirAll(dir, 0755)
+			if pErr != nil {
+				return pErr
+			}
+
+			pErr = os.Symlink(symlinkEntry.Dest, path)
+			if pErr != nil {
+				return pErr
+			}
+
+		case WoundKind_FILE:
+			if files[wound.Index] {
+				// already queued
+				return nil
+			}
+
+			file := container.Files[wound.Index]
+			if ah.Consumer != nil {
+				ah.Consumer.ProgressLabel(file.Path)
+			}
+
+			atomic.AddInt64(&ah.totalHealing, file.Size)
+			ah.updateProgress()
+			files[wound.Index] = true
+
+			select {
+			case pErr := <-errs:
+				return pErr
+			case fileIndices <- wound.Index:
+				// queued for work!
+			}
+
+		case WoundKind_CLOSED_FILE:
+			if files[wound.Index] {
+				// already healing whole file
+			} else {
+				fileSize := container.Files[wound.Index].Size
+
+				// whole file was healthy
+				if wound.End == fileSize {
+					atomic.AddInt64(&ah.totalHealthy, fileSize)
+					ah.updateProgress()
+				}
+			}
+
+		default:
+			return fmt.Errorf("unknown wound kind: %d", wound.Kind)
+		}
+
+		return nil
+	}
+
+	for wound := range wounds {
+		err := processWound(wound)
+		if err != nil {
+			close(fileIndices)
+			close(cancelled)
+			return errors.WithStack(err)
+		}
+	}
+
+	// queued everything
+	close(fileIndices)
+
+	// expecting up to NumWorkers done, some may still
+	// send errors
+	for i := 0; i < ah.NumWorkers; i++ {
+		err := <-errs
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return nil
+}
+
+func (ah *ArchiveHealer) heal(container *tlc.Container, targetPool wsync.WritablePool,
+	fileIndices chan int64, cancelled chan struct{}, chunkHealed chunkHealedFunc) error {
+
+	var sourcePool wsync.Pool
+	var err error
+
+	for {
+		select {
+		case <-cancelled:
+			// something else stopped the healing
+			return nil
+		case fileIndex, ok := <-fileIndices:
+			if !ok {
+				// no more files to heal
+				return nil
+			}
+
+			// lazily open file
+			if sourcePool == nil {
+				if ah.Consumer != nil {
+					ah.Consumer.Debugf("opening archive for worker!")
+				}
+
+				file, err := eos.Open(ah.ArchivePath)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				defer file.Close()
+
+				stat, err := file.Stat()
+				if err != nil {
+					return err
+				}
+
+				zipReader, err := zip.NewReader(file, stat.Size())
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				sourcePool = zippool.New(container, zipReader)
+				// sic: we're inside a for, not a function, so this correctly happens
+				// when we actually return
+				defer sourcePool.Close()
+			}
+
+			err = ah.healOne(sourcePool, targetPool, fileIndex, chunkHealed)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+	}
+}
+
+func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.WritablePool, fileIndex int64, chunkHealed chunkHealedFunc) error {
+	if ah.lockMap != nil {
+		lock := ah.lockMap[fileIndex]
+		<-lock
+	}
+
+	var err error
+	var reader io.Reader
+	var writer io.WriteCloser
+
+	if ah.Consumer != nil {
+		f := ah.container.Files[fileIndex]
+		ah.Consumer.Debugf("healing (%s) %s", f.Path, humanize.IBytes(uint64(f.Size)))
+	}
+
+	reader, err = sourcePool.GetReader(fileIndex)
+	if err != nil {
+		return err
+	}
+
+	writer, err = targetPool.GetWriter(fileIndex)
+	if err != nil {
+		return err
+	}
+
+	lastCount := int64(0)
+	cw := counter.NewWriterCallback(func(count int64) {
+		chunk := count - lastCount
+		chunkHealed(chunk)
+		lastCount = count
+	}, writer)
+
+	_, err = io.Copy(cw, reader)
+	if err != nil {
+		return err
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+// HasWounds returns true if the healer ever received wounds
+func (ah *ArchiveHealer) HasWounds() bool {
+	return ah.hasWounds
+}
+
+// TotalCorrupted returns the total amount of corrupted data
+// contained in the wounds this healer has received. Dirs
+// and symlink wounds have 0-size, use HasWounds to know
+// if there were any wounds at all.
+func (ah *ArchiveHealer) TotalCorrupted() int64 {
+	return ah.totalCorrupted
+}
+
+// TotalHealed returns the total amount of data written to disk
+// to repair the wounds. This might be more than TotalCorrupted,
+// since ArchiveHealer always redownloads whole files, even if
+// they're just partly corrupted
+func (ah *ArchiveHealer) TotalHealed() int64 {
+	return ah.totalHealed
+}
+
+// SetNumWorkers may be called before Do to adjust the concurrency
+// of ArchiveHealer (how many files it'll try to heal in parallel)
+func (ah *ArchiveHealer) SetNumWorkers(numWorkers int) {
+	ah.NumWorkers = numWorkers
+}
+
+// SetConsumer gives this healer a consumer to report progress to
+func (ah *ArchiveHealer) SetConsumer(consumer *state.Consumer) {
+	ah.Consumer = consumer
+}
+
+func (ah *ArchiveHealer) updateProgress() {
+	if ah.Consumer == nil {
+		return
+	}
+
+	totalHealthy := atomic.LoadInt64(&ah.totalHealthy)
+	totalHealed := atomic.LoadInt64(&ah.totalHealed)
+
+	progress := float64(totalHealthy+totalHealed) / float64(ah.container.Size)
+	ah.Consumer.Progress(progress)
+}
+
+func (ah *ArchiveHealer) SetLockMap(lockMap LockMap) {
+	ah.lockMap = lockMap
+}

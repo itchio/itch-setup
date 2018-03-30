@@ -1222,6 +1222,49 @@ const (
 	DI_NORMAL      = DI_IMAGE | DI_MASK
 )
 
+// WM_NCHITTEST constants
+const (
+	HTBORDER      = 18
+	HTBOTTOM      = 15
+	HTBOTTOMLEFT  = 16
+	HTBOTTOMRIGHT = 17
+	HTCAPTION     = 2
+	HTCLIENT      = 1
+	HTCLOSE       = 20
+	HTERROR       = -2
+	HTGROWBOX     = 4
+	HTHELP        = 21
+	HTHSCROLL     = 6
+	HTLEFT        = 10
+	HTMENU        = 5
+	HTMAXBUTTON   = 9
+	HTMINBUTTON   = 8
+	HTNOWHERE     = 0
+	HTREDUCE      = 8
+	HTRIGHT       = 11
+	HTSIZE        = 4
+	HTSYSMENU     = 3
+	HTTOP         = 12
+	HTTOPLEFT     = 13
+	HTTOPRIGHT    = 14
+	HTTRANSPARENT = -1
+	HTVSCROLL     = 7
+	HTZOOM        = 9
+)
+
+// AnimateWindow flags
+const (
+	AW_ACTIVATE     = 0x00020000
+	AW_BLEND        = 0x00080000
+	AW_CENTER       = 0x00000010
+	AW_HIDE         = 0x00010000
+	AW_HOR_POSITIVE = 0x00000001
+	AW_HOR_NEGATIVE = 0x00000002
+	AW_SLIDE        = 0x00040000
+	AW_VER_POSITIVE = 0x00000004
+	AW_VER_NEGATIVE = 0x00000008
+)
+
 type NMBCDROPDOWN struct {
 	Hdr      NMHDR
 	RcButton RECT
@@ -1495,6 +1538,7 @@ var (
 	// Functions
 	addClipboardFormatListener uintptr
 	adjustWindowRect           uintptr
+	animateWindow              uintptr
 	beginDeferWindowPos        uintptr
 	beginPaint                 uintptr
 	callWindowProc             uintptr
@@ -1523,6 +1567,7 @@ var (
 	endPaint                   uintptr
 	enumChildWindows           uintptr
 	findWindow                 uintptr
+	getActiveWindow            uintptr
 	getAncestor                uintptr
 	getCaretPos                uintptr
 	getClientRect              uintptr
@@ -1530,6 +1575,7 @@ var (
 	getCursorPos               uintptr
 	getDC                      uintptr
 	getFocus                   uintptr
+	getForegroundWindow        uintptr
 	getKeyState                uintptr
 	getMenuInfo                uintptr
 	getMessage                 uintptr
@@ -1600,6 +1646,7 @@ var (
 	trackPopupMenuEx           uintptr
 	translateMessage           uintptr
 	updateWindow               uintptr
+	windowFromDC               uintptr
 	windowFromPoint            uintptr
 )
 
@@ -1612,6 +1659,7 @@ func init() {
 	// Functions
 	addClipboardFormatListener, _ = syscall.GetProcAddress(syscall.Handle(libuser32), "AddClipboardFormatListener")
 	adjustWindowRect = MustGetProcAddress(libuser32, "AdjustWindowRect")
+	animateWindow = MustGetProcAddress(libuser32, "AnimateWindow")
 	beginDeferWindowPos = MustGetProcAddress(libuser32, "BeginDeferWindowPos")
 	beginPaint = MustGetProcAddress(libuser32, "BeginPaint")
 	callWindowProc = MustGetProcAddress(libuser32, "CallWindowProcW")
@@ -1640,6 +1688,7 @@ func init() {
 	endPaint = MustGetProcAddress(libuser32, "EndPaint")
 	enumChildWindows = MustGetProcAddress(libuser32, "EnumChildWindows")
 	findWindow = MustGetProcAddress(libuser32, "FindWindowW")
+	getActiveWindow = MustGetProcAddress(libuser32, "GetActiveWindow")
 	getAncestor = MustGetProcAddress(libuser32, "GetAncestor")
 	getCaretPos = MustGetProcAddress(libuser32, "GetCaretPos")
 	getClientRect = MustGetProcAddress(libuser32, "GetClientRect")
@@ -1647,6 +1696,7 @@ func init() {
 	getCursorPos = MustGetProcAddress(libuser32, "GetCursorPos")
 	getDC = MustGetProcAddress(libuser32, "GetDC")
 	getFocus = MustGetProcAddress(libuser32, "GetFocus")
+	getForegroundWindow = MustGetProcAddress(libuser32, "GetForegroundWindow")
 	getKeyState = MustGetProcAddress(libuser32, "GetKeyState")
 	getMenuInfo = MustGetProcAddress(libuser32, "GetMenuInfo")
 	getMessage = MustGetProcAddress(libuser32, "GetMessageW")
@@ -1727,6 +1777,7 @@ func init() {
 	trackPopupMenuEx = MustGetProcAddress(libuser32, "TrackPopupMenuEx")
 	translateMessage = MustGetProcAddress(libuser32, "TranslateMessage")
 	updateWindow = MustGetProcAddress(libuser32, "UpdateWindow")
+	windowFromDC = MustGetProcAddress(libuser32, "WindowFromDC")
 	windowFromPoint = MustGetProcAddress(libuser32, "WindowFromPoint")
 }
 
@@ -1748,6 +1799,15 @@ func AdjustWindowRect(lpRect *RECT, dwStyle uint32, bMenu bool) bool {
 		uintptr(unsafe.Pointer(lpRect)),
 		uintptr(dwStyle),
 		uintptr(BoolToBOOL(bMenu)))
+
+	return ret != 0
+}
+
+func AnimateWindow(hwnd HWND, dwTime, dwFlags uint32) bool {
+	ret, _, _ := syscall.Syscall(animateWindow, 3,
+		uintptr(hwnd),
+		uintptr(dwTime),
+		uintptr(dwFlags))
 
 	return ret != 0
 }
@@ -2041,6 +2101,15 @@ func FindWindow(lpClassName, lpWindowName *uint16) HWND {
 	return HWND(ret)
 }
 
+func GetActiveWindow() HWND {
+	ret, _, _ := syscall.Syscall(getActiveWindow, 0,
+		0,
+		0,
+		0)
+
+	return HWND(ret)
+}
+
 func GetAncestor(hWnd HWND, gaFlags uint32) HWND {
 	ret, _, _ := syscall.Syscall(getAncestor, 2,
 		uintptr(hWnd),
@@ -2097,6 +2166,15 @@ func GetDC(hWnd HWND) HDC {
 
 func GetFocus() HWND {
 	ret, _, _ := syscall.Syscall(getFocus, 0,
+		0,
+		0,
+		0)
+
+	return HWND(ret)
+}
+
+func GetForegroundWindow() HWND {
+	ret, _, _ := syscall.Syscall(getForegroundWindow, 0,
 		0,
 		0,
 		0)
@@ -2803,6 +2881,16 @@ func UpdateWindow(hwnd HWND) bool {
 
 	return ret != 0
 }
+
+func WindowFromDC(hDC HDC) HWND {
+	ret, _, _ := syscall.Syscall(windowFromDC, 1,
+		uintptr(hDC),
+		0,
+		0)
+
+	return HWND(ret)
+}
+
 func WindowFromPoint(Point POINT) HWND {
 	ret, _, _ := syscall.Syscall(windowFromPoint, 2,
 		uintptr(Point.X),

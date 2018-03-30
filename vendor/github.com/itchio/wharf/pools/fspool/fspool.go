@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-errors/errors"
+	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/tlc"
 	"github.com/itchio/wharf/wsync"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -15,13 +16,20 @@ const (
 	ModeMask = 0644
 )
 
+type fsEntryReader interface {
+	io.ReadSeeker
+	io.Closer
+}
+
 // FsPool is a filesystem-backed Pool+WritablePool
 type FsPool struct {
 	container *tlc.Container
 	basePath  string
 
 	fileIndex int64
-	reader    *os.File
+	reader    fsEntryReader
+
+	UniqueReader fsEntryReader
 }
 
 var _ wsync.Pool = (*FsPool)(nil)
@@ -70,24 +78,39 @@ func (cfp *FsPool) GetPath(fileIndex int64) string {
 // returned reader if the file index is similar. The cache size is 1, so
 // reading in parallel from different files is not supported.
 func (cfp *FsPool) GetReader(fileIndex int64) (io.Reader, error) {
-	return cfp.GetReadSeeker(fileIndex)
+	rs, err := cfp.GetReadSeeker(fileIndex)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	_, err = rs.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return rs, nil
 }
 
 // GetReadSeeker is like GetReader but the returned object allows seeking
 func (cfp *FsPool) GetReadSeeker(fileIndex int64) (io.ReadSeeker, error) {
+	if cfp.UniqueReader != nil {
+		return cfp.UniqueReader, nil
+	}
+
 	if cfp.fileIndex != fileIndex {
 		if cfp.reader != nil {
 			err := cfp.reader.Close()
 			if err != nil {
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 			cfp.reader = nil
 		}
 
-		reader, err := os.Open(cfp.GetPath(fileIndex))
+		reader, err := eos.Open(cfp.GetPath(fileIndex))
 		if err != nil {
 			return nil, err
 		}
+
 		cfp.reader = reader
 		cfp.fileIndex = fileIndex
 	}
@@ -100,7 +123,7 @@ func (cfp *FsPool) Close() error {
 	if cfp.reader != nil {
 		err := cfp.reader.Close()
 		if err != nil {
-			return errors.Wrap(err, 1)
+			return errors.WithStack(err)
 		}
 
 		cfp.reader = nil
@@ -115,7 +138,7 @@ func (cfp *FsPool) GetWriter(fileIndex int64) (io.WriteCloser, error) {
 
 	err := os.MkdirAll(filepath.Dir(path), os.FileMode(0755))
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	outputFile := cfp.container.Files[fileIndex]

@@ -29,7 +29,12 @@ type MainWindow struct {
 }
 
 func NewMainWindow() (*MainWindow, error) {
+	return NewMainWindowWithName("")
+}
+
+func NewMainWindowWithName(name string) (*MainWindow, error) {
 	mw := new(MainWindow)
+	mw.SetName(name)
 
 	if err := InitWindow(
 		mw,
@@ -75,9 +80,6 @@ func NewMainWindow() (*MainWindow, error) {
 	mw.statusBar.visibleChangedPublisher.event.Attach(func() {
 		mw.SetBounds(mw.Bounds())
 	})
-
-	// This forces display of focus rectangles, as soon as the user starts to type.
-	mw.SendMessage(win.WM_CHANGEUISTATE, win.UIS_INITIALIZE, 0)
 
 	succeeded = true
 

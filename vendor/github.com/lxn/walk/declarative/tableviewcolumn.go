@@ -27,6 +27,8 @@ type TableViewColumn struct {
 	Precision  int
 	Width      int
 	Hidden     bool
+	Frozen     bool
+	StyleCell  func(style *walk.CellStyle)
 }
 
 func (tvc TableViewColumn) Create(tv *walk.TableView) error {
@@ -49,6 +51,9 @@ func (tvc TableViewColumn) Create(tv *walk.TableView) error {
 		return err
 	}
 	if err := w.SetVisible(!tvc.Hidden); err != nil {
+		return err
+	}
+	if err := w.SetFrozen(tvc.Frozen); err != nil {
 		return err
 	}
 	if err := w.SetWidth(tvc.Width); err != nil {

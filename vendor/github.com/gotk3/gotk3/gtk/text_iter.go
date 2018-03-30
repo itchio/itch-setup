@@ -6,7 +6,11 @@ package gtk
 // #include "gtk.go.h"
 import "C"
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/gotk3/gotk3/glib"
+)
 
 /*
  * GtkTextIter
@@ -34,7 +38,7 @@ func (v *TextIter) GetBuffer() *TextBuffer {
 	if c == nil {
 		return nil
 	}
-	return wrapTextBuffer(wrapObject(unsafe.Pointer(c)))
+	return wrapTextBuffer(glib.Take(unsafe.Pointer(c)))
 }
 
 // GetOffset is a wrapper around gtk_text_iter_get_offset().
@@ -94,11 +98,6 @@ func (v *TextIter) GetVisibleSlice(end *TextIter) string {
 func (v *TextIter) GetVisibleText(end *TextIter) string {
 	c := C.gtk_text_iter_get_visible_text(v.native(), end.native())
 	return C.GoString((*C.char)(c))
-}
-
-// BeginsTag is a wrapper around gtk_text_iter_begins_tag().
-func (v *TextIter) BeginsTag(v1 *TextTag) bool {
-	return gobool(C.gtk_text_iter_begins_tag(v.native(), v1.native()))
 }
 
 // EndsTag is a wrapper around gtk_text_iter_ends_tag().

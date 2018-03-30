@@ -34,7 +34,7 @@ func (v *Label) native() *C.GtkLabel {
 
 func marshalLabel(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapLabel(obj), nil
 }
 
@@ -50,7 +50,7 @@ func LabelNew(str string) (*Label, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapLabel(obj), nil
 }
 
@@ -234,7 +234,7 @@ func LabelNewWithMnemonic(str string) (*Label, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapLabel(obj), nil
 }
 
@@ -263,4 +263,14 @@ func (v *Label) GetLabel() string {
 		return ""
 	}
 	return C.GoString((*C.char)(c))
+}
+
+// GetMnemonicKeyval is a wrapper around gtk_label_get_mnemonic_keyval().
+func (v *Label) GetMnemonicKeyval() uint {
+	return uint(C.gtk_label_get_mnemonic_keyval(v.native()))
+}
+
+// SetMnemonicWidget is a wrapper around gtk_label_set_mnemonic_widget().
+func (v *Label) SetMnemonicWidget(widget IWidget) {
+	C.gtk_label_set_mnemonic_widget(v.native(), widget.toWidget())
 }

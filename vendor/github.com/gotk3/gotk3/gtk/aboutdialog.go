@@ -40,7 +40,7 @@ func (v *AboutDialog) native() *C.GtkAboutDialog {
 
 func marshalAboutDialog(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapAboutDialog(obj), nil
 }
 
@@ -54,7 +54,7 @@ func AboutDialogNew() (*AboutDialog, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapAboutDialog(obj), nil
 }
 
@@ -106,6 +106,17 @@ func (v *AboutDialog) GetLicenseType() License {
 // SetLicenseType is a wrapper around gtk_about_dialog_set_license_type().
 func (v *AboutDialog) SetLicenseType(license License) {
 	C.gtk_about_dialog_set_license_type(v.native(), C.GtkLicense(license))
+}
+
+// GetLogo is a wrapper around gtk_about_dialog_get_logo().
+func (v *AboutDialog) GetLogo() (*gdk.Pixbuf, error) {
+	c := C.gtk_about_dialog_get_logo(v.native())
+	if c == nil {
+		return nil, nilPtrErr
+	}
+
+	p := &gdk.Pixbuf{glib.Take(unsafe.Pointer(c))}
+	return p, nil
 }
 
 // SetLogo is a wrapper around gtk_about_dialog_set_logo().

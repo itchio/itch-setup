@@ -15,38 +15,53 @@ import (
 )
 
 type ComboBox struct {
+	// Window
+
+	Background         Brush
+	ContextMenuItems   []MenuItem
+	Enabled            Property
+	Font               Font
+	MaxSize            Size
+	MinSize            Size
+	Name               string
+	OnBoundsChanged    walk.EventHandler
+	OnKeyDown          walk.KeyEventHandler
+	OnKeyPress         walk.KeyEventHandler
+	OnKeyUp            walk.KeyEventHandler
+	OnMouseDown        walk.MouseEventHandler
+	OnMouseMove        walk.MouseEventHandler
+	OnMouseUp          walk.MouseEventHandler
+	OnSizeChanged      walk.EventHandler
+	Persistent         bool
+	RightToLeftReading bool
+	ToolTipText        Property
+	Visible            Property
+
+	// Widget
+
+	AlwaysConsumeSpace bool
+	Column             int
+	ColumnSpan         int
+	GraphicsEffects    []walk.WidgetGraphicsEffect
+	Row                int
+	RowSpan            int
+	StretchFactor      int
+
+	// ComboBox
+
 	AssignTo              **walk.ComboBox
-	Name                  string
-	Enabled               Property
-	Visible               Property
-	Font                  Font
-	ToolTipText           Property
-	MinSize               Size
-	MaxSize               Size
-	StretchFactor         int
-	Row                   int
-	RowSpan               int
-	Column                int
-	ColumnSpan            int
-	AlwaysConsumeSpace    bool
-	ContextMenuItems      []MenuItem
-	OnKeyDown             walk.KeyEventHandler
-	OnKeyUp               walk.KeyEventHandler
-	OnMouseDown           walk.MouseEventHandler
-	OnKeyPress            walk.KeyEventHandler
-	OnMouseMove           walk.MouseEventHandler
-	OnMouseUp             walk.MouseEventHandler
-	OnSizeChanged         walk.EventHandler
+	BindingMember         string
+	CurrentIndex          Property
+	DisplayMember         string
 	Editable              bool
 	Format                string
-	Precision             int
 	MaxLength             int
-	BindingMember         string
-	DisplayMember         string
 	Model                 interface{}
-	Value                 Property
-	CurrentIndex          Property
 	OnCurrentIndexChanged walk.EventHandler
+	OnEditingFinished     walk.EventHandler
+	OnTextChanged         walk.EventHandler
+	Precision             int
+	Value                 Property
 }
 
 func (cb ComboBox) Create(builder *Builder) error {
@@ -86,6 +101,12 @@ func (cb ComboBox) Create(builder *Builder) error {
 		if cb.OnCurrentIndexChanged != nil {
 			w.CurrentIndexChanged().Attach(cb.OnCurrentIndexChanged)
 		}
+		if cb.OnEditingFinished != nil {
+			w.EditingFinished().Attach(cb.OnEditingFinished)
+		}
+		if cb.OnTextChanged != nil {
+			w.TextChanged().Attach(cb.OnTextChanged)
+		}
 
 		if cb.AssignTo != nil {
 			*cb.AssignTo = w
@@ -93,8 +114,4 @@ func (cb ComboBox) Create(builder *Builder) error {
 
 		return nil
 	})
-}
-
-func (w ComboBox) WidgetInfo() (name string, disabled, hidden bool, font *Font, toolTipText string, minSize, maxSize Size, stretchFactor, row, rowSpan, column, columnSpan int, alwaysConsumeSpace bool, contextMenuItems []MenuItem, OnKeyDown walk.KeyEventHandler, OnKeyPress walk.KeyEventHandler, OnKeyUp walk.KeyEventHandler, OnMouseDown walk.MouseEventHandler, OnMouseMove walk.MouseEventHandler, OnMouseUp walk.MouseEventHandler, OnSizeChanged walk.EventHandler) {
-	return w.Name, false, false, &w.Font, "", w.MinSize, w.MaxSize, w.StretchFactor, w.Row, w.RowSpan, w.Column, w.ColumnSpan, w.AlwaysConsumeSpace, w.ContextMenuItems, w.OnKeyDown, w.OnKeyPress, w.OnKeyUp, w.OnMouseDown, w.OnMouseMove, w.OnMouseUp, w.OnSizeChanged
 }

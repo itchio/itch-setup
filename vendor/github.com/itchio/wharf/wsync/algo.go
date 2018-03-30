@@ -18,11 +18,10 @@ package wsync
 
 import (
 	"crypto/md5"
-	"fmt"
 	"io"
 	"os"
 
-	"github.com/go-errors/errors"
+	"github.com/pkg/errors"
 )
 
 // MaxDataOp is the maximum number of 'fresh bytes' that can be contained
@@ -57,57 +56,72 @@ func (ctx *Context) ApplyPatch(output io.Writer, pool Pool, ops chan Operation) 
 
 // ApplyPatchFull is like ApplyPatch but accepts an ApplyWound channel
 func (ctx *Context) ApplyPatchFull(output io.Writer, pool Pool, ops chan Operation, failFast bool) error {
-	blockSize := int64(ctx.blockSize)
-	pos := int64(0)
-
 	for op := range ops {
-		switch op.Type {
-		case OpBlockRange:
-			fileSize := pool.GetSize(op.FileIndex)
-			fixedSize := (op.BlockSpan - 1) * blockSize
-			lastIndex := op.BlockIndex + (op.BlockSpan - 1)
-			lastSize := blockSize
-			if blockSize*(lastIndex+1) > fileSize {
-				lastSize = fileSize % blockSize
-			}
-			opSize := (fixedSize + lastSize)
+		err := ctx.ApplySingleFull(output, pool, op, failFast)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
 
-			target, err := pool.GetReadSeeker(op.FileIndex)
-			if err != nil {
-				if failFast {
-					return errors.Wrap(err, 1)
-				}
-				io.CopyN(output, &devNullReader{}, opSize)
-				pos += opSize
-				continue
+	return nil
+}
+
+func (ctx *Context) ApplySingle(output io.Writer, pool Pool, op Operation) error {
+	return ctx.ApplySingleFull(output, pool, op, true)
+}
+
+func (ctx *Context) ApplySingleFull(output io.Writer, pool Pool, op Operation, failFast bool) error {
+	const minBufferSize = 32 * 1024 // golang's io.Copy default szie
+	if len(ctx.buffer) < minBufferSize {
+		ctx.buffer = make([]byte, minBufferSize)
+	}
+	buffer := ctx.buffer
+
+	blockSize := int64(ctx.blockSize)
+
+	switch op.Type {
+	case OpBlockRange:
+		fileSize := pool.GetSize(op.FileIndex)
+		fixedSize := (op.BlockSpan - 1) * blockSize
+		lastIndex := op.BlockIndex + (op.BlockSpan - 1)
+		lastSize := blockSize
+		if blockSize*(lastIndex+1) > fileSize {
+			lastSize = fileSize % blockSize
+		}
+		opSize := (fixedSize + lastSize)
+
+		target, err := pool.GetReadSeeker(op.FileIndex)
+		if err != nil {
+			if failFast {
+				return errors.WithStack(err)
+			}
+			io.CopyBuffer(output, io.LimitReader(&devNullReader{}, opSize), buffer)
+			return nil
+		}
+
+		_, err = target.Seek(blockSize*op.BlockIndex, os.SEEK_SET)
+		if err != nil {
+			if failFast {
+				return errors.WithStack(err)
+			}
+			io.CopyBuffer(output, io.LimitReader(&devNullReader{}, opSize), buffer)
+			return nil
+		}
+
+		copied, err := io.CopyBuffer(output, io.LimitReader(target, opSize), buffer)
+		if err != nil {
+			if failFast {
+				return errors.Wrapf(err, "While copying %d bytes: %s", blockSize*op.BlockSpan)
 			}
 
-			_, err = target.Seek(blockSize*op.BlockIndex, os.SEEK_SET)
-			if err != nil {
-				if failFast {
-					return errors.Wrap(err, 1)
-				}
-				io.CopyN(output, &devNullReader{}, opSize)
-				pos += opSize
-				continue
-			}
-
-			copied, err := io.CopyN(output, target, opSize)
-			if err != nil {
-				if failFast {
-					return errors.Wrap(fmt.Errorf("While copying %d bytes: %s", blockSize*op.BlockSpan, err.Error()), 1)
-				}
-
-				remaining := opSize - copied
-				io.CopyN(output, &devNullReader{}, remaining)
-				pos += opSize
-				continue
-			}
-		case OpData:
-			_, err := output.Write(op.Data)
-			if err != nil {
-				return errors.Wrap(err, 1)
-			}
+			remaining := opSize - copied
+			io.CopyBuffer(output, io.LimitReader(&devNullReader{}, remaining), buffer)
+			return nil
+		}
+	case OpData:
+		_, err := output.Write(op.Data)
+		if err != nil {
+			return errors.WithStack(err)
 		}
 	}
 
@@ -163,7 +177,7 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 
 				opErr := ops(*prevOp)
 				if opErr != nil {
-					return errors.Wrap(opErr, 1)
+					return errors.WithStack(opErr)
 				}
 				// prevOp has been completely sent off, can no longer be combined with anything
 				prevOp = nil
@@ -174,12 +188,12 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 			if prevOp != nil {
 				opErr := ops(*prevOp)
 				if opErr != nil {
-					return errors.Wrap(opErr, 1)
+					return errors.WithStack(opErr)
 				}
 			}
 			opErr := ops(op)
 			if opErr != nil {
-				return errors.Wrap(opErr, 1)
+				return errors.WithStack(opErr)
 			}
 			prevOp = nil
 		}
@@ -195,7 +209,7 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 				if data.tail < data.head {
 					err = enqueue(Operation{Type: OpData, Data: buffer[data.tail:data.head]})
 					if err != nil {
-						return errors.Wrap(err, 1)
+						return errors.WithStack(err)
 					}
 				}
 				// Wrap the buffer.
@@ -212,8 +226,8 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 			n, err = io.ReadAtLeast(source, buffer[validTo:validTo+ctx.blockSize], ctx.blockSize)
 			validTo += n
 			if err != nil {
-				if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-					return errors.Wrap(err, 1)
+				if errors.Cause(err) != io.EOF && errors.Cause(err) != io.ErrUnexpectedEOF {
+					return errors.WithStack(err)
 				}
 				lastRun = true
 
@@ -225,30 +239,41 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 		// or be at the end of the buffer.
 		sum.head = min(sum.tail+ctx.blockSize, validTo)
 
+		skip := false
+
 		// Compute the rolling hash.
-		if !rolling {
-			β, β1, β2 = βhash(buffer[sum.tail:sum.head])
-			rolling = true
-		} else {
+		if rolling {
+			βold := β
+
 			αPush = uint32(buffer[sum.head-1])
 			β1 = (β1 - αPop + αPush) % _M
 			β2 = (β2 - uint32(sum.head-sum.tail)*αPop + β1) % _M
 			β = β1 + _M*β2
+
+			if β == βold {
+				skip = true
+			}
+		} else {
+			β, β1, β2 = βhash(buffer[sum.tail:sum.head])
+			rolling = true
 		}
 
 		var blockHash *BlockHash
 
-		// Determine if there is a hash match.
-		if hh, ok := library.hashLookup[β]; ok {
-			blockHash = findUniqueHash(hh, ctx.uniqueHash(buffer[sum.tail:sum.head]), shortSize, preferredFileIndex)
+		if !skip {
+			// Determine if there is a hash match.
+			if hh, ok := library.hashLookup[β]; ok {
+				blockHash = ctx.findUniqueHash(hh, buffer[sum.tail:sum.head], shortSize, preferredFileIndex)
+			}
 		}
+
 		// Send data off if there is data available and a hash is found (so the buffer before it
 		// must be flushed first), or the data chunk size has reached it's maximum size (for buffer
 		// allocation purposes) or to flush the end of the data.
 		if data.tail < data.head && (blockHash != nil || data.head-data.tail >= MaxDataOp) {
 			err = enqueue(Operation{Type: OpData, Data: buffer[data.tail:data.head]})
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 			data.tail = data.head
 		}
@@ -256,7 +281,7 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 		if blockHash != nil {
 			err = enqueue(Operation{Type: OpBlockRange, FileIndex: blockHash.FileIndex, BlockIndex: blockHash.BlockIndex, BlockSpan: 1})
 			if err != nil {
-				return errors.Wrap(err, 1)
+				return errors.WithStack(err)
 			}
 			rolling = false
 			sum.tail += ctx.blockSize
@@ -271,7 +296,7 @@ func (ctx *Context) ComputeDiff(source io.Reader, library *BlockLibrary, ops Ope
 			if lastRun {
 				err = enqueue(Operation{Type: OpData, Data: buffer[data.tail:validTo]})
 				if err != nil {
-					return errors.Wrap(err, 1)
+					return errors.WithStack(err)
 				}
 			} else {
 				// The following is for the next loop iteration, so don't try to calculate if last.

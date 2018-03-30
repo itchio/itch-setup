@@ -8,11 +8,11 @@ import (
 	"runtime"
 	"sync/atomic"
 
-	"github.com/go-errors/errors"
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pools"
 	"github.com/itchio/wharf/pools/nullpool"
 	"github.com/itchio/wharf/state"
+	"github.com/pkg/errors"
 )
 
 // MaxWoundSize is how large AggregateWounds will let an aggregat
@@ -128,13 +128,8 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		consumerErrs <- vctx.WoundsConsumer.Do(signature.Container, vctx.Wounds)
 
 		// throw away wounds until closed
-		for {
-			select {
-			case _, ok := <-vctx.Wounds:
-				if !ok {
-					return
-				}
-			}
+		for range vctx.Wounds {
+			// muffin
 		}
 	}()
 
@@ -143,7 +138,7 @@ func (vctx *ValidatorContext) Validate(target string, signature *SignatureInfo) 
 		path := filepath.Join(target, filepath.FromSlash(dir.Path))
 		stats, err := os.Lstat(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if IsNotExist(err) {
 				vctx.Wounds <- &Wound{
 					Kind:  WoundKind_DIR,
 					Index: int64(dirIndex),
@@ -260,7 +255,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 	defer func() {
 		err := targetPool.Close()
 		if err != nil {
-			retErr = errors.Wrap(err, 1)
+			retErr = errors.WithStack(err)
 			return
 		}
 
@@ -284,7 +279,7 @@ func (vctx *ValidatorContext) validate(target string, signature *SignatureInfo, 
 		var reader io.Reader
 		reader, err = targetPool.GetReader(fileIndex)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if IsNotExist(err) {
 				// whole file is missing
 				wound := &Wound{
 					Kind:  WoundKind_FILE,
@@ -378,4 +373,9 @@ func AssertValid(target string, signature *SignatureInfo) error {
 	}
 
 	return nil
+}
+
+// IsNotExist is a variant of os.IsNotExist that works with nested errors
+func IsNotExist(err error) bool {
+	return os.IsNotExist(errors.Cause(err))
 }

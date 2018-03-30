@@ -27,15 +27,40 @@ import (
 	"github.com/oxtoacart/bpool"
 )
 
+const (
+	// ERROR is an error Severity
+	ERROR = 500
+
+	// FATAL is an error Severity
+	FATAL = 600
+)
+
 var (
 	outs           atomic.Value
 	reporters      []ErrorReporter
 	reportersMutex sync.RWMutex
 
 	bufferPool = bpool.NewBufferPool(200)
+
+	onFatal atomic.Value
 )
 
+// Severity is a level of error (higher values are more severe)
+type Severity int
+
+func (s Severity) String() string {
+	switch s {
+	case ERROR:
+		return "ERROR"
+	case FATAL:
+		return "FATAL"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 func init() {
+	DefaultOnFatal()
 	ResetOutputs()
 }
 
@@ -62,6 +87,19 @@ func RegisterReporter(reporter ErrorReporter) {
 	reportersMutex.Unlock()
 }
 
+// OnFatal configures golog to call the given function on any FATAL error. By
+// default, golog calls os.Exit(1) on any FATAL error.
+func OnFatal(fn func(err error)) {
+	onFatal.Store(fn)
+}
+
+// DefaultOnFatal enables the default behavior for OnFatal
+func DefaultOnFatal() {
+	onFatal.Store(func(err error) {
+		os.Exit(1)
+	})
+}
+
 type outputs struct {
 	ErrorOut io.Writer
 	DebugOut io.Writer
@@ -82,7 +120,7 @@ type MultiLine interface {
 // context. This should return quickly as it executes on the critical code
 // path. The recommended approach is to buffer as much as possible and discard
 // new reports if the buffer becomes saturated.
-type ErrorReporter func(err error, linePrefix string, ctx map[string]interface{})
+type ErrorReporter func(err error, linePrefix string, severity Severity, ctx map[string]interface{})
 
 type Logger interface {
 	// Debug logs to stdout
@@ -122,7 +160,6 @@ type Logger interface {
 }
 
 func LoggerFor(prefix string) Logger {
-
 	l := &logger{
 		prefix: prefix + ": ",
 		pc:     make([]uintptr, 10),
@@ -247,10 +284,27 @@ func (l *logger) Debugf(message string, args ...interface{}) {
 }
 
 func (l *logger) Error(arg interface{}) error {
-	return l.errorSkipFrames(arg, 1)
+	return l.errorSkipFrames(arg, 1, ERROR)
 }
 
-func (l *logger) errorSkipFrames(arg interface{}, skipFrames int) error {
+func (l *logger) Errorf(message string, args ...interface{}) error {
+	return l.errorSkipFrames(errors.NewOffset(1, message, args...), 1, ERROR)
+}
+
+func (l *logger) Fatal(arg interface{}) {
+	fatal(l.errorSkipFrames(arg, 1, FATAL))
+}
+
+func (l *logger) Fatalf(message string, args ...interface{}) {
+	fatal(l.errorSkipFrames(errors.NewOffset(1, message, args...), 1, FATAL))
+}
+
+func fatal(err error) {
+	fn := onFatal.Load().(func(err error))
+	fn(err)
+}
+
+func (l *logger) errorSkipFrames(arg interface{}, skipFrames int, severity Severity) error {
 	var err error
 	switch e := arg.(type) {
 	case error:
@@ -258,22 +312,8 @@ func (l *logger) errorSkipFrames(arg interface{}, skipFrames int) error {
 	default:
 		err = fmt.Errorf("%v", e)
 	}
-	linePrefix := l.print(GetOutputs().ErrorOut, skipFrames+4, "ERROR", err)
-	return report(err, linePrefix)
-}
-
-func (l *logger) Errorf(message string, args ...interface{}) error {
-	return l.errorSkipFrames(errors.NewOffset(1, message, args...), 1)
-}
-
-func (l *logger) Fatal(arg interface{}) {
-	l.print(GetOutputs().ErrorOut, 4, "FATAL", arg)
-	os.Exit(1)
-}
-
-func (l *logger) Fatalf(message string, args ...interface{}) {
-	l.printf(GetOutputs().ErrorOut, 4, "FATAL", nil, message, args...)
-	os.Exit(1)
+	linePrefix := l.print(GetOutputs().ErrorOut, skipFrames+4, severity.String(), err)
+	return report(err, linePrefix, severity)
 }
 
 func (l *logger) Trace(arg interface{}) {
@@ -397,7 +437,7 @@ func printContext(buf *bytes.Buffer, err interface{}) {
 	buf.WriteByte(']')
 }
 
-func report(err error, linePrefix string) error {
+func report(err error, linePrefix string, severity Severity) error {
 	var reportersCopy []ErrorReporter
 	reportersMutex.RLock()
 	if len(reporters) > 0 {
@@ -408,9 +448,10 @@ func report(err error, linePrefix string) error {
 
 	if len(reportersCopy) > 0 {
 		ctx := ops.AsMap(err, true)
+		ctx["severity"] = severity.String()
 		for _, reporter := range reportersCopy {
 			// We include globals when reporting
-			reporter(err, linePrefix, ctx)
+			reporter(err, linePrefix, severity, ctx)
 		}
 	}
 	return err

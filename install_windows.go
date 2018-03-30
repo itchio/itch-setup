@@ -397,8 +397,7 @@ func showInstallGUI(installDirIn string) {
 								},
 							},
 							ui.PushButton{
-								MaxSize: ui.Size{Width: 1},
-								Text:    localizer.T("setup.action.install"),
+								Text: localizer.T("setup.action.install"),
 								OnClicked: func() {
 									progressComposite.SetVisible(true)
 									optionsComposite.SetVisible(false)

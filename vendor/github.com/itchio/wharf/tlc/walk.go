@@ -1,16 +1,18 @@
 package tlc
 
 import (
-	"github.com/itchio/arkive/zip"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
-	"github.com/go-errors/errors"
+	"github.com/itchio/arkive/zip"
+
 	"github.com/itchio/wharf/eos"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -19,6 +21,10 @@ const (
 
 	// NullPath can be specified instead of a directory to yield an empty container
 	NullPath = "/dev/null"
+)
+
+var (
+	ErrUnrecognizedContainer = errors.New("Unrecognized container: should either be a directory, or a .zip archive")
 )
 
 // A FilterFunc allows ignoring certain files or directories when walking the filesystem
@@ -30,9 +36,17 @@ var DefaultFilter FilterFunc = func(fileInfo os.FileInfo) bool {
 	return true
 }
 
+type WalkOpts struct {
+	// Filter decides which files to exclude from the walk
+	Filter FilterFunc
+
+	// Dereference walks symlinks as if they were their targets
+	Dereference bool
+}
+
 // WalkAny tries to retrieve container information on containerPath. It supports:
-// the empty container (/dev/null), local directories, zip archives
-func WalkAny(containerPath string, filter FilterFunc) (*Container, error) {
+// the empty container (/dev/null), local directories, zip archives, or single files
+func WalkAny(containerPath string, opts *WalkOpts) (*Container, error) {
 	// empty container case
 	if containerPath == NullPath {
 		return &Container{}, nil
@@ -40,36 +54,63 @@ func WalkAny(containerPath string, filter FilterFunc) (*Container, error) {
 
 	file, err := eos.Open(containerPath)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	defer file.Close()
 
 	stat, err := file.Stat()
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	if stat.IsDir() {
-		if err != nil {
-			return nil, errors.Wrap(err, 1)
-		}
-
 		// local directory case
-		return WalkDir(containerPath, filter)
+		return WalkDir(containerPath, opts)
 	}
 
 	// zip archive case
-	zr, err := zip.NewReader(file, stat.Size())
-	if err != nil {
-		return nil, errors.Wrap(err, 1)
+	if strings.HasSuffix(strings.ToLower(stat.Name()), ".zip") {
+		zr, err := zip.NewReader(file, stat.Size())
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		return WalkZip(zr, opts)
 	}
 
-	return WalkZip(zr, filter)
+	// single file case
+	return WalkSingle(file)
+}
+
+// WalkSingle returns a container with a single file
+func WalkSingle(file eos.File) (*Container, error) {
+	stats, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if !stats.Mode().IsRegular() {
+		return nil, errors.Errorf("%s: not a regular file, can only WalkSingle regular files", stats.Name())
+	}
+
+	container := &Container{
+		Files: []*File{
+			&File{
+				Mode:   uint32(stats.Mode()),
+				Size:   int64(stats.Size()),
+				Offset: 0,
+				Path:   filepath.Base(stats.Name()),
+			},
+		},
+		Size: stats.Size(),
+	}
+	return container, nil
 }
 
 // WalkDir retrieves information on all files, directories, and symlinks in a directory
-func WalkDir(BasePath string, filter FilterFunc) (*Container, error) {
+func WalkDir(basePathIn string, opts *WalkOpts) (*Container, error) {
+	filter := opts.Filter
+
 	if filter == nil {
 		filter = DefaultFilter
 	}
@@ -78,77 +119,128 @@ func WalkDir(BasePath string, filter FilterFunc) (*Container, error) {
 	var Symlinks []*Symlink
 	var Files []*File
 
+	currentlyWalking := make(map[string]bool)
+
 	TotalOffset := int64(0)
 
-	onEntry := func(FullPath string, fileInfo os.FileInfo, err error) error {
-		// we shouldn't encounter any error crawling the repo
-		if err != nil {
-			if os.IsPermission(err) {
-				// ...except permission errors, those are fine
-				log.Printf("Permission error: %s\n", err.Error())
-			} else {
-				return errors.Wrap(err, 1)
-			}
-		}
+	var makeEntryCallback func(BasePath string, LocationPath string) filepath.WalkFunc
 
-		Path, err := filepath.Rel(BasePath, FullPath)
-		if err != nil {
-			return errors.Wrap(err, 1)
-		}
-
-		Path = filepath.ToSlash(Path)
-		if Path == "." {
-			// Don't store a single folder named "."
-			return nil
-		}
-
-		// don't end up with files we (the patcher) can't modify
-		Mode := fileInfo.Mode() | ModeMask
-
-		if !filter(fileInfo) {
-			if Mode.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		if Mode.IsDir() {
-			Dirs = append(Dirs, &Dir{Path: Path, Mode: uint32(Mode)})
-		} else if Mode.IsRegular() {
-			Size := fileInfo.Size()
-			Offset := TotalOffset
-			OffsetEnd := Offset + Size
-
-			Files = append(Files, &File{Path: Path, Mode: uint32(Mode), Size: Size, Offset: Offset})
-			TotalOffset = OffsetEnd
-		} else if Mode&os.ModeSymlink > 0 {
-			Dest, err := os.Readlink(FullPath)
+	makeEntryCallback = func(BasePath string, LocationPath string) filepath.WalkFunc {
+		return func(FullPath string, fileInfo os.FileInfo, err error) error {
+			// we shouldn't encounter any error crawling the repo
 			if err != nil {
-				return errors.Wrap(err, 1)
+				if os.IsPermission(err) {
+					// ...except permission errors, those are fine
+					log.Printf("Permission error: %s\n", err.Error())
+				} else {
+					return errors.WithStack(err)
+				}
 			}
 
-			Dest = filepath.ToSlash(Dest)
-			Symlinks = append(Symlinks, &Symlink{Path: Path, Mode: uint32(Mode), Dest: Dest})
-		}
+			Path, err := filepath.Rel(BasePath, FullPath)
+			if err != nil {
+				return errors.WithStack(err)
+			}
 
-		return nil
+			Path = filepath.Join(LocationPath, Path)
+
+			Path = filepath.ToSlash(Path)
+			if Path == "." {
+				// Don't store a single folder named "."
+				return nil
+			}
+
+			// os.Walk does not follow symlinks, so we must do it
+			// manually if Dereference is set
+			if opts.Dereference && fileInfo.Mode()&os.ModeSymlink > 0 {
+				fileInfo, err = os.Stat(FullPath)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				if fileInfo.Mode().IsDir() {
+					Dest, err := os.Readlink(FullPath)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+
+					var JoinedDest string
+					if filepath.IsAbs(Dest) {
+						JoinedDest = Dest
+					} else {
+						JoinedDest = filepath.Join(filepath.Dir(FullPath), Dest)
+					}
+
+					CleanDest := filepath.Clean(JoinedDest)
+
+					if currentlyWalking[CleanDest] {
+						err := fmt.Errorf("symlinks recurse onto %s, cowardly refusing to walk infinite container", CleanDest)
+						return errors.WithStack(err)
+					}
+
+					currentlyWalking[CleanDest] = true
+					err = filepath.Walk(CleanDest, makeEntryCallback(CleanDest, Path))
+					delete(currentlyWalking, CleanDest)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+				}
+			}
+
+			// don't end up with files we (the patcher) can't modify
+			Mode := fileInfo.Mode() | ModeMask
+
+			if !filter(fileInfo) {
+				if Mode.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+
+			if Mode.IsDir() {
+				Dirs = append(Dirs, &Dir{Path: Path, Mode: uint32(Mode)})
+			} else if Mode.IsRegular() {
+				Size := fileInfo.Size()
+				Offset := TotalOffset
+				OffsetEnd := Offset + Size
+
+				Files = append(Files, &File{Path: Path, Mode: uint32(Mode), Size: Size, Offset: Offset})
+				TotalOffset = OffsetEnd
+			} else if Mode&os.ModeSymlink > 0 {
+				Dest, err := os.Readlink(FullPath)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				Dest = filepath.ToSlash(Dest)
+				Symlinks = append(Symlinks, &Symlink{Path: Path, Mode: uint32(Mode), Dest: Dest})
+			}
+
+			return nil
+		}
 	}
 
-	if BasePath == NullPath {
+	if basePathIn == NullPath {
 		// empty container is fine - /dev/null is legal even on Win32 where it doesn't exist
 	} else {
-		fi, err := os.Lstat(BasePath)
+		basePathIn, err := filepath.Abs(basePathIn)
 		if err != nil {
-			return nil, errors.Wrap(err, 1)
+			return nil, errors.WithStack(err)
+		}
+
+		fi, err := os.Lstat(basePathIn)
+		if err != nil {
+			return nil, errors.WithStack(err)
 		}
 
 		if !fi.IsDir() {
-			return nil, errors.Wrap(fmt.Errorf("can't walk non-directory %s", BasePath), 1)
+			return nil, errors.Errorf("can't walk non-directory %s", basePathIn)
 		}
 
-		err = filepath.Walk(BasePath, onEntry)
+		currentlyWalking[basePathIn] = true
+		err = filepath.Walk(basePathIn, makeEntryCallback(basePathIn, "."))
 		if err != nil {
-			return nil, errors.Wrap(err, 1)
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -157,12 +249,18 @@ func WalkDir(BasePath string, filter FilterFunc) (*Container, error) {
 }
 
 // WalkZip walks all file in a zip archive and returns a container
-func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
+func WalkZip(zr *zip.Reader, opts *WalkOpts) (*Container, error) {
+	filter := opts.Filter
+
 	if filter == nil {
 		// default filter is a passthrough
 		filter = func(fileInfo os.FileInfo) bool {
 			return true
 		}
+	}
+
+	if opts.Dereference {
+		return nil, errors.New("Dereference is not supporting when walking a zip")
 	}
 
 	var Dirs []*Dir
@@ -174,9 +272,11 @@ func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
 	TotalOffset := int64(0)
 
 	for _, file := range zr.File {
+		fileName := filepath.ToSlash(filepath.Clean(filepath.ToSlash(file.Name)))
+
 		// don't trust zip files to have directory entries for
 		// all directories. it's a miracle anything works.
-		dir := path.Dir(file.Name)
+		dir := path.Dir(fileName)
 		if dir != "" && dir != "." && dirMap[dir] == 0 {
 			dirMap[dir] = os.FileMode(0755)
 		}
@@ -185,30 +285,30 @@ func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
 		mode := file.Mode() | ModeMask
 
 		if info.IsDir() {
-			dirMap[file.Name] = mode
+			dirMap[fileName] = mode
 		} else if mode&os.ModeSymlink > 0 {
 			var linkname []byte
 
 			err := func() error {
 				reader, err := file.Open()
 				if err != nil {
-					return errors.Wrap(err, 1)
+					return errors.WithStack(err)
 				}
 				defer reader.Close()
 
 				linkname, err = ioutil.ReadAll(reader)
 				if err != nil {
-					return errors.Wrap(err, 1)
+					return errors.WithStack(err)
 				}
 				return nil
 			}()
 
 			if err != nil {
-				return nil, errors.Wrap(err, 1)
+				return nil, errors.WithStack(err)
 			}
 
 			Symlinks = append(Symlinks, &Symlink{
-				Path: file.Name,
+				Path: fileName,
 				Dest: string(linkname),
 				Mode: uint32(mode),
 			})
@@ -216,7 +316,7 @@ func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
 			Size := int64(file.UncompressedSize64)
 
 			Files = append(Files, &File{
-				Path:   file.Name,
+				Path:   fileName,
 				Mode:   uint32(mode),
 				Size:   Size,
 				Offset: TotalOffset,
@@ -246,4 +346,13 @@ func WalkZip(zr *zip.Reader, filter FilterFunc) (*Container, error) {
 func (container *Container) Stats() string {
 	return fmt.Sprintf("%d files, %d dirs, %d symlinks",
 		len(container.Files), len(container.Dirs), len(container.Symlinks))
+}
+
+// IsSingleFile returns true if the container contains
+// exactly one files, and no directories or symlinks.
+func (container *Container) IsSingleFile() bool {
+	if len(container.Files) == 1 && len(container.Dirs) == 0 && len(container.Symlinks) == 0 {
+		return true
+	}
+	return false
 }

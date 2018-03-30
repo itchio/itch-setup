@@ -48,7 +48,7 @@ func (v *Window) toWindow() *C.GtkWindow {
 
 func marshalWindow(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapWindow(obj), nil
 }
 
@@ -62,7 +62,7 @@ func WindowNew(t WindowType) (*Window, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapWindow(wrapObject(unsafe.Pointer(c))), nil
+	return wrapWindow(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // SetTitle is a wrapper around gtk_window_set_title().
@@ -105,12 +105,6 @@ func (v *Window) SetDefaultSize(width, height int) {
 	C.gtk_window_set_default_size(v.native(), C.gint(width), C.gint(height))
 }
 
-// SetDefaultGeometry is a wrapper around gtk_window_set_default_geometry().
-func (v *Window) SetDefaultGeometry(width, height int) {
-	C.gtk_window_set_default_geometry(v.native(), C.gint(width),
-		C.gint(height))
-}
-
 // GetScreen is a wrapper around gtk_window_get_screen().
 func (v *Window) GetScreen() (*gdk.Screen, error) {
 	c := C.gtk_window_get_screen(v.native())
@@ -118,7 +112,7 @@ func (v *Window) GetScreen() (*gdk.Screen, error) {
 		return nil, nilPtrErr
 	}
 
-	s := &gdk.Screen{wrapObject(unsafe.Pointer(c))}
+	s := &gdk.Screen{glib.Take(unsafe.Pointer(c))}
 	return s, nil
 }
 
@@ -196,7 +190,7 @@ func (v *Window) GetFocus() (*Widget, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapWidget(wrapObject(unsafe.Pointer(c))), nil
+	return wrapWidget(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // SetFocus is a wrapper around gtk_window_set_focus().
@@ -210,7 +204,7 @@ func (v *Window) GetDefaultWidget() *Widget {
 	if c == nil {
 		return nil
 	}
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapWidget(obj)
 }
 
@@ -289,6 +283,11 @@ func (v *Window) SetDeletable(setting bool) {
 	C.gtk_window_set_deletable(v.native(), gbool(setting))
 }
 
+// SetTypeHint is a wrapper around gtk_window_set_type_hint().
+func (v *Window) SetTypeHint(typeHint gdk.WindowTypeHint) {
+	C.gtk_window_set_type_hint(v.native(), C.GdkWindowTypeHint(typeHint))
+}
+
 // SetSkipTaskbarHint is a wrapper around gtk_window_set_skip_taskbar_hint().
 func (v *Window) SetSkipTaskbarHint(setting bool) {
 	C.gtk_window_set_skip_taskbar_hint(v.native(), gbool(setting))
@@ -326,15 +325,6 @@ func (v *Window) SetRole(s string) {
 	cstr := (*C.gchar)(C.CString(s))
 	defer C.free(unsafe.Pointer(cstr))
 	C.gtk_window_set_role(v.native(), cstr)
-}
-
-// SetWMClass is a wrapper around gtk_window_set_wmclass().
-func (v *Window) SetWMClass(name, class string) {
-	cName := C.CString(name)
-	defer C.free(unsafe.Pointer(cName))
-	cClass := C.CString(class)
-	defer C.free(unsafe.Pointer(cClass))
-	C.gtk_window_set_wmclass(v.native(), (*C.gchar)(cName), (*C.gchar)(cClass))
 }
 
 // GetDecorated is a wrapper around gtk_window_get_decorated().
@@ -382,7 +372,7 @@ func (v *Window) GetIcon() (*gdk.Pixbuf, error) {
 		return nil, nilPtrErr
 	}
 
-	p := &gdk.Pixbuf{wrapObject(unsafe.Pointer(c))}
+	p := &gdk.Pixbuf{glib.Take(unsafe.Pointer(c))}
 	return p, nil
 }
 
@@ -434,7 +424,7 @@ func (v *Window) GetTransientFor() (*Window, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapWindow(wrapObject(unsafe.Pointer(c))), nil
+	return wrapWindow(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // GetAttachedTo is a wrapper around gtk_window_get_attached_to().
@@ -443,7 +433,13 @@ func (v *Window) GetAttachedTo() (*Widget, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapWidget(wrapObject(unsafe.Pointer(c))), nil
+	return wrapWidget(glib.Take(unsafe.Pointer(c))), nil
+}
+
+// GetTypeHint is a wrapper around gtk_window_get_type_hint().
+func (v *Window) GetTypeHint() gdk.WindowTypeHint {
+	c := C.gtk_window_get_type_hint(v.native())
+	return gdk.WindowTypeHint(c)
 }
 
 // GetSkipTaskbarHint is a wrapper around gtk_window_get_skip_taskbar_hint().
@@ -490,11 +486,6 @@ func (v *Window) Move(x, y int) {
 // Resize is a wrapper around gtk_window_resize().
 func (v *Window) Resize(width, height int) {
 	C.gtk_window_resize(v.native(), C.gint(width), C.gint(height))
-}
-
-// ResizeToGeometry is a wrapper around gtk_window_resize_to_geometry().
-func (v *Window) ResizeToGeometry(width, height int) {
-	C.gtk_window_resize_to_geometry(v.native(), C.gint(width), C.gint(height))
 }
 
 // WindowSetDefaultIconFromFile is a wrapper around gtk_window_set_default_icon_from_file().
@@ -577,7 +568,7 @@ func (v *Window) GetApplication() (*Application, error) {
 		return nil, nilPtrErr
 	}
 
-	return wrapApplication(wrapObject(unsafe.Pointer(c))), nil
+	return wrapApplication(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // SetApplication is a wrapper around gtk_window_set_application().
@@ -585,25 +576,50 @@ func (v *Window) SetApplication(a *Application) {
 	C.gtk_window_set_application(v.native(), a.native())
 }
 
-// TODO gtk_window_activate_key().
-// TODO gtk_window_add_mnemonic().
+// ActivateKey is a wrapper around gtk_window_activate_key().
+func (v *Window) ActivateKey(event *gdk.EventKey) bool {
+	c := C.gtk_window_activate_key(v.native(), (*C.GdkEventKey)(unsafe.Pointer(event.Native())))
+	return gobool(c)
+}
+
+// AddMnemonic is a wrapper around gtk_window_add_mnemonic().
+func (v *Window) AddMnemonic(keyval uint, target *Widget) {
+	C.gtk_window_add_mnemonic(v.native(), C.guint(keyval), target.native())
+}
+
+// RemoveMnemonic is a wrapper around gtk_window_remove_mnemonic().
+func (v *Window) RemoveMnemonic(keyval uint, target *Widget) {
+	C.gtk_window_remove_mnemonic(v.native(), C.guint(keyval), target.native())
+}
+
+// ActivateMnemonic is a wrapper around gtk_window_mnemonic_activate().
+func (v *Window) ActivateMnemonic(keyval uint, mods gdk.ModifierType) bool {
+	c := C.gtk_window_mnemonic_activate(v.native(), C.guint(keyval), C.GdkModifierType(mods))
+	return gobool(c)
+}
+
+// GetMnemonicModifier is a wrapper around gtk_window_get_mnemonic_modifier().
+func (v *Window) GetMnemonicModifier() gdk.ModifierType {
+	c := C.gtk_window_get_mnemonic_modifier(v.native())
+	return gdk.ModifierType(c)
+}
+
+// SetMnemonicModifier is a wrapper around gtk_window_set_mnemonic_modifier().
+func (v *Window) SetMnemonicModifier(mods gdk.ModifierType) {
+	C.gtk_window_set_mnemonic_modifier(v.native(), C.GdkModifierType(mods))
+}
+
 // TODO gtk_window_begin_move_drag().
 // TODO gtk_window_begin_resize_drag().
 // TODO gtk_window_get_default_icon_list().
 // TODO gtk_window_get_group().
 // TODO gtk_window_get_icon_list().
-// TODO gtk_window_get_mnemonic_modifier().
-// TODO gtk_window_get_type_hint().
 // TODO gtk_window_get_window_type().
 // TODO gtk_window_list_toplevels().
-// TODO gtk_window_mnemonic_activate().
 // TODO gtk_window_parse_geometry().
 // TODO gtk_window_propogate_key_event().
-// TODO gtk_window_remove_mnemonic().
 // TODO gtk_window_set_attached_to().
 // TODO gtk_window_set_default_icon_list().
 // TODO gtk_window_set_icon_list().
-// TODO gtk_window_set_mnemonic_modifier().
 // TODO gtk_window_set_screen().
-// TODO gtk_window_set_type_hint().
 // TODO gtk_window_get_resize_grip_area().

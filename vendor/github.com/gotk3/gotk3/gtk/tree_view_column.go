@@ -32,7 +32,7 @@ func (v *TreeViewColumn) native() *C.GtkTreeViewColumn {
 
 func marshalTreeViewColumn(p uintptr) (interface{}, error) {
 	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := wrapObject(unsafe.Pointer(c))
+	obj := glib.Take(unsafe.Pointer(c))
 	return wrapTreeViewColumn(obj), nil
 }
 
@@ -46,7 +46,7 @@ func TreeViewColumnNew() (*TreeViewColumn, error) {
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapTreeViewColumn(wrapObject(unsafe.Pointer(c))), nil
+	return wrapTreeViewColumn(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // TreeViewColumnNewWithAttribute() is a wrapper around
@@ -62,7 +62,7 @@ func TreeViewColumnNewWithAttribute(title string, renderer ICellRenderer, attrib
 	if c == nil {
 		return nil, nilPtrErr
 	}
-	return wrapTreeViewColumn(wrapObject(unsafe.Pointer(c))), nil
+	return wrapTreeViewColumn(glib.Take(unsafe.Pointer(c))), nil
 }
 
 // AddAttribute() is a wrapper around gtk_tree_view_column_add_attribute().
@@ -250,8 +250,25 @@ func (v *TreeViewColumn) GetXOffset() int {
 // GtkTreeViewColumn * 	gtk_tree_view_column_new_with_area ()
 // void 	gtk_tree_view_column_set_attributes ()
 // void 	gtk_tree_view_column_set_cell_data_func ()
+
+type TreeViewColumnSizing int
+
+const (
+	TREE_VIEW_COLUMN_GROW_ONLY int = C.GTK_TREE_VIEW_COLUMN_GROW_ONLY
+	TREE_VIEW_COLUMN_AUTOSIZE      = C.GTK_TREE_VIEW_COLUMN_AUTOSIZE
+	TREE_VIEW_COLUMN_FIXED         = C.GTK_TREE_VIEW_COLUMN_FIXED
+)
+
 // void 	gtk_tree_view_column_set_sizing ()
+func (v *TreeViewColumn) SetSizing(sizing TreeViewColumnSizing) {
+	C.gtk_tree_view_column_set_sizing(v.native(), C.GtkTreeViewColumnSizing(sizing))
+}
+
 // GtkTreeViewColumnSizing 	gtk_tree_view_column_get_sizing ()
+func (v *TreeViewColumn) GetSizing() TreeViewColumnSizing {
+	return TreeViewColumnSizing(C.gtk_tree_view_column_get_sizing(v.native()))
+}
+
 // void 	gtk_tree_view_column_set_widget ()
 // GtkWidget * 	gtk_tree_view_column_get_widget ()
 // GtkWidget * 	gtk_tree_view_column_get_button ()

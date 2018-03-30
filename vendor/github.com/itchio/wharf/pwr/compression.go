@@ -5,8 +5,9 @@ import (
 	"io"
 	"log"
 
-	"github.com/go-errors/errors"
+	"github.com/itchio/savior"
 	"github.com/itchio/wharf/wire"
+	"github.com/pkg/errors"
 )
 
 // A Compressor can compress a stream given a quality setting
@@ -16,7 +17,7 @@ type Compressor interface {
 
 // A Decompressor can decompress a stream with a given algorithm
 type Decompressor interface {
-	Apply(reader io.Reader) (io.Reader, error)
+	Apply(source savior.Source) (savior.Source, error)
 }
 
 var compressors map[CompressionAlgorithm]Compressor
@@ -52,7 +53,7 @@ func (cs *CompressionSettings) ToString() string {
 // so that any messages written through the returned WriteContext will first be compressed.
 func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wire.WriteContext, error) {
 	if compression == nil {
-		return nil, errors.Wrap(fmt.Errorf("no compression specified"), 1)
+		return nil, errors.WithStack(fmt.Errorf("no compression specified"))
 	}
 
 	if compression.Algorithm == CompressionAlgorithm_NONE {
@@ -61,12 +62,12 @@ func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wi
 
 	compressor := compressors[compression.Algorithm]
 	if compressor == nil {
-		return nil, errors.Wrap(fmt.Errorf("no compressor registered for %s", compression.Algorithm.String()), 1)
+		return nil, errors.WithStack(fmt.Errorf("no compressor registered for %s", compression.Algorithm.String()))
 	}
 
 	compressedWriter, err := compressor.Apply(ctx.Writer(), compression.Quality)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
 	return wire.NewWriteContext(compressedWriter), nil
@@ -76,22 +77,46 @@ func CompressWire(ctx *wire.WriteContext, compression *CompressionSettings) (*wi
 // so that any messages read through the returned ReadContext will first be decompressed.
 func DecompressWire(ctx *wire.ReadContext, compression *CompressionSettings) (*wire.ReadContext, error) {
 	if compression == nil {
-		return nil, errors.Wrap(fmt.Errorf("no compression specified"), 1)
+		return nil, errors.WithStack(fmt.Errorf("no compression specified"))
 	}
+
+	originalSource, ok := ctx.GetSource().(savior.SeekSource)
+	if !ok {
+		return nil, errors.WithStack(fmt.Errorf("can only DecompressWire when source is a savior.SeekSource"))
+	}
+
+	offset := originalSource.Tell()
+	size := originalSource.Size()
+	sectionSource, err := originalSource.Section(offset, size-offset)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	var finalSource savior.Source
 
 	if compression.Algorithm == CompressionAlgorithm_NONE {
-		return ctx, nil
+		finalSource = sectionSource
+	} else {
+		decompressor := decompressors[compression.Algorithm]
+		if decompressor == nil {
+			return nil, errors.WithStack(fmt.Errorf("no decompressor registered for %s", compression.Algorithm.String()))
+		}
+
+		var err error
+		finalSource, err = decompressor.Apply(sectionSource)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
-	decompressor := decompressors[compression.Algorithm]
-	if decompressor == nil {
-		return nil, errors.Wrap(fmt.Errorf("no compressor registered for %s", compression.Algorithm.String()), 1)
-	}
-
-	compressedReader, err := decompressor.Apply(ctx.Reader())
+	finalOffset, err := finalSource.Resume(nil)
 	if err != nil {
-		return nil, errors.Wrap(err, 1)
+		return nil, errors.WithStack(err)
 	}
 
-	return wire.NewReadContext(compressedReader), nil
+	if finalOffset != 0 {
+		return nil, errors.WithStack(fmt.Errorf("expected source to resume at 0, got %d", finalOffset))
+	}
+
+	return wire.NewReadContext(finalSource), nil
 }

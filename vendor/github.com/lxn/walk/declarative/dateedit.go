@@ -15,21 +15,16 @@ import (
 )
 
 type DateEdit struct {
-	AssignTo           **walk.DateEdit
-	Name               string
-	Enabled            Property
-	Visible            Property
-	Font               Font
-	ToolTipText        Property
-	MinSize            Size
-	MaxSize            Size
-	StretchFactor      int
-	Row                int
-	RowSpan            int
-	Column             int
-	ColumnSpan         int
-	AlwaysConsumeSpace bool
+	// Window
+
+	Background         Brush
 	ContextMenuItems   []MenuItem
+	Enabled            Property
+	Font               Font
+	MaxSize            Size
+	MinSize            Size
+	Name               string
+	OnBoundsChanged    walk.EventHandler
 	OnKeyDown          walk.KeyEventHandler
 	OnKeyPress         walk.KeyEventHandler
 	OnKeyUp            walk.KeyEventHandler
@@ -37,19 +32,38 @@ type DateEdit struct {
 	OnMouseMove        walk.MouseEventHandler
 	OnMouseUp          walk.MouseEventHandler
 	OnSizeChanged      walk.EventHandler
-	Format             string
-	NoneOption         bool
-	MinDate            time.Time
-	MaxDate            time.Time
-	Date               Property
-	OnDateChanged      walk.EventHandler
+	Persistent         bool
+	RightToLeftReading bool
+	ToolTipText        Property
+	Visible            Property
+
+	// Widget
+
+	AlwaysConsumeSpace bool
+	Column             int
+	ColumnSpan         int
+	GraphicsEffects    []walk.WidgetGraphicsEffect
+	Row                int
+	RowSpan            int
+	StretchFactor      int
+
+	// DateEdit
+
+	AssignTo      **walk.DateEdit
+	Date          Property
+	Format        string
+	MaxDate       time.Time
+	MinDate       time.Time
+	NoneOption    bool // Deprecated: use Optional instead
+	OnDateChanged walk.EventHandler
+	Optional      bool
 }
 
 func (de DateEdit) Create(builder *Builder) error {
 	var w *walk.DateEdit
 	var err error
 
-	if de.NoneOption {
+	if de.Optional || de.NoneOption {
 		w, err = walk.NewDateEditWithNoneOption(builder.Parent())
 	} else {
 		w, err = walk.NewDateEdit(builder.Parent())
@@ -77,8 +91,4 @@ func (de DateEdit) Create(builder *Builder) error {
 
 		return nil
 	})
-}
-
-func (w DateEdit) WidgetInfo() (name string, disabled, hidden bool, font *Font, toolTipText string, minSize, maxSize Size, stretchFactor, row, rowSpan, column, columnSpan int, alwaysConsumeSpace bool, contextMenuItems []MenuItem, OnKeyDown walk.KeyEventHandler, OnKeyPress walk.KeyEventHandler, OnKeyUp walk.KeyEventHandler, OnMouseDown walk.MouseEventHandler, OnMouseMove walk.MouseEventHandler, OnMouseUp walk.MouseEventHandler, OnSizeChanged walk.EventHandler) {
-	return w.Name, false, false, &w.Font, "", w.MinSize, w.MaxSize, w.StretchFactor, w.Row, w.RowSpan, w.Column, w.ColumnSpan, w.AlwaysConsumeSpace, w.ContextMenuItems, w.OnKeyDown, w.OnKeyPress, w.OnKeyUp, w.OnMouseDown, w.OnMouseMove, w.OnMouseUp, w.OnSizeChanged
 }

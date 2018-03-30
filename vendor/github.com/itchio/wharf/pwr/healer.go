@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-errors/errors"
-	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
 	"github.com/itchio/wharf/tlc"
 )
@@ -49,14 +47,9 @@ func NewHealer(spec string, target string) (Healer, error) {
 
 	switch healerType {
 	case "archive":
-		file, err := eos.Open(healerURL)
-		if err != nil {
-			return nil, errors.Wrap(err, 1)
-		}
-
 		ah := &ArchiveHealer{
-			File:   file,
-			Target: target,
+			ArchivePath: healerURL,
+			Target:      target,
 		}
 		return ah, nil
 	case "manifest":
