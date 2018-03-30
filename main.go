@@ -12,7 +12,6 @@ import (
 	"github.com/cloudfoundry-attic/jibber_jabber"
 	"github.com/itchio/itchSetup/localize"
 
-	"github.com/kardianos/osext"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -27,12 +26,12 @@ var (
 
 func must(err error) {
 	if err != nil {
-		log.Fatal("%+v", err)
+		log.Fatalf("%+v", err)
 	}
 }
 
 func detectAppName() {
-	execPath, err := osext.Executable()
+	execPath, err := os.Executable()
 	must(err)
 
 	ext := ""

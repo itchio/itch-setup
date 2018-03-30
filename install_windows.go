@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/itchio/itchSetup/setup"
-	"github.com/kardianos/osext"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -201,11 +200,14 @@ func SetupMain() {
 	showInstallGUI(installDir)
 }
 
+// TODO: return a struct damn it
 func pokeExecFolder() (foundMarker bool, execFolder string, appDirs []string, err error) {
-	execFolder, err = osext.ExecutableFolder()
+	execPath, err := os.Executable()
 	if err != nil {
 		return
 	}
+
+	execFolder = filepath.Dir(execPath)
 
 	var entries []os.FileInfo
 
@@ -282,7 +284,7 @@ func showInstallGUI(installDirIn string) {
 				return err
 			}
 
-			execPath, err := osext.Executable()
+			execPath, err := os.Executable()
 			if err != nil {
 				return err
 			}
