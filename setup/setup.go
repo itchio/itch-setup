@@ -2,24 +2,21 @@ package setup
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
-	"net/url"
+	"net/http"
 	"os"
 	"runtime"
-	"sync"
+	"strings"
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
-	itchio "github.com/itchio/go-itchio"
-	"github.com/itchio/go-itchio/itchfs"
 	"github.com/itchio/itchSetup/localize"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
+	loghttp "github.com/motemen/go-loghttp"
 )
-
-// ItchSetupAPIKey belongs to a custom-made, empty itch.io account
-const ItchSetupAPIKey = "sX3RL0lp73FZjmb19aEVcqHTuSbDuxT7id2QdZ93"
 
 type ErrorHandler func(message string)
 type ProgressLabelHandler func(label string)
@@ -48,28 +45,11 @@ type InstallSource struct {
 	Archive eos.File
 }
 
-var once sync.Once
-
-var gameIDMap = map[string]int64{
-	"itch":  107034,
-	"kitch": 108233,
-}
+const brothBaseURL = "https://broth.itch.ovh"
 
 func NewInstaller(settings InstallerSettings) *Installer {
-	once.Do(func() {
-		eos.RegisterHandler(&itchfs.ItchFS{
-			ItchServer: "https://itch.io",
-		})
-	})
-
-	gameID, ok := gameIDMap[settings.AppName]
-	if !ok {
-		panic(fmt.Sprintf("Unknown app: %s", settings.AppName))
-	}
-
 	i := &Installer{
 		settings:   settings,
-		gameID:     gameID,
 		sourceChan: make(chan InstallSource),
 	}
 	go func() {
@@ -83,60 +63,44 @@ func NewInstaller(settings InstallerSettings) *Installer {
 }
 
 func (i *Installer) warmUp() error {
-	c := itchio.ClientWithKey(ItchSetupAPIKey)
-	uploads, err := c.GameUploads(i.gameID)
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	if goos == "windows" {
+		// TODO: remove me when we ship the first amd64 build
+		goarch = "386"
+	}
+
+	channel := fmt.Sprintf("%s-%s", goos, goarch)
+
+	client := http.Client{
+		Transport: &loghttp.Transport{},
+	}
+
+	baseURL := fmt.Sprintf("%s/%s/%s", brothBaseURL, i.settings.AppName, channel)
+
+	latestURL := fmt.Sprintf("%s/LATEST", baseURL)
+	latestRes, err := client.Get(latestURL)
 	if err != nil {
-		return fmt.Errorf("While listing uploads: %s", err.Error())
+		return fmt.Errorf("While looking for latest version: %s", err.Error())
 	}
 
-	var channelName string
-	if runtime.GOOS == "windows" {
-		channelName = "windows-32"
-	} else if runtime.GOOS == "darwin" {
-		channelName = "mac-64"
-	} else {
-		if runtime.GOARCH == "386" {
-			channelName = "linux-32"
-		} else {
-			channelName = "linux-64"
-		}
+	versionBytes, err := ioutil.ReadAll(latestRes.Body)
+	if err != nil {
+		return fmt.Errorf("While reading latest version: %s", err.Error())
 	}
 
-	var upload *itchio.Upload
-	for _, candidate := range uploads.Uploads {
-		if candidate.ChannelName == channelName {
-			upload = candidate
-			break
-		}
-	}
+	version := strings.TrimSpace(string(versionBytes))
 
-	if upload == nil {
-		return fmt.Errorf("No %s version found", channelName)
-	}
+	log.Printf("Will install version %s\n", version)
 
-	if upload.Build == nil {
-		return fmt.Errorf("%s version has no build", channelName)
-	}
-
-	log.Printf("Will install v%s\n", upload.Build.UserVersion)
-
-	values := url.Values{}
-	values.Set("api_key", c.Key)
-	archiveURL := fmt.Sprintf("itchfs:///upload/%d/download/builds/%d/%s?%s",
-		upload.ID, upload.Build.ID, "archive", values.Encode())
-
-	version := upload.Build.UserVersion
 	envVersion := os.Getenv("ITCHSETUP_VERSION")
 	if envVersion != "" {
 		log.Printf("Version overriden by environment: %s", envVersion)
 		version = envVersion
 	}
 
-	envArchive := os.Getenv("ITCHSETUP_ARCHIVE_URL")
-	if envArchive != "" {
-		log.Printf("Archive overriden by environment: %s", envArchive)
-		archiveURL = envArchive
-	}
+	archiveURL := fmt.Sprintf("%s/%s/.zip", baseURL, version)
 
 	archive, err := eos.Open(archiveURL)
 	if err != nil {

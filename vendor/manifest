@@ -197,6 +197,23 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/motemen/go-loghttp",
+			"repository": "https://github.com/motemen/go-loghttp",
+			"vcs": "git",
+			"revision": "974ac5ceac271576caabe1c0bddf2b7eed471f67",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/motemen/go-nuts/roundtime",
+			"repository": "https://github.com/motemen/go-nuts",
+			"vcs": "git",
+			"revision": "42c35bdb11c20ff50bb14ef05750e8dcdfc75ea5",
+			"branch": "master",
+			"path": "/roundtime",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/oxtoacart/bpool",
 			"repository": "https://github.com/oxtoacart/bpool",
 			"vcs": "git",
