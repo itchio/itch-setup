@@ -573,7 +573,6 @@ func showError(errMsg string, parent walk.Form) {
 					ui.HSpacer{},
 					ui.PushButton{
 						Text:    localizer.T("prompt.action.ok"),
-						MaxSize: ui.Size{Width: 1},
 						OnClicked: func() {
 							dlg.Close(0)
 						},
