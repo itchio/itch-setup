@@ -74,7 +74,7 @@ if [ "$CI_OS" = "windows" -o "$CI_OS" = "linux" ]; then
   upx -1 $TARGET
 fi
 
-BINARIES=binaries/$CI_OS-$CI_ARCH
+BINARIES=broth/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
 cp -rf $TARGET $BINARIES/
 
