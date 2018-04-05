@@ -12,12 +12,12 @@ BEGIN
     BLOCK "080904E4"
     BEGIN
       VALUE "CompanyName", "itch corp."
-      VALUE "FileDescription", "Installer for the itch app"
+      VALUE "FileDescription", "Installer and self-update helper for the itch app"
       VALUE "FileVersion", "1.0"
-      VALUE "InternalName", "itchSetup"
+      VALUE "InternalName", "itch-setup"
       VALUE "LegalCopyright", "itch corp."
-      VALUE "OriginalFilename", "itchSetup.exe"
-      VALUE "ProductName", "itchSetup"
+      VALUE "OriginalFilename", "itch-setup.exe"
+      VALUE "ProductName", "itch-setup"
       VALUE "ProductVersion", "1.0"
     END
   END

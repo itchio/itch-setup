@@ -17,7 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/itchio/itchSetup/setup"
+	"github.com/itchio/itch-setup/setup"
 )
 
 func SetupMain() {

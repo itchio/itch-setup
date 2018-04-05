@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/itchio/itchSetup/setup"
+	"github.com/itchio/itch-setup/setup"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -462,7 +462,7 @@ func showInstallGUI(installDirIn string) {
 		log.Fatal(err)
 	}
 
-	// see itchSetup.rc
+	// see itch-setup.rc
 	ic, err := walk.NewIconFromResourceId(101)
 	if err != nil {
 		log.Println("Could not load icon, oh well")
@@ -572,7 +572,7 @@ func showError(errMsg string, parent walk.Form) {
 				Children: []ui.Widget{
 					ui.HSpacer{},
 					ui.PushButton{
-						Text:    localizer.T("prompt.action.ok"),
+						Text: localizer.T("prompt.action.ok"),
 						OnClicked: func() {
 							dlg.Close(0)
 						},

@@ -38,18 +38,18 @@ if [ "$CI_OS" = "windows" ]; then
   export CI_LDFLAGS="$CI_LDFLAGS -H windowsgui"
 fi
 
-TARGET=itchSetup
+TARGET=itch-setup
 if [ "$CI_OS" = "windows" ]; then
   TARGET=$TARGET.exe
 fi
 
-export PKG=github.com/itchio/itchSetup
+export PKG=github.com/itchio/itch-setup
 
 mkdir -p src/$PKG
 
 if [ "$CI_OS" = "windows" ]; then
-  $WINDRES -o itchSetup.syso itchSetup.rc
-  file itchSetup.syso
+  $WINDRES -o itch-setup.syso itch-setup.rc
+  file itch-setup.syso
 fi
 
 # rsync will complain about vanishing files sometimes, who knows where they come from

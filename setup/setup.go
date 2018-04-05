@@ -11,7 +11,7 @@ import (
 	"time"
 
 	humanize "github.com/dustin/go-humanize"
-	"github.com/itchio/itchSetup/localize"
+	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"

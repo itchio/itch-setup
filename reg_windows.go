@@ -40,7 +40,7 @@ func CreateUninstallRegistryEntry(installDir string, appName string, version str
 	}
 	defer k.Close()
 
-	uninstallCmd := fmt.Sprintf("\"%s\" --uninstall", filepath.Join(installDir, "itchSetup.exe"))
+	uninstallCmd := fmt.Sprintf("\"%s\" --uninstall", filepath.Join(installDir, "itch-setup.exe"))
 
 	strings := []StringValue{
 		{Key: "DisplayName", Value: appName},

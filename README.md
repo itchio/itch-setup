@@ -1,4 +1,4 @@
-# itchSetup
+# itch-setup
 
 This it the install and self-update helper for [the itch.io app][app]
 
@@ -12,5 +12,5 @@ uploader and patcher.
 
 ### License
 
-itchSetup is MIT-licensed, see LICENSE for details
+itch-setup is MIT-licensed, see LICENSE for details
 

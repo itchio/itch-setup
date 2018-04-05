@@ -1,6 +1,7 @@
 
 stages:
   - build
+  - deploy
 
 build:linux:386:
   stage: build
@@ -50,3 +51,9 @@ build:darwin:amd64:
     paths:
       - binaries
 
+deploy:
+  stage: deploy
+  tags:
+    - dropsy
+  script:
+    - scripts/ci-deploy.sh

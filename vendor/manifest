@@ -152,7 +152,7 @@
 			"importpath": "github.com/itchio/httpkit",
 			"repository": "https://github.com/itchio/httpkit",
 			"vcs": "git",
-			"revision": "7c17a3276a5727772c1c5b0899d01dbda95b2063",
+			"revision": "46789c967853619d80c9887b4a378e6e3a446b97",
 			"branch": "master",
 			"notests": true
 		},
@@ -160,7 +160,7 @@
 			"importpath": "github.com/itchio/wharf",
 			"repository": "https://github.com/itchio/wharf",
 			"vcs": "git",
-			"revision": "6ff5a506015e512afef01a772d29bacd2ac067cc",
+			"revision": "53f208a29ebc424be3afc58839bbcfa3dd2e6ec8",
 			"branch": "master",
 			"notests": true
 		},

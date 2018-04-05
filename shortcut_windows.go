@@ -33,7 +33,7 @@ func CreateShortcut(settings ShortcutSettings) error {
 		settings.IconLocation,
 		settings.WorkingDirectory)
 
-	tmpDir, err := ioutil.TempDir("", "itchSetupShortcut")
+	tmpDir, err := ioutil.TempDir("", "itch-setup-shortcut")
 	if err != nil {
 		return err
 	}

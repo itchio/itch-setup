@@ -12,7 +12,7 @@ import (
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
-	"github.com/itchio/itchSetup/setup"
+	"github.com/itchio/itch-setup/setup"
 )
 
 func SetupMain() {
@@ -38,7 +38,7 @@ func SetupMain() {
 	}
 	win.Add(box)
 
-	tmpDir, err := ioutil.TempDir("", "itchSetupImages")
+	tmpDir, err := ioutil.TempDir("", "itch-setup-images")
 	if err != nil {
 		log.Fatal("Couldn't grab temp dir:", err)
 	}

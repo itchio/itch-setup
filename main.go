@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry-attic/jibber_jabber"
-	"github.com/itchio/itchSetup/localize"
+	"github.com/itchio/itch-setup/localize"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -21,7 +21,7 @@ var (
 	commit        = ""     // set by command-line on CI release builds
 	versionString = ""     // formatted on boot from 'version' and 'builtAt'
 	appName       = "itch" // autodetected from executable name
-	app           = kingpin.New("itchSetup", "The itch installer and self-updater")
+	app           = kingpin.New("itch-setup", "The itch installer and self-updater")
 )
 
 func must(err error) {
@@ -38,7 +38,7 @@ func detectAppName() {
 	if runtime.GOOS == "windows" {
 		ext = ".exe"
 	}
-	kitchBinary := fmt.Sprintf("kitchSetup%s", ext)
+	kitchBinary := fmt.Sprintf("kitch-setup%s", ext)
 
 	if filepath.Base(execPath) == kitchBinary {
 		appName = "kitch"
@@ -46,7 +46,7 @@ func detectAppName() {
 
 	log.Println(appName, "setup starting up...")
 
-	app.Name = fmt.Sprintf("%sSetup", appName)
+	app.Name = fmt.Sprintf("%s-setup", appName)
 }
 
 const DefaultLocale = "en-US"
