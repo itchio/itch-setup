@@ -29,7 +29,10 @@ var (
 var cli cl.CLI
 
 func init() {
-	app.Flag("--prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cli.PreferLaunch)
+	app.Flag("prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cli.PreferLaunch)
+	app.Flag("uninstall", "Uninstall the itch app").BoolVar(&cli.Uninstall)
+	app.Flag("relaunch", "Relaunch a new version of the itch app").BoolVar(&cli.Relaunch)
+	app.Flag("relaunch-pid", "PID to wait for before relaunching").IntVar(&cli.RelaunchPID)
 }
 
 func must(err error) {

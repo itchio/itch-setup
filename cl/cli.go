@@ -8,6 +8,10 @@ type CLI struct {
 	AppName       string
 	VersionString string
 
+	Localizer *localize.Localizer
+
 	PreferLaunch bool
-	Localizer    *localize.Localizer
+	Uninstall    bool
+	Relaunch     bool
+	RelaunchPID  int
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/itchio/itch-setup/bindata"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -55,7 +56,7 @@ func CreateUninstallRegistryEntry(installDir string, appName string, version str
 
 	func() {
 		iconPath := filepath.Join(installDir, "app.ico")
-		icoBytes, err := dataItchIcoBytes()
+		icoBytes, err := bindata.Asset("data/itch.ico")
 		if err != nil {
 			log.Printf("itch ico not found :()")
 			return
@@ -97,7 +98,7 @@ func CreateUninstallRegistryEntry(installDir string, appName string, version str
 	return nil
 }
 
-func RemoveUninstallerRegistryKey(appname string) error {
+func RemoveUninstallerRegistryKey(appName string) error {
 	pk, _, err := registry.CreateKey(registry.CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", registry.WRITE)
 	if err != nil {
 		return err

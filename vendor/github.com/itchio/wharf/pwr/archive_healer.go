@@ -1,11 +1,15 @@
 package pwr
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync/atomic"
+
+	"github.com/itchio/wharf/ctxcopy"
+	"github.com/itchio/wharf/werrors"
 
 	"github.com/itchio/arkive/zip"
 
@@ -53,7 +57,10 @@ var _ Healer = (*ArchiveHealer)(nil)
 type chunkHealedFunc func(chunkHealed int64)
 
 // Do starts receiving from the wounds channel and healing
-func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error {
+func (ah *ArchiveHealer) Do(parentCtx context.Context, container *tlc.Container, wounds chan *Wound) error {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	ah.container = container
 
 	files := make(map[int64]bool)
@@ -70,7 +77,6 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	targetPool := fspool.New(container, ah.Target)
 
 	errs := make(chan error, ah.NumWorkers)
-	cancelled := make(chan struct{})
 
 	onChunkHealed := func(healedChunk int64) {
 		atomic.AddInt64(&ah.totalHealed, healedChunk)
@@ -79,7 +85,7 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 
 	for i := 0; i < ah.NumWorkers; i++ {
 		go func() {
-			errs <- ah.heal(container, targetPool, fileIndices, cancelled, onChunkHealed)
+			errs <- ah.heal(ctx, container, targetPool, fileIndices, onChunkHealed)
 		}()
 	}
 
@@ -161,10 +167,15 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	}
 
 	for wound := range wounds {
+		select {
+		case <-ctx.Done():
+			return werrors.ErrCancelled
+		default:
+			// keep going!
+		}
+
 		err := processWound(wound)
 		if err != nil {
-			close(fileIndices)
-			close(cancelled)
 			return errors.WithStack(err)
 		}
 	}
@@ -184,15 +195,15 @@ func (ah *ArchiveHealer) Do(container *tlc.Container, wounds chan *Wound) error 
 	return nil
 }
 
-func (ah *ArchiveHealer) heal(container *tlc.Container, targetPool wsync.WritablePool,
-	fileIndices chan int64, cancelled chan struct{}, chunkHealed chunkHealedFunc) error {
+func (ah *ArchiveHealer) heal(ctx context.Context, container *tlc.Container, targetPool wsync.WritablePool,
+	fileIndices chan int64, chunkHealed chunkHealedFunc) error {
 
 	var sourcePool wsync.Pool
 	var err error
 
 	for {
 		select {
-		case <-cancelled:
+		case <-ctx.Done():
 			// something else stopped the healing
 			return nil
 		case fileIndex, ok := <-fileIndices:
@@ -230,7 +241,7 @@ func (ah *ArchiveHealer) heal(container *tlc.Container, targetPool wsync.Writabl
 				defer sourcePool.Close()
 			}
 
-			err = ah.healOne(sourcePool, targetPool, fileIndex, chunkHealed)
+			err = ah.healOne(ctx, sourcePool, targetPool, fileIndex, chunkHealed)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -238,10 +249,15 @@ func (ah *ArchiveHealer) heal(container *tlc.Container, targetPool wsync.Writabl
 	}
 }
 
-func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.WritablePool, fileIndex int64, chunkHealed chunkHealedFunc) error {
+func (ah *ArchiveHealer) healOne(ctx context.Context, sourcePool wsync.Pool, targetPool wsync.WritablePool, fileIndex int64, chunkHealed chunkHealedFunc) error {
 	if ah.lockMap != nil {
 		lock := ah.lockMap[fileIndex]
-		<-lock
+		select {
+		case <-lock:
+			// keep going
+		case <-ctx.Done():
+			return werrors.ErrCancelled
+		}
 	}
 
 	var err error
@@ -262,6 +278,7 @@ func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.Writabl
 	if err != nil {
 		return err
 	}
+	defer writer.Close()
 
 	lastCount := int64(0)
 	cw := counter.NewWriterCallback(func(count int64) {
@@ -270,12 +287,7 @@ func (ah *ArchiveHealer) healOne(sourcePool wsync.Pool, targetPool wsync.Writabl
 		lastCount = count
 	}, writer)
 
-	_, err = io.Copy(cw, reader)
-	if err != nil {
-		return err
-	}
-
-	err = writer.Close()
+	_, err = ctxcopy.Do(ctx, cw, reader)
 	if err != nil {
 		return err
 	}

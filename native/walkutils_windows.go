@@ -1,4 +1,4 @@
-package main
+package native
 
 import (
 	"io/ioutil"
@@ -6,6 +6,7 @@ import (
 	"os"
 	"unsafe"
 
+	"github.com/itchio/itch-setup/bindata"
 	"github.com/lxn/walk"
 	"github.com/lxn/win"
 )
@@ -50,7 +51,7 @@ func centerWindow(mw *walk.FormBase) {
 
 func setInstallerImage(imageView *walk.ImageView) {
 	// thanks, go-bindata!
-	data, err := dataInstallerPngBytes()
+	data, err := bindata.Asset("data/installer.png")
 	if err != nil {
 		log.Printf("Installer image not found :()")
 		return

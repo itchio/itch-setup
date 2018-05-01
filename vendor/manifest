@@ -143,7 +143,7 @@
 			"importpath": "github.com/itchio/arkive/zip",
 			"repository": "https://github.com/itchio/arkive",
 			"vcs": "git",
-			"revision": "6b2a30e5a4b832a1e7f0692b2f17654688478917",
+			"revision": "34b5b620da94c21a8dfaa51e225a01a0620aa9a7",
 			"branch": "master",
 			"path": "/zip",
 			"notests": true
@@ -152,7 +152,7 @@
 			"importpath": "github.com/itchio/httpkit",
 			"repository": "https://github.com/itchio/httpkit",
 			"vcs": "git",
-			"revision": "46789c967853619d80c9887b4a378e6e3a446b97",
+			"revision": "90d559a20a306937f4710972f0dccdaf24f6fc6a",
 			"branch": "master",
 			"notests": true
 		},
@@ -160,7 +160,7 @@
 			"importpath": "github.com/itchio/wharf",
 			"repository": "https://github.com/itchio/wharf",
 			"vcs": "git",
-			"revision": "53f208a29ebc424be3afc58839bbcfa3dd2e6ec8",
+			"revision": "53561ed309eb51af694673986c5bf0fa4b8a1ba8",
 			"branch": "master",
 			"notests": true
 		},

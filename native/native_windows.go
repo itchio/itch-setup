@@ -14,17 +14,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 	ps "github.com/mitchellh/go-ps"
-)
-
-var (
-	uninstall   = app.Flag("uninstall", "Uninstall the itch app").Bool()
-	relaunch    = app.Flag("relaunch", "Relaunch a new version of the itch app").Bool()
-	relaunchPID = app.Flag("relaunchPid", "PID to wait for before relaunching").Int()
 )
 
 func getUserDirectory(csidl win.CSIDL) (string, error) {
@@ -39,24 +34,24 @@ func getUserDirectory(csidl win.CSIDL) (string, error) {
 
 var localPath, roamingPath, desktopPath string
 
-func SetupMain() {
+func Do(cli cl.CLI) {
 	var err error
 
 	localPath, err = getUserDirectory(win.CSIDL_LOCAL_APPDATA)
 	if err != nil {
-		showError(err.Error(), nil)
+		showError(cli, err.Error(), nil)
 		os.Exit(1)
 	}
 
 	roamingPath, err = getUserDirectory(win.CSIDL_APPDATA)
 	if err != nil {
-		showError(err.Error(), nil)
+		showError(cli, err.Error(), nil)
 		os.Exit(1)
 	}
 
 	desktopPath, err = getUserDirectory(win.CSIDL_DESKTOP)
 	if err != nil {
-		showError(err.Error(), nil)
+		showError(cli, err.Error(), nil)
 		os.Exit(1)
 	}
 
@@ -64,17 +59,17 @@ func SetupMain() {
 	log.Println("AppData roam' path: ", roamingPath)
 	log.Println("Desktop path:       ", desktopPath)
 
-	foundMarker, execFolder, appDirs, err := pokeExecFolder()
+	foundMarker, execFolder, appDirs, err := pokeExecFolder(cli)
 
 	if foundMarker {
 		log.Println("Found marker")
 
-		if *uninstall == true {
+		if cli.Uninstall {
 			log.Println("Uninstalling app")
 
 			pathsToKill := []string{}
 			for _, appDir := range appDirs {
-				pathsToKill = append(pathsToKill, filepath.Join(appDir, exeName()))
+				pathsToKill = append(pathsToKill, filepath.Join(appDir, exeName(cli)))
 			}
 
 			pidsToKill := []int{}
@@ -125,7 +120,7 @@ func SetupMain() {
 			}
 
 			log.Println("Removing marker")
-			err = os.Remove(filepath.Join(execFolder, markerName()))
+			err = os.Remove(filepath.Join(execFolder, markerName(cli)))
 			if err != nil {
 				log.Println("While removing marker", err.Error())
 			}
@@ -137,7 +132,7 @@ func SetupMain() {
 			}
 
 			log.Println("Removing shortcut...")
-			err = os.Remove(shortcutPath())
+			err = os.Remove(shortcutPath(cli))
 			if err != nil {
 				log.Println("While removing full shortcut", err.Error())
 				log.Println("(Note: shortcut errors aren't critical)")
@@ -159,7 +154,7 @@ func SetupMain() {
 			}
 
 			log.Println("Removing uninstaller entry...")
-			err = RemoveUninstallerRegistryKey(appName)
+			err = RemoveUninstallerRegistryKey(cli.AppName)
 			if err != nil {
 				log.Println("While removing uninstaller entry", err.Error())
 				log.Println("(Note: these aren't critical)")
@@ -167,41 +162,41 @@ func SetupMain() {
 			return
 		}
 
-		if *relaunch {
-			proc, err := os.FindProcess(*relaunchPID)
+		if cli.Relaunch {
+			proc, err := os.FindProcess(cli.RelaunchPID)
 			if err != nil {
-				showError(fmt.Sprintf("Could not find %s app process: %s", appName, err.Error()), nil)
+				showError(cli, fmt.Sprintf("Could not find %s app process: %s", cli.AppName, err.Error()), nil)
 			}
 
 			state, err := proc.Wait()
 			if err != nil {
-				showError(fmt.Sprintf("Could not wait on %s app: %s", appName, err.Error()), nil)
+				showError(cli, fmt.Sprintf("Could not wait on %s app: %s", cli.AppName, err.Error()), nil)
 			}
 
 			log.Printf("Wait result: success = %v", state.Success())
 
-			tryLaunch(appDirs)
+			tryLaunch(cli, appDirs)
 			return
 		}
 
 		{
-			tryLaunch(appDirs)
+			tryLaunch(cli, appDirs)
 			return
 		}
 	}
 
-	if *uninstall {
+	if cli.Uninstall {
 		log.Printf("Asked to uninstall but couldn't find marker, just quitting")
 		os.Exit(0)
 	}
 
 	log.Println("Showing install GUI")
-	installDir := filepath.Join(localPath, appName)
-	showInstallGUI(installDir)
+	installDir := filepath.Join(localPath, cli.AppName)
+	showInstallGUI(cli, installDir)
 }
 
 // TODO: return a struct damn it
-func pokeExecFolder() (foundMarker bool, execFolder string, appDirs []string, err error) {
+func pokeExecFolder(cli cl.CLI) (foundMarker bool, execFolder string, appDirs []string, err error) {
 	execPath, err := os.Executable()
 	if err != nil {
 		return
@@ -218,7 +213,7 @@ func pokeExecFolder() (foundMarker bool, execFolder string, appDirs []string, er
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			if entry.Name() == markerName() {
+			if entry.Name() == markerName(cli) {
 				foundMarker = true
 			}
 			continue
@@ -240,18 +235,18 @@ func pokeExecFolder() (foundMarker bool, execFolder string, appDirs []string, er
 	return
 }
 
-func tryLaunch(appDirs []string) {
+func tryLaunch(cli cl.CLI, appDirs []string) {
 	log.Println("Launching app")
 
 	log.Printf("Sorted app dirs:\n%s", strings.Join(appDirs, "\n"))
 
 	if len(appDirs) > 0 {
 		first := appDirs[0]
-		cmd := exec.Command(filepath.Join(first, exeName()))
+		cmd := exec.Command(filepath.Join(first, exeName(cli)))
 
 		err := cmd.Start()
 		if err != nil {
-			showError(fmt.Sprintf("Encountered a problem while launching %s: %s", appName, err.Error()), nil)
+			showError(cli, fmt.Sprintf("Encountered a problem while launching %s: %s", cli.AppName, err.Error()), nil)
 		}
 
 		log.Printf("App launched, getting out of the way")
@@ -259,7 +254,7 @@ func tryLaunch(appDirs []string) {
 	}
 }
 
-func showInstallGUI(installDirIn string) {
+func showInstallGUI(cli cl.CLI, installDirIn string) {
 	var installer *setup.Installer
 
 	var ni *walk.NotifyIcon
@@ -290,7 +285,7 @@ func showInstallGUI(installDirIn string) {
 
 			// copy ourselves in install directory
 			copyErr := func() error {
-				installedExecPath := filepath.Join(installDir, setupName())
+				installedExecPath := filepath.Join(installDir, setupName(cli))
 				execWriter, err := os.Create(installedExecPath)
 				if err != nil {
 					log.Println("Couldn't open target for writing, maybe already running from install location?")
@@ -320,14 +315,14 @@ func showInstallGUI(installDirIn string) {
 			return nil
 		}()
 		if kickErr != nil {
-			showError(kickErr.Error(), mw)
+			showError(cli, kickErr.Error(), mw)
 		}
 	}
 
 	pickInstallLocation := func() {
 		dlg := new(walk.FileDialog)
 
-		dlg.Title = localizer.T("setup.tooltip.location")
+		dlg.Title = cli.Localizer.T("setup.tooltip.location")
 		dlg.FilePath = installDir
 
 		if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
@@ -351,7 +346,7 @@ func showInstallGUI(installDirIn string) {
 		Height: windowHeight,
 	}
 
-	baseTitle := localizer.T("setup.window.title", map[string]string{"app_name": appName})
+	baseTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
 
 	err := ui.MainWindow{
 		Title:   baseTitle,
@@ -379,7 +374,7 @@ func showInstallGUI(installDirIn string) {
 				Children: []ui.Widget{
 					ui.VSpacer{},
 					ui.Label{
-						Text: localizer.T("setup.window.welcome", map[string]string{"app_name": appName}),
+						Text: cli.Localizer.T("setup.window.welcome", map[string]string{"app_name": cli.AppName}),
 					},
 					ui.VSpacer{},
 					ui.Composite{
@@ -391,13 +386,13 @@ func showInstallGUI(installDirIn string) {
 								AssignTo:    &installDirLabel,
 								Text:        installDir,
 								ReadOnly:    true,
-								ToolTipText: localizer.T("setup.tooltip.location"),
+								ToolTipText: cli.Localizer.T("setup.tooltip.location"),
 								OnMouseUp: func(x, y int, button walk.MouseButton) {
 									pickInstallLocation()
 								},
 							},
 							ui.PushButton{
-								Text: localizer.T("setup.action.install"),
+								Text: cli.Localizer.T("setup.action.install"),
 								OnClicked: func() {
 									progressComposite.SetVisible(true)
 									optionsComposite.SetVisible(false)
@@ -428,7 +423,7 @@ func showInstallGUI(installDirIn string) {
 					},
 					ui.VSpacer{Size: 10},
 					ui.Label{
-						Text:     localizer.T("setup.status.preparing"),
+						Text:     cli.Localizer.T("setup.status.preparing"),
 						AssignTo: &progressLabel,
 					},
 					ui.VSpacer{},
@@ -474,10 +469,10 @@ func showInstallGUI(installDirIn string) {
 	setInstallerImage(imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
-		Localizer: localizer,
-		AppName:   appName,
-		OnError: func(message string) {
-			go showError(message, mw)
+		Localizer: cli.Localizer,
+		AppName:   cli.AppName,
+		OnError: func(err error) {
+			go showError(cli, fmt.Sprintf("%v", err), mw)
 		},
 		OnProgressLabel: func(label string) {
 			progressLabel.SetText(label)
@@ -490,30 +485,30 @@ func showInstallGUI(installDirIn string) {
 			sourceChan <- sourceIn
 			source = sourceIn
 		},
-		OnFinish: func() {
-			markerPath := filepath.Join(installDir, markerName())
+		OnFinish: func(source setup.InstallSource) {
+			markerPath := filepath.Join(installDir, markerName(cli))
 			markerWriter, err := os.Create(markerPath)
 			if err != nil {
 				log.Println("While creating marker", err)
-				showError(err.Error(), mw)
+				showError(cli, err.Error(), mw)
 				os.Exit(1)
 			}
 			err = markerWriter.Close()
 			if err != nil {
 				log.Println("While closing marker", err)
-				showError(err.Error(), mw)
+				showError(cli, err.Error(), mw)
 				os.Exit(1)
 			}
 
 			// this creates $installDir/app.ico
-			err = CreateUninstallRegistryEntry(installDir, appName, source.Version)
+			err = CreateUninstallRegistryEntry(installDir, cli.AppName, source.Version)
 			if err != nil {
 				log.Printf("While creating registry entry: %s", err.Error())
 			}
 
 			err = CreateShortcut(ShortcutSettings{
-				ShortcutFilePath: shortcutPath(),
-				TargetPath:       filepath.Join(installDir, setupName()),
+				ShortcutFilePath: shortcutPath(cli),
+				TargetPath:       filepath.Join(installDir, setupName(cli)),
 				Description:      "The best way to play your itch.io games",
 				IconLocation:     filepath.Join(installDir, "app.ico"),
 				WorkingDirectory: filepath.Join(installDir),
@@ -521,17 +516,17 @@ func showInstallGUI(installDirIn string) {
 
 			if err != nil {
 				log.Println("While creating shortcut", err)
-				showError(err.Error(), mw)
+				showError(cli, err.Error(), mw)
 				os.Exit(1)
 			}
 
-			ni.ShowInfo(appName, fmt.Sprintf("The installation went well, %s is now starting up!", appName))
+			ni.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
 
-			exePath := filepath.Join(versionInstallDir, exeName())
+			exePath := filepath.Join(versionInstallDir, exeName(cli))
 			cmd := exec.Command(exePath)
 			err = cmd.Start()
 			if err != nil {
-				showError(err.Error(), mw)
+				showError(cli, err.Error(), mw)
 			}
 
 			time.Sleep(2 * time.Second)
@@ -544,11 +539,11 @@ func showInstallGUI(installDirIn string) {
 	mw.Run()
 }
 
-func showError(errMsg string, parent walk.Form) {
+func showError(cli cl.CLI, errMsg string, parent walk.Form) {
 	var dlg *walk.Dialog
 
 	res, err := ui.Dialog{
-		Title:    localizer.T("setup.error_dialog.title"),
+		Title:    cli.Localizer.T("setup.error_dialog.title"),
 		MinSize:  ui.Size{Width: 350},
 		Layout:   ui.VBox{},
 		AssignTo: &dlg,
@@ -572,7 +567,7 @@ func showError(errMsg string, parent walk.Form) {
 				Children: []ui.Widget{
 					ui.HSpacer{},
 					ui.PushButton{
-						Text: localizer.T("prompt.action.ok"),
+						Text: cli.Localizer.T("prompt.action.ok"),
 						OnClicked: func() {
 							dlg.Close(0)
 						},
@@ -593,18 +588,18 @@ func showError(errMsg string, parent walk.Form) {
 	os.Exit(0)
 }
 
-func shortcutPath() string {
-	return filepath.Join(desktopPath, fmt.Sprintf("%s.lnk", appName))
+func shortcutPath(cli cl.CLI) string {
+	return filepath.Join(desktopPath, fmt.Sprintf("%s.lnk", cli.AppName))
 }
 
-func markerName() string {
-	return fmt.Sprintf(".%s-marker", appName)
+func markerName(cli cl.CLI) string {
+	return fmt.Sprintf(".%s-marker", cli.AppName)
 }
 
-func exeName() string {
-	return fmt.Sprintf("%s.exe", appName)
+func exeName(cli cl.CLI) string {
+	return fmt.Sprintf("%s.exe", cli.AppName)
 }
 
-func setupName() string {
-	return fmt.Sprintf("%sSetup.exe", appName)
+func setupName(cli cl.CLI) string {
+	return fmt.Sprintf("%sSetup.exe", cli.AppName)
 }

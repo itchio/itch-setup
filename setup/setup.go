@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -141,6 +142,7 @@ func (i *Installer) Install(installDir string) {
 }
 
 func (i *Installer) doInstall(installDir string, installSource InstallSource) error {
+	ctx := context.Background()
 	localizer := i.settings.Localizer
 
 	i.settings.OnProgressLabel(localizer.T("setup.status.preparing"))
@@ -161,7 +163,7 @@ func (i *Installer) doInstall(installDir string, installSource InstallSource) er
 		return errors.WithMessage(err, "while opening signature file")
 	}
 
-	sigInfo, err := pwr.ReadSignature(sigSource)
+	sigInfo, err := pwr.ReadSignature(ctx, sigSource)
 	if err != nil {
 		return errors.WithMessage(err, "while parsing signature file")
 	}
@@ -198,7 +200,7 @@ func (i *Installer) doInstall(installDir string, installSource InstallSource) er
 		Consumer: consumer,
 		HealPath: healPath,
 	}
-	err = vc.Validate(installDir, sigInfo)
+	err = vc.Validate(ctx, installDir, sigInfo)
 	if err != nil {
 		return errors.WithMessage(err, "while installing")
 	}

@@ -29,3 +29,4 @@ Windows:
 	windres -o itch-setup.syso itch-setup.rc
 	go get -v -x -ldflags="-H windowsgui"
 	upx ${UPX_LEVEL} ${GOBIN}/itch-setup.exe
+	cp -f ${GOBIN}/itch-setup.exe ${GOBIN}/kitch-setup.exe
