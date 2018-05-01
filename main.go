@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/cloudfoundry-attic/jibber_jabber"
+	"github.com/itchio/itch-setup/bindata"
+	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/localize"
+	"github.com/itchio/itch-setup/native"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -20,16 +23,13 @@ var (
 	builtAt       = ""     // set by command-line on CI release builds
 	commit        = ""     // set by command-line on CI release builds
 	versionString = ""     // formatted on boot from 'version' and 'builtAt'
-	appName       = "itch" // autodetected from executable name
 	app           = kingpin.New("itch-setup", "The itch installer and self-updater")
 )
 
-var cliParams = struct {
-	preferLaunch bool
-}{}
+var cli cl.CLI
 
 func init() {
-	app.Flag("--prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cliParams.preferLaunch)
+	app.Flag("--prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cli.PreferLaunch)
 }
 
 func must(err error) {
@@ -49,12 +49,12 @@ func detectAppName() {
 	kitchBinary := fmt.Sprintf("kitch-setup%s", ext)
 
 	if filepath.Base(execPath) == kitchBinary {
-		appName = "kitch"
+		cli.AppName = "kitch"
 	}
 
-	log.Println(appName, "setup starting up...")
+	log.Println(cli.AppName, "setup starting up...")
 
-	app.Name = fmt.Sprintf("%s-setup", appName)
+	app.Name = fmt.Sprintf("%s-setup", cli.AppName)
 }
 
 const DefaultLocale = "en-US"
@@ -78,6 +78,8 @@ func main() {
 	app.VersionFlag.Short('V')
 	app.Author("Amos Wenger <amos@itch.io>")
 
+	cli.VersionString = versionString
+
 	_, err := app.Parse(os.Args[1:])
 	must(err)
 
@@ -89,7 +91,7 @@ func main() {
 
 	log.Println("Locale: ", userLocale)
 
-	localizer, err = localize.NewLocalizer(Asset)
+	localizer, err = localize.NewLocalizer(bindata.Asset)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -103,6 +105,7 @@ func main() {
 	if err == nil {
 		localizer.SetLang(userLocale)
 	}
+	cli.Localizer = localizer
 
-	SetupMain()
+	native.Do(cli)
 }

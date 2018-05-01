@@ -39,7 +39,7 @@
 // data/locales/zh.json
 // DO NOT EDIT!
 
-package main
+package bindata
 
 import (
 	"bytes"
@@ -119,7 +119,7 @@ func dataInstallerPng() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/installer.png", size: 8618, mode: os.FileMode(438), modTime: time.Unix(1482434551, 0)}
+	info := bindataFileInfo{name: "data/installer.png", size: 8618, mode: os.FileMode(436), modTime: time.Unix(1482324628, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -139,7 +139,7 @@ func dataItchIconPng() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/itch-icon.png", size: 8874, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/itch-icon.png", size: 8874, mode: os.FileMode(436), modTime: time.Unix(1482944443, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -159,7 +159,7 @@ func dataItchIco() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/itch.ico", size: 12003, mode: os.FileMode(438), modTime: time.Unix(1482434551, 0)}
+	info := bindataFileInfo{name: "data/itch.ico", size: 12003, mode: os.FileMode(436), modTime: time.Unix(1482360771, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -179,7 +179,7 @@ func dataLocales_englitchJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/_englitch.json", size: 14388, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/_englitch.json", size: 14388, mode: os.FileMode(436), modTime: time.Unix(1482942950, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -199,7 +199,7 @@ func dataLocalesArJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/ar.json", size: 11053, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/ar.json", size: 11053, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -219,7 +219,7 @@ func dataLocalesBgJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/bg.json", size: 35201, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/bg.json", size: 35201, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -239,7 +239,7 @@ func dataLocalesCaJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/ca.json", size: 7410, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/ca.json", size: 7410, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -259,7 +259,7 @@ func dataLocalesCsJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/cs.json", size: 25640, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/cs.json", size: 25640, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -279,7 +279,7 @@ func dataLocalesCyJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/cy.json", size: 4380, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/cy.json", size: 4380, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -299,7 +299,7 @@ func dataLocalesDaJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/da.json", size: 18846, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/da.json", size: 18846, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -319,7 +319,7 @@ func dataLocalesDeJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/de.json", size: 26816, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/de.json", size: 26816, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -339,7 +339,7 @@ func dataLocalesElJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/el.json", size: 11895, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/el.json", size: 11895, mode: os.FileMode(436), modTime: time.Unix(1482942946, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -359,7 +359,7 @@ func dataLocalesEnJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/en.json", size: 24041, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/en.json", size: 24041, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -379,7 +379,7 @@ func dataLocalesEoJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/eo.json", size: 19258, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/eo.json", size: 19258, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -399,7 +399,7 @@ func dataLocalesEsJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/es.json", size: 26273, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/es.json", size: 26273, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -419,7 +419,7 @@ func dataLocalesFaJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/fa.json", size: 1319, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/fa.json", size: 1319, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -439,7 +439,7 @@ func dataLocalesFiJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/fi.json", size: 8216, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/fi.json", size: 8216, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -459,7 +459,7 @@ func dataLocalesFrJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/fr.json", size: 28712, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/fr.json", size: 28712, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -479,7 +479,7 @@ func dataLocalesHeJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/he.json", size: 7458, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/he.json", size: 7458, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -499,7 +499,7 @@ func dataLocalesHuJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/hu.json", size: 6379, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/hu.json", size: 6379, mode: os.FileMode(436), modTime: time.Unix(1482942947, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -519,7 +519,7 @@ func dataLocalesInJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/in.json", size: 25209, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/in.json", size: 25209, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -539,7 +539,7 @@ func dataLocalesItJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/it.json", size: 24303, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/it.json", size: 24303, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -559,7 +559,7 @@ func dataLocalesJaJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/ja.json", size: 27112, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/ja.json", size: 27112, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -579,7 +579,7 @@ func dataLocalesKoJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/ko.json", size: 3939, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/ko.json", size: 3939, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -599,7 +599,7 @@ func dataLocalesNbJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/nb.json", size: 22735, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/nb.json", size: 22735, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -619,7 +619,7 @@ func dataLocalesNlJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/nl.json", size: 14283, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/nl.json", size: 14283, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -639,7 +639,7 @@ func dataLocalesPlJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/pl.json", size: 19038, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/pl.json", size: 19038, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -659,7 +659,7 @@ func dataLocalesPt_brJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/pt_BR.json", size: 22407, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/pt_BR.json", size: 22407, mode: os.FileMode(436), modTime: time.Unix(1482942948, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -679,7 +679,7 @@ func dataLocalesPt_ptJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/pt_PT.json", size: 10177, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/pt_PT.json", size: 10177, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -699,7 +699,7 @@ func dataLocalesRoJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/ro.json", size: 21336, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/ro.json", size: 21336, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -719,7 +719,7 @@ func dataLocalesRuJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/ru.json", size: 35017, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/ru.json", size: 35017, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -739,7 +739,7 @@ func dataLocalesSkJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/sk.json", size: 2825, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/sk.json", size: 2825, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -759,7 +759,7 @@ func dataLocalesSrJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/sr.json", size: 28202, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/sr.json", size: 28202, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -779,7 +779,7 @@ func dataLocalesSvJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/sv.json", size: 25336, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/sv.json", size: 25336, mode: os.FileMode(436), modTime: time.Unix(1482942950, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -799,7 +799,7 @@ func dataLocalesTrJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/tr.json", size: 22439, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/tr.json", size: 22439, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -819,7 +819,7 @@ func dataLocalesUkJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/uk.json", size: 5795, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/uk.json", size: 5795, mode: os.FileMode(436), modTime: time.Unix(1482942949, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -839,7 +839,7 @@ func dataLocalesZhJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "data/locales/zh.json", size: 23366, mode: os.FileMode(438), modTime: time.Unix(1522944392, 0)}
+	info := bindataFileInfo{name: "data/locales/zh.json", size: 23366, mode: os.FileMode(436), modTime: time.Unix(1482942950, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }

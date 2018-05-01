@@ -1,4 +1,4 @@
-package main
+package native
 
 import (
 	"bytes"
@@ -8,38 +8,39 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"io/ioutil"
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/itchio/itch-setup/bindata"
+	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 )
 
 var parentWin *gtk.Window
 
-func SetupMain() {
+func Do(cli cl.CLI) {
 	var err error
 
 	gtk.Init(nil)
 
 	// Linux policy: we default to `~/.itch` and `~/.kitch`
 	// If you want it to point elsewhere, that's what symlinks are for!
-	baseDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", appName))
+	baseDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", cli.AppName))
 
 	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
-		AppName: appName,
+		AppName: cli.AppName,
 		BaseDir: baseDir,
 	})
 	if err != nil {
-		showError("Internal error: %+v", err)
+		showError(cli, "Internal error: %+v", err)
 	}
 
-	if cliParams.preferLaunch {
+	if cli.PreferLaunch {
 		log.Printf("Launch preferred, looking for a valid app dir...")
 		if appDir, ok := mv.GetValidAppDir(); ok {
-			tryLaunch(appDir)
+			tryLaunch(cli, appDir)
 			return
 		}
 	}
@@ -55,7 +56,7 @@ func SetupMain() {
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
 	}
-	win.SetTitle(localizer.T("setup.window.title", map[string]string{"app_name": appName}))
+	win.SetTitle(cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName}))
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
@@ -80,7 +81,7 @@ func SetupMain() {
 	defer os.RemoveAll(tmpDir)
 
 	loadBundledImage := func(path string) string {
-		imageBytes, err := Asset(path)
+		imageBytes, err := bindata.Asset(path)
 		if err != nil {
 			log.Fatal("Couldn't load image:", err)
 		}
@@ -138,12 +139,11 @@ func SetupMain() {
 	win.ShowAll()
 	parentWin = win
 
-	versionInstallDir := ""
 	sourceChan := make(chan setup.InstallSource, 1)
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
-		Localizer: localizer,
-		AppName:   appName,
+		Localizer: cli.Localizer,
+		AppName:   cli.AppName,
 		OnProgress: func(progress float64) {
 			glib.IdleAdd(func() {
 				pb.SetFraction(progress)
@@ -156,24 +156,16 @@ func SetupMain() {
 		},
 		OnError: func(err error) {
 			glib.IdleAdd(func() {
-				showError("Warm-up error: %+v", err)
+				showError(cli, "Warm-up error: %+v", err)
 			})
 		},
 		OnSource: func(source setup.InstallSource) {
 			sourceChan <- source
 		},
-		OnFinish: func() {
-			itchPath := filepath.Join(versionInstallDir, exeName())
-			cmd := exec.Command(itchPath)
-			err := cmd.Start()
-			if err != nil {
-				glib.IdleAdd(func() {
-					l.SetText(err.Error())
-				})
-			}
-
-			time.Sleep(2 * time.Second)
-			gtk.MainQuit()
+		OnFinish: func(source setup.InstallSource) {
+			glib.IdleAdd(func() {
+				tryLaunch(cli, mv.GetAppDir(source.Version))
+			})
 		},
 	})
 
@@ -186,7 +178,7 @@ func SetupMain() {
 		}()
 		if kickErr != nil {
 			glib.IdleAdd(func() {
-				showError("Install error: %+v", kickErr)
+				showError(cli, "Install error: %+v", kickErr)
 			})
 		}
 	}
@@ -200,32 +192,36 @@ func SetupMain() {
 
 //
 
-func tryLaunch(validAppDir string) {
+func tryLaunch(cli cl.CLI, validAppDir string) {
 	log.Println("Launching app")
 
-	log.Printf("Via app dir: ", validAppDir)
-	exePath := filepath.Join(validAppDir, exeName())
+	log.Printf("Via app dir: %s", validAppDir)
+	exePath := filepath.Join(validAppDir, exeName(cli))
 
 	cmd := exec.Command(exePath)
 
 	err := cmd.Start()
 	if err != nil {
-		showError("Encountered a problem while launching %s: %s", appName, err.Error())
+		showError(cli, "Encountered a problem while launching %s: %+v", cli.AppName, err.Error())
 	}
 
 	log.Printf("App launched, getting out of the way")
 	os.Exit(0)
 }
 
-func showError(format string, a ...interface{}) {
+func exeName(cli cl.CLI) string {
+	return cli.AppName
+}
+
+func showError(cli cl.CLI, format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	log.Printf("Fatal error: %s", msg)
 
 	dialog := gtk.MessageDialogNewWithMarkup(parentWin, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "")
 	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, `<b>%s</b>`, localizer.T("setup.error_dialog.title"))
+	fmt.Fprintf(buf, `<b>%s</b>`, cli.Localizer.T("setup.error_dialog.title"))
 	buf.WriteString("\n\n")
-	fmt.Fprintf(buf, `<i>%s-setup, %s</i>`, appName, versionString)
+	fmt.Fprintf(buf, `<i>%s-setup, %s</i>`, cli.AppName, cli.VersionString)
 	buf.WriteString("\n\n")
 	buf.WriteString(`<a href='https://github.com/itchio/itch/issues'>Open issue tracker</a>`)
 	buf.WriteString("\n\n")
@@ -242,8 +238,4 @@ func showError(format string, a ...interface{}) {
 
 	gtk.Main()
 	os.Exit(1)
-}
-
-func exeName() string {
-	return appName
 }

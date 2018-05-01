@@ -1,0 +1,3 @@
+#!/bin/bash
+
+go-bindata -pkg bindata -o bindata/bindata.go data/...

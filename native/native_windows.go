@@ -1,4 +1,4 @@
-package main
+package native
 
 import (
 	"errors"

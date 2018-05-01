@@ -29,7 +29,7 @@ import (
 type ErrorHandler func(err error)
 type ProgressLabelHandler func(label string)
 type ProgressHandler func(progress float64)
-type FinishHandler func()
+type FinishHandler func(source InstallSource)
 type SourceHandler func(source InstallSource)
 
 type InstallerSettings struct {
@@ -130,21 +130,21 @@ func (i *Installer) getVersion() (string, error) {
 
 func (i *Installer) Install(installDir string) {
 	go func() {
-		err := i.doInstall(installDir)
+		installSource := <-i.sourceChan
+		err := i.doInstall(installDir, installSource)
 		if err != nil {
 			i.settings.OnError(err)
 		} else {
-			i.settings.OnFinish()
+			i.settings.OnFinish(installSource)
 		}
 	}()
 }
 
-func (i *Installer) doInstall(installDir string) error {
+func (i *Installer) doInstall(installDir string, installSource InstallSource) error {
 	localizer := i.settings.Localizer
 
 	i.settings.OnProgressLabel(localizer.T("setup.status.preparing"))
 
-	installSource := <-i.sourceChan
 	version := installSource.Version
 
 	signatureURL := fmt.Sprintf("%s/%s/signature", i.brothPackageURL(), version)
