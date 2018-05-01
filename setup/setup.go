@@ -4,21 +4,29 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/itchio/wharf/eos/option"
+
+	"github.com/itchio/savior/seeksource"
+
+	"github.com/itchio/httpkit/timeout"
+	"github.com/itchio/wharf/pwr"
+	"github.com/pkg/errors"
+
 	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/itch-setup/localize"
-	"github.com/itchio/wharf/archiver"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
-	loghttp "github.com/motemen/go-loghttp"
+
+	_ "github.com/itchio/wharf/decompressors/cbrotli"
+	_ "github.com/itchio/wharf/decompressors/zstd"
 )
 
-type ErrorHandler func(message string)
+type ErrorHandler func(err error)
 type ProgressLabelHandler func(label string)
 type ProgressHandler func(progress float64)
 type FinishHandler func()
@@ -36,80 +44,58 @@ type InstallerSettings struct {
 
 type Installer struct {
 	settings   InstallerSettings
-	gameID     int64
 	sourceChan chan InstallSource
+
+	channelName string
+	consumer    *state.Consumer
 }
 
 type InstallSource struct {
 	Version string
-	Archive eos.File
 }
 
 const brothBaseURL = "https://broth.itch.ovh"
 
 func NewInstaller(settings InstallerSettings) *Installer {
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	channelName := fmt.Sprintf("%s-%s", goos, goarch)
+
 	i := &Installer{
-		settings:   settings,
-		sourceChan: make(chan InstallSource),
+		settings:    settings,
+		sourceChan:  make(chan InstallSource),
+		channelName: channelName,
+		consumer: &state.Consumer{
+			OnMessage: func(lvl string, msg string) {
+				log.Printf("[%s] %s", lvl, msg)
+			},
+		},
 	}
+
 	go func() {
 		err := i.warmUp()
 		if err != nil {
 			log.Printf("Install error: %s", err.Error())
-			settings.OnError(err.Error())
+			settings.OnError(err)
 		}
 	}()
 	return i
 }
 
+func (i *Installer) brothPackageURL() string {
+	return fmt.Sprintf("%s/%s/%s", brothBaseURL, i.settings.AppName, i.channelName)
+}
+
 func (i *Installer) warmUp() error {
-	goos := runtime.GOOS
-	goarch := runtime.GOARCH
-
-	if goos == "windows" {
-		// TODO: remove me when we ship the first amd64 build
-		goarch = "386"
-	}
-
-	channel := fmt.Sprintf("%s-%s", goos, goarch)
-
-	client := http.Client{
-		Transport: &loghttp.Transport{},
-	}
-
-	baseURL := fmt.Sprintf("%s/%s/%s", brothBaseURL, i.settings.AppName, channel)
-
-	latestURL := fmt.Sprintf("%s/LATEST", baseURL)
-	latestRes, err := client.Get(latestURL)
+	version, err := i.getVersion()
 	if err != nil {
-		return fmt.Errorf("While looking for latest version: %s", err.Error())
+		return errors.WithMessage(err, "while getting latest version")
 	}
-
-	versionBytes, err := ioutil.ReadAll(latestRes.Body)
-	if err != nil {
-		return fmt.Errorf("While reading latest version: %s", err.Error())
-	}
-
-	version := strings.TrimSpace(string(versionBytes))
 
 	log.Printf("Will install version %s\n", version)
 
-	envVersion := os.Getenv("ITCHSETUP_VERSION")
-	if envVersion != "" {
-		log.Printf("Version overriden by environment: %s", envVersion)
-		version = envVersion
-	}
-
-	archiveURL := fmt.Sprintf("%s/%s/.zip", baseURL, version)
-
-	archive, err := eos.Open(archiveURL)
-	if err != nil {
-		return fmt.Errorf("While starting download: %s", err.Error())
-	}
-
 	source := InstallSource{
 		Version: version,
-		Archive: archive,
 	}
 	if i.settings.OnSource != nil {
 		i.settings.OnSource(source)
@@ -118,11 +104,35 @@ func (i *Installer) warmUp() error {
 	return nil
 }
 
+func (i *Installer) getVersion() (string, error) {
+	envVersion := os.Getenv("ITCHSETUP_VERSION")
+	if envVersion != "" {
+		log.Printf("Version overriden by environment: %s", envVersion)
+		return envVersion, nil
+	}
+
+	client := timeout.NewDefaultClient()
+
+	latestURL := fmt.Sprintf("%s/LATEST", i.brothPackageURL())
+	latestRes, err := client.Get(latestURL)
+	if err != nil {
+		return "", errors.WithMessage(err, "looking for latest version")
+	}
+
+	versionBytes, err := ioutil.ReadAll(latestRes.Body)
+	if err != nil {
+		return "", errors.WithMessage(err, "reading latest version")
+	}
+
+	version := strings.TrimSpace(string(versionBytes))
+	return version, nil
+}
+
 func (i *Installer) Install(installDir string) {
 	go func() {
 		err := i.doInstall(installDir)
 		if err != nil {
-			i.settings.OnError(err.Error())
+			i.settings.OnError(err)
 		} else {
 			i.settings.OnFinish()
 		}
@@ -135,20 +145,36 @@ func (i *Installer) doInstall(installDir string) error {
 	i.settings.OnProgressLabel(localizer.T("setup.status.preparing"))
 
 	installSource := <-i.sourceChan
-	archive := installSource.Archive
+	version := installSource.Version
 
-	stats, err := archive.Stat()
+	signatureURL := fmt.Sprintf("%s/%s/signature", i.brothPackageURL(), version)
+	archiveURL := fmt.Sprintf("%s/%s/archive", i.brothPackageURL(), version)
+
+	sigFile, err := eos.Open(signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "while opening signature file")
 	}
 
-	var uncompressedSize int64
+	sigSource := seeksource.FromFile(sigFile)
+	_, err = sigSource.Resume(nil)
+	if err != nil {
+		return errors.WithMessage(err, "while opening signature file")
+	}
+
+	sigInfo, err := pwr.ReadSignature(sigSource)
+	if err != nil {
+		return errors.WithMessage(err, "while parsing signature file")
+	}
+
+	container := sigInfo.Container
+	log.Printf("To install: %s", container.Stats())
+
 	startTime := time.Now()
 
 	consumer := &state.Consumer{
 		OnProgress: func(progress float64) {
 			percent := int(progress * 100.0)
-			doneSize := int64(float64(uncompressedSize) * progress)
+			doneSize := int64(float64(container.Size) * progress)
 			secsSinceStart := time.Since(startTime).Seconds()
 			donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
 
@@ -164,17 +190,17 @@ func (i *Installer) doInstall(installDir string) error {
 		},
 	}
 
-	log.Printf("Installing to %s\n", installDir)
+	log.Printf("Installing to %s", installDir)
 
-	xSettings := archiver.ExtractSettings{
+	healPath := fmt.Sprintf("archive,%s", archiveURL)
+
+	vc := pwr.ValidatorContext{
 		Consumer: consumer,
-		OnUncompressedSizeKnown: func(size int64) {
-			uncompressedSize = size
-		},
+		HealPath: healPath,
 	}
-	_, err = archiver.ExtractZip(archive, stats.Size(), installDir, xSettings)
+	err = vc.Validate(installDir, sigInfo)
 	if err != nil {
-		return fmt.Errorf("Error while installing: %s", err.Error())
+		return errors.WithMessage(err, "while installing")
 	}
 
 	i.settings.OnProgressLabel(localizer.T("setup.status.done"))

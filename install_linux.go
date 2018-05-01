@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strings"
 	"time"
 
 	"io/ioutil"
@@ -17,23 +17,34 @@ import (
 	"github.com/itchio/itch-setup/setup"
 )
 
-var installDir string
+var parentWin *gtk.Window
 
 func SetupMain() {
-	installDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", appName))
-
-	ids, err := assessInstallDirState(installDir)
-	if err != nil {
-		showError(fmt.Sprintf("%+v", err))
-	}
-
-	if ids.FoundMarker && len(ids.AppDirs) > 0 {
-		log.Printf("Has marker and at least one app dir, trying to launch!")
-		tryLaunch(ids)
-		return
-	}
+	var err error
 
 	gtk.Init(nil)
+
+	// Linux policy: we default to `~/.itch` and `~/.kitch`
+	// If you want it to point elsewhere, that's what symlinks are for!
+	baseDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", appName))
+
+	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
+		AppName: appName,
+		BaseDir: baseDir,
+	})
+	if err != nil {
+		showError("Internal error: %+v", err)
+	}
+
+	if cliParams.preferLaunch {
+		log.Printf("Launch preferred, looking for a valid app dir...")
+		if appDir, ok := mv.GetValidAppDir(); ok {
+			tryLaunch(appDir)
+			return
+		}
+	}
+
+	log.Printf("Initializing installer GUI...")
 
 	imageWidth := 622
 	imageHeight := 301
@@ -54,6 +65,8 @@ func SetupMain() {
 		log.Fatal("Unable to create box:", err)
 	}
 	win.Add(box)
+
+	log.Printf("Loading image resources...")
 
 	tmpDir, err := ioutil.TempDir("", "itch-setup-images")
 	if err != nil {
@@ -91,6 +104,8 @@ func SetupMain() {
 
 	win.SetIconFromFile(loadBundledImage("data/itch-icon.png"))
 
+	log.Printf("Setting up progress bar...")
+
 	pb, err := gtk.ProgressBarNew()
 	if err != nil {
 		log.Fatal("Unable to create progress bar:", err)
@@ -105,13 +120,23 @@ func SetupMain() {
 	}
 	box.Add(l)
 
+	vh, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
+	if err != nil {
+		log.Fatal("Unable to create box:", err)
+	}
+	box.Add(vh)
+
+	log.Printf("Positioning and showing window...")
+
 	// Set the default window size.
 	win.SetDefaultSize(imageWidth, imageHeight+260)
+	win.SetResizable(false)
 
 	win.SetPosition(gtk.WIN_POS_CENTER)
 
 	// Recursively show all widgets contained in this window.
 	win.ShowAll()
+	parentWin = win
 
 	versionInstallDir := ""
 	sourceChan := make(chan setup.InstallSource, 1)
@@ -129,9 +154,9 @@ func SetupMain() {
 				l.SetText(label)
 			})
 		},
-		OnError: func(message string) {
+		OnError: func(err error) {
 			glib.IdleAdd(func() {
-				l.SetText(message)
+				showError("Warm-up error: %+v", err)
 			})
 		},
 		OnSource: func(source setup.InstallSource) {
@@ -154,20 +179,15 @@ func SetupMain() {
 
 	kickoffInstall := func() {
 		kickErr := func() error {
-			err := os.MkdirAll(installDir, 0755)
-			if err != nil {
-				return err
-			}
-
 			source := <-sourceChan
-
-			versionInstallDir = filepath.Join(installDir, fmt.Sprintf("app-%s", source.Version))
-			installer.Install(versionInstallDir)
+			installer.Install(mv.GetAppDir(source.Version))
 
 			return nil
 		}()
 		if kickErr != nil {
-			showError(kickErr.Error())
+			glib.IdleAdd(func() {
+				showError("Install error: %+v", kickErr)
+			})
 		}
 	}
 
@@ -180,81 +200,50 @@ func SetupMain() {
 
 //
 
-type InstallDirState struct {
-	InstallDir    string
-	FoundMarker   bool
-	AppDirs       []string
-	CurrentAppDir string
-}
-
-func assessInstallDirState(installDir string) (*InstallDirState, error) {
-	res := &InstallDirState{
-		InstallDir: installDir,
-	}
-
-	entries, err := ioutil.ReadDir(installDir)
-	if err != nil {
-		log.Printf("Empty (%s), that's ok", installDir)
-		return res, nil
-	}
-
-	log.Printf("Looking through %d entries in %s", len(entries), installDir)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			if entry.Name() == markerName() {
-				log.Printf("Found marker...")
-				res.FoundMarker = true
-			}
-			continue
-		}
-
-		if !strings.HasPrefix(entry.Name(), "app-") {
-			continue
-		}
-
-		log.Printf("Found app dir %s", entry.Name())
-		res.AppDirs = append(res.AppDirs, entry.Name())
-	}
-
-	if len(res.AppDirs) == 0 {
-		log.Printf("No app dirs in sight, it's install time!")
-		return res, nil
-	}
-
-	log.Printf("Found %d app dirs, sorting them...", len(res.AppDirs))
-	sort.Strings(res.AppDirs)
-
-	// make all paths absolute
-	for i := range res.AppDirs {
-		res.AppDirs[i] = filepath.Join(installDir, res.AppDirs[i])
-	}
-	res.CurrentAppDir = res.AppDirs[len(res.AppDirs)-1]
-
-	return res, nil
-}
-func markerName() string {
-	return fmt.Sprintf(".%s-marker", appName)
-}
-
-func exeName() string {
-	return fmt.Sprintf("%s", appName)
-}
-
-func tryLaunch(ids *InstallDirState) {
+func tryLaunch(validAppDir string) {
 	log.Println("Launching app")
 
-	log.Printf("Current app dir: ", ids.CurrentAppDir)
-	cmd := exec.Command(filepath.Join(ids.CurrentAppDir, exeName()))
+	log.Printf("Via app dir: ", validAppDir)
+	exePath := filepath.Join(validAppDir, exeName())
+
+	cmd := exec.Command(exePath)
 
 	err := cmd.Start()
 	if err != nil {
-		showError(fmt.Sprintf("Encountered a problem while launching %s: %s", appName, err.Error()))
+		showError("Encountered a problem while launching %s: %s", appName, err.Error())
 	}
 
 	log.Printf("App launched, getting out of the way")
 	os.Exit(0)
 }
 
-func showError(msg string) {
-	log.Fatal(msg)
+func showError(format string, a ...interface{}) {
+	msg := fmt.Sprintf(format, a...)
+	log.Printf("Fatal error: %s", msg)
+
+	dialog := gtk.MessageDialogNewWithMarkup(parentWin, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "")
+	buf := new(bytes.Buffer)
+	fmt.Fprintf(buf, `<b>%s</b>`, localizer.T("setup.error_dialog.title"))
+	buf.WriteString("\n\n")
+	fmt.Fprintf(buf, `<i>%s-setup, %s</i>`, appName, versionString)
+	buf.WriteString("\n\n")
+	buf.WriteString(`<a href='https://github.com/itchio/itch/issues'>Open issue tracker</a>`)
+	buf.WriteString("\n\n")
+	xml.EscapeText(buf, []byte(msg))
+
+	dialog.SetMarkup(buf.String())
+	dialog.Connect("destroy", func() {
+		gtk.MainQuit()
+	})
+	dialog.Connect("response", func() {
+		gtk.MainQuit()
+	})
+	dialog.ShowAll()
+
+	gtk.Main()
+	os.Exit(1)
+}
+
+func exeName() string {
+	return appName
 }

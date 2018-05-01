@@ -9,6 +9,16 @@ uploader and patcher.
 [app]: https://itch.io/app
 [butler]: https://itch.io/docs/butler
 
+### What does it look like?
+
+Something like this:
+
+![](https://user-images.githubusercontent.com/7998310/39475360-428bd3ce-4d58-11e8-9e9d-720b8e7d31aa.png)
+
+This is a screen you should only see the first time you launch the itch.io app,
+or if your itch install gets corrupted on disk somehow.
+
+Any upgrades happen seamlessly in the background.
 
 ### License
 

@@ -24,6 +24,14 @@ var (
 	app           = kingpin.New("itch-setup", "The itch installer and self-updater")
 )
 
+var cliParams = struct {
+	preferLaunch bool
+}{}
+
+func init() {
+	app.Flag("--prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cliParams.preferLaunch)
+}
+
 func must(err error) {
 	if err != nil {
 		log.Fatalf("%+v", err)
