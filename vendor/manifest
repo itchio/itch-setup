@@ -168,7 +168,7 @@
 			"importpath": "github.com/lxn/walk",
 			"repository": "https://github.com/lxn/walk",
 			"vcs": "git",
-			"revision": "3a419a3e75d50588a20963991569f4680e2b970d",
+			"revision": "7486ba05b2df44b7d0a7643879ba027e095d4649",
 			"branch": "master",
 			"notests": true
 		},
@@ -176,7 +176,7 @@
 			"importpath": "github.com/lxn/win",
 			"repository": "https://github.com/lxn/win",
 			"vcs": "git",
-			"revision": "d3b5b63dbde2ccbcad21970eb7080e90c2d631b3",
+			"revision": "7e1250ba2e7749fb9eb865da9ee93fb5a2fe73f1",
 			"branch": "master",
 			"notests": true
 		},

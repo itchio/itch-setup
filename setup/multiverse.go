@@ -18,6 +18,7 @@ type Multiverse interface {
 
 	GetValidAppDir() (string, bool)
 	GetAppDir(version string) string
+	ListAppDirs() []string
 }
 
 type multiverse struct {
@@ -52,6 +53,15 @@ func (m *multiverse) GetValidAppDir() (string, bool) {
 	absDir := filepath.Join(m.params.BaseDir, appDir)
 
 	return absDir, true
+}
+
+func (m *multiverse) ListAppDirs() []string {
+	var appDirs []string
+
+	for _, appDir := range m.appDirs {
+		appDirs = append(appDirs, filepath.Join(m.params.BaseDir, appDir))
+	}
+	return appDirs
 }
 
 func (m *multiverse) GetAppDir(version string) string {

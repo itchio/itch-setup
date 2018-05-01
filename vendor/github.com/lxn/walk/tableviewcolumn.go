@@ -422,11 +422,15 @@ func (tvc *TableViewColumn) sendMessage(msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	}
 
+	tvc.tv.hasFrozenColumn = tvc.tv.visibleFrozenColumnCount() > 0
+	tvc.tv.SetCheckBoxes(tvc.tv.CheckBoxes())
+	tvc.tv.applyImageList()
+
 	var hwnd win.HWND
 	if tvc.frozen {
-		hwnd = tvc.tv.hwndFrozen
+		hwnd = tvc.tv.hwndFrozenLV
 	} else {
-		hwnd = tvc.tv.hwndNormal
+		hwnd = tvc.tv.hwndNormalLV
 	}
 
 	return win.SendMessage(hwnd, msg, wp, lp)
