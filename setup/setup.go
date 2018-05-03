@@ -120,6 +120,10 @@ func (i *Installer) getVersion() (string, error) {
 		return "", errors.WithMessage(err, "looking for latest version")
 	}
 
+	if latestRes.StatusCode != 200 {
+		return "", errors.Errorf("got HTTP %d for %s", latestRes.StatusCode, latestURL)
+	}
+
 	versionBytes, err := ioutil.ReadAll(latestRes.Body)
 	if err != nil {
 		return "", errors.WithMessage(err, "reading latest version")

@@ -17,11 +17,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 )
 
-func SetupMain() {
-	setupTitle := localizer.T("setup.window.title", map[string]string{"app_name": appName})
+var cli cl.CLI
+
+func Do(cliArg cl.CLI) {
+	cli = cliArg
+	setupTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
 	C.StartApp(C.CString(setupTitle))
 }
 
@@ -29,7 +33,19 @@ func SetupMain() {
 func StartItchSetup() {
 	var installer *setup.Installer
 
-	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%sSetup", appName))
+	if cli.PreferLaunch {
+		log.Fatal("prefer launch passed, but don't know how to do that on macOS")
+	}
+
+	if cli.Uninstall {
+		log.Fatal("uninstall passed, but don't know how to do that on macOS")
+	}
+
+	if cli.Relaunch {
+		log.Fatal("relaunch passed, but don't know how to do that on macOS")
+	}
+
+	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-setup", cli.AppName))
 	if err != nil {
 		log.Fatal("Could not get temporary directory", err)
 	}
@@ -41,19 +57,19 @@ func StartItchSetup() {
 		log.Fatal("Could not create temporary directory", err)
 	}
 
-	bundleName := fmt.Sprintf("%s.app", appName)
+	bundleName := fmt.Sprintf("%s.app", cli.AppName)
 	installDir := filepath.Join(tmpDir, bundleName)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
-		Localizer: localizer,
-		AppName:   appName,
-		OnError: func(message string) {
-			C.SetLabel(C.CString(message))
+		Localizer: cli.Localizer,
+		AppName:   cli.AppName,
+		OnError: func(err error) {
+			C.SetLabel(C.CString(fmt.Sprintf("%+v", err)))
 		},
-		OnFinish: func() {
+		OnFinish: func(source setup.InstallSource) {
 			target := fmt.Sprintf("/Applications/%s", bundleName)
 
-			log.Printf("Validating new bundle...\n")
+			log.Printf("Validating bundle for %s...\n", source.Version)
 			errMsg := C.ValidateBundle(C.CString(installDir))
 			if errMsg != nil {
 				C.SetLabel(errMsg)

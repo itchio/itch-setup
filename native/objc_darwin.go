@@ -3,6 +3,6 @@ package native
 /*
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Cocoa -framework Security
-#include "native/native.m"
+#include "objc/objc.m"
 */
 import "C"
