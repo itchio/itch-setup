@@ -56,7 +56,7 @@ fi
 rsync -a --exclude 'src' . src/$PKG || echo "rsync complained (code $?)"
 
 # grab deps
-GOOS=$CI_OS GOARCH=$CI_ARCH go get -v -d -t $PKG
+GOOS=$CI_OS GOARCH=$CI_ARCH CGO_ENABLED=1 go get -v -d -t $PKG
 
 if [ "$CI_OS" = "linux" ]; then
   export GO_TAGS="-tags gtk_3_14"
@@ -71,9 +71,7 @@ go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS $PKG
 
 file $TARGET
 
-if [ "$CI_OS" = "windows" -o "$CI_OS" = "linux" ]; then
-  upx -1 $TARGET
-fi
+upx -1 $TARGET
 
 BINARIES=broth/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
