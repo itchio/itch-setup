@@ -64,6 +64,7 @@ fi
 
 export GOOS=$CI_OS
 export GOARCH=$CI_ARCH
+export CGO_ENABLED=1
 
 # compile
 go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS $PKG
