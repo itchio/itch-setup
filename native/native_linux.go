@@ -22,6 +22,7 @@ var parentWin *gtk.Window
 
 func Do(cli cl.CLI) {
 	var err error
+	var installDir string
 
 	gtk.Init(nil)
 
@@ -164,7 +165,7 @@ func Do(cli cl.CLI) {
 		},
 		OnFinish: func(source setup.InstallSource) {
 			glib.IdleAdd(func() {
-				tryLaunch(cli, mv.GetAppDir(source.Version))
+				tryLaunch(cli, installDir)
 			})
 		},
 	})
@@ -176,6 +177,9 @@ func Do(cli cl.CLI) {
 			if err != nil {
 				return err
 			}
+
+			installDir = appDir
+
 			installer.Install(appDir)
 
 			return nil
