@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -133,10 +134,10 @@ func (i *Installer) getVersion() (string, error) {
 	return version, nil
 }
 
-func (i *Installer) Install(installDir string) {
+func (i *Installer) Install(appDir string) {
 	go func() {
 		installSource := <-i.sourceChan
-		err := i.doInstall(installDir, installSource)
+		err := i.doInstall(appDir, installSource)
 		if err != nil {
 			i.settings.OnError(err)
 		} else {
@@ -145,7 +146,7 @@ func (i *Installer) Install(installDir string) {
 	}()
 }
 
-func (i *Installer) doInstall(installDir string, installSource InstallSource) error {
+func (i *Installer) doInstall(appDir string, installSource InstallSource) error {
 	ctx := context.Background()
 	localizer := i.settings.Localizer
 
@@ -158,10 +159,17 @@ func (i *Installer) doInstall(installDir string, installSource InstallSource) er
 
 	sigFile, err := eos.Open(signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {
-		return errors.WithMessage(err, "while opening signature file")
+		return errors.WithMessage(err, "while opening remote signature file")
+	}
+	defer sigFile.Close()
+
+	log.Printf("Downloading signature...")
+	sigBytes, err := ioutil.ReadAll(sigFile)
+	if err != nil {
+		return errors.WithMessage(err, "reading remote signature file")
 	}
 
-	sigSource := seeksource.FromFile(sigFile)
+	sigSource := seeksource.FromBytes(sigBytes)
 	_, err = sigSource.Resume(nil)
 	if err != nil {
 		return errors.WithMessage(err, "while opening signature file")
@@ -177,26 +185,25 @@ func (i *Installer) doInstall(installDir string, installSource InstallSource) er
 
 	startTime := time.Now()
 
-	consumer := &state.Consumer{
-		OnProgress: func(progress float64) {
-			percent := int(progress * 100.0)
-			doneSize := int64(float64(container.Size) * progress)
-			secsSinceStart := time.Since(startTime).Seconds()
-			donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
+	consumer := newConsumer()
+	consumer.OnProgress = func(progress float64) {
+		percent := int(progress * 100.0)
+		doneSize := int64(float64(container.Size) * progress)
+		secsSinceStart := time.Since(startTime).Seconds()
+		donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
 
-			percentStr := fmt.Sprintf("%d%%", percent)
-			speedStr := fmt.Sprintf("%s/s", humanize.IBytes(uint64(donePerSec)))
+		percentStr := fmt.Sprintf("%d%%", percent)
+		speedStr := fmt.Sprintf("%s/s", humanize.IBytes(uint64(donePerSec)))
 
-			progressLabel := fmt.Sprintf("%s - %s",
-				localizer.T("setup.status.progress", map[string]string{"percent": percentStr}),
-				localizer.T("setup.status.installing", map[string]string{"speed": speedStr}),
-			)
-			i.settings.OnProgressLabel(progressLabel)
-			i.settings.OnProgress(progress)
-		},
+		progressLabel := fmt.Sprintf("%s - %s",
+			localizer.T("setup.status.progress", map[string]string{"percent": percentStr}),
+			localizer.T("setup.status.installing", map[string]string{"speed": speedStr}),
+		)
+		i.settings.OnProgressLabel(progressLabel)
+		i.settings.OnProgress(progress)
 	}
 
-	log.Printf("Installing to %s", installDir)
+	log.Printf("Installing to %s", appDir)
 
 	healPath := fmt.Sprintf("archive,%s", archiveURL)
 
@@ -204,11 +211,33 @@ func (i *Installer) doInstall(installDir string, installSource InstallSource) er
 		Consumer: consumer,
 		HealPath: healPath,
 	}
-	err = vc.Validate(ctx, installDir, sigInfo)
+
+	log.Printf("Healing %s...", appDir)
+	err = vc.Validate(ctx, appDir, sigInfo)
 	if err != nil {
 		return errors.WithMessage(err, "while installing")
 	}
 
+	sigPath := localSignaturePath(appDir)
+	log.Printf("Writing signature to %s", sigPath)
+
+	err = ioutil.WriteFile(sigPath, sigBytes, os.FileMode(0644))
+	if err != nil {
+		return errors.WithMessage(err, "while writing local signature file")
+	}
+
 	i.settings.OnProgressLabel(localizer.T("setup.status.done"))
 	return nil
+}
+
+func localSignaturePath(appDir string) string {
+	return filepath.Join(appDir, "signature.pws")
+}
+
+func newConsumer() *state.Consumer {
+	return &state.Consumer{
+		OnMessage: func(lvl string, msg string) {
+			log.Printf("[%s] %s", lvl, msg)
+		},
+	}
 }
