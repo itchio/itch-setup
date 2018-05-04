@@ -34,37 +34,6 @@ func getUserDirectory(csidl win.CSIDL) (string, error) {
 
 var localPath, roamingPath, desktopPath, execFolder string
 
-func getDirs() error {
-	var err error
-
-	localPath, err = getUserDirectory(win.CSIDL_LOCAL_APPDATA)
-	if err != nil {
-		return err
-	}
-
-	roamingPath, err = getUserDirectory(win.CSIDL_APPDATA)
-	if err != nil {
-		return err
-	}
-
-	desktopPath, err = getUserDirectory(win.CSIDL_DESKTOP)
-	if err != nil {
-		return err
-	}
-
-	execPath, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	execFolder = filepath.Dir(execPath)
-
-	log.Println("AppData local path: ", localPath)
-	log.Println("AppData roam' path: ", roamingPath)
-	log.Println("Desktop path:       ", desktopPath)
-	return nil
-}
-
 func Do(cli cl.CLI) {
 	var err error
 
@@ -110,6 +79,37 @@ func Do(cli cl.CLI) {
 	log.Println("Showing install GUI")
 	installDir := filepath.Join(localPath, cli.AppName)
 	showInstallGUI(cli, installDir)
+}
+
+func getDirs() error {
+	var err error
+
+	localPath, err = getUserDirectory(win.CSIDL_LOCAL_APPDATA)
+	if err != nil {
+		return err
+	}
+
+	roamingPath, err = getUserDirectory(win.CSIDL_APPDATA)
+	if err != nil {
+		return err
+	}
+
+	desktopPath, err = getUserDirectory(win.CSIDL_DESKTOP)
+	if err != nil {
+		return err
+	}
+
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	execFolder = filepath.Dir(execPath)
+
+	log.Println("AppData local path: ", localPath)
+	log.Println("AppData roam' path: ", roamingPath)
+	log.Println("Desktop path:       ", desktopPath)
+	return nil
 }
 
 func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
