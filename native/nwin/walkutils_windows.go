@@ -1,4 +1,4 @@
-package native
+package nwin
 
 import (
 	"io/ioutil"
@@ -11,7 +11,7 @@ import (
 	"github.com/lxn/win"
 )
 
-func rectangleFromRECT(r win.RECT) walk.Rectangle {
+func RectangleFromRECT(r win.RECT) walk.Rectangle {
 	return walk.Rectangle{
 		X:      int(r.Left),
 		Y:      int(r.Top),
@@ -20,7 +20,7 @@ func rectangleFromRECT(r win.RECT) walk.Rectangle {
 	}
 }
 
-func loadImage(filePath string) walk.Image {
+func LoadImage(filePath string) walk.Image {
 	img, err := walk.NewImageFromFile(filePath)
 	if err != nil {
 		log.Printf("Couldn't load %s: %s\n", filePath, err.Error())
@@ -29,13 +29,13 @@ func loadImage(filePath string) walk.Image {
 	return img
 }
 
-func centerWindow(mw *walk.FormBase) {
+func CenterWindow(mw *walk.FormBase) {
 	// Center window
 	var mi win.MONITORINFO
 	mi.CbSize = uint32(unsafe.Sizeof(mi))
 
 	if win.GetMonitorInfo(win.MonitorFromWindow(mw.Handle(), win.MONITOR_DEFAULTTOPRIMARY), &mi) {
-		mon := rectangleFromRECT(mi.RcWork)
+		mon := RectangleFromRECT(mi.RcWork)
 		mon.Height -= int(win.GetSystemMetrics(win.SM_CYCAPTION))
 
 		size := mw.Size()
@@ -49,7 +49,7 @@ func centerWindow(mw *walk.FormBase) {
 	}
 }
 
-func setInstallerImage(imageView *walk.ImageView) {
+func SetInstallerImage(imageView *walk.ImageView) {
 	// thanks, go-bindata!
 	data, err := bindata.Asset("data/installer.png")
 	if err != nil {

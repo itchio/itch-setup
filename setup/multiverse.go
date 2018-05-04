@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,8 +18,9 @@ type Multiverse interface {
 	IsValid() bool
 
 	GetValidAppDir() (string, bool)
-	GetAppDir(version string) string
+	MakeAppDir(version string) (string, error)
 	ListAppDirs() []string
+	GetBaseDir() string
 }
 
 type multiverse struct {
@@ -64,9 +66,22 @@ func (m *multiverse) ListAppDirs() []string {
 	return appDirs
 }
 
-func (m *multiverse) GetAppDir(version string) string {
+func (m *multiverse) MakeAppDir(version string) (string, error) {
+	// first make sure we have a marker
+	markerPath := filepath.Join(m.params.BaseDir, m.markerName())
+	markerWriter, err := os.Create(markerPath)
+	if err != nil {
+		return "", err
+	}
+	defer markerWriter.Close()
+
 	name := fmt.Sprintf("app-%s", version)
-	return filepath.Join(m.params.BaseDir, name)
+	appDir := filepath.Join(m.params.BaseDir, name)
+	return appDir, nil
+}
+
+func (m *multiverse) GetBaseDir() string {
+	return m.params.BaseDir
 }
 
 func NewMultiverse(params *MultiverseParams) (Multiverse, error) {

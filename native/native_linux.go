@@ -172,7 +172,11 @@ func Do(cli cl.CLI) {
 	kickoffInstall := func() {
 		kickErr := func() error {
 			source := <-sourceChan
-			installer.Install(mv.GetAppDir(source.Version))
+			appDir, err := mv.MakeAppDir(source.Version)
+			if err != nil {
+				return err
+			}
+			installer.Install(appDir)
 
 			return nil
 		}()

@@ -1,4 +1,4 @@
-package native
+package nwin
 
 import (
 	"fmt"
@@ -51,10 +51,5 @@ func CreateShortcut(settings ShortcutSettings) error {
 	}
 
 	cmd := exec.Command("wscript", "/b", "/nologo", tmpPath)
-	err = cmd.Run()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return cmd.Run()
 }

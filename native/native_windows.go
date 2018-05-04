@@ -1,38 +1,55 @@
 package native
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/skratchdot/open-golang/open"
 
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/native/nwin"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
-	ps "github.com/mitchellh/go-ps"
 )
 
 var mw *walk.MainWindow = nil
-
-var localPath, roamingPath, desktopPath, execFolder string
+var folders nwin.Folders
 
 func Do(cli cl.CLI) {
 	var err error
 
-	err = getDirs()
+	folders, err = nwin.GetFolders()
 	if err != nil {
 		showError(cli, "Error during setup initialization: %+v", err)
 	}
 
-	baseDir := filepath.Join(localPath, cli.AppName)
+	defaultBaseDir := filepath.Join(folders.LocalAppData, cli.AppName)
+	baseDir := defaultBaseDir
+
+	registryBaseDir, err := nwin.GetRegistryInstallDir(cli)
+	if err != nil {
+		log.Printf("Could not get registry base dir: %+v", err)
+	} else {
+		log.Printf("Default base dir:  %s", defaultBaseDir)
+		log.Printf("Registry base dir: %s", registryBaseDir)
+		if defaultBaseDir == registryBaseDir {
+			log.Printf("Same as default, moving on")
+		} else {
+			log.Printf("Strays from defaults, taking it into account")
+			baseDir = defaultBaseDir
+		}
+	}
+	log.Printf("Initial base dir: %s", baseDir)
+
 	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
 		AppName: cli.AppName,
 		BaseDir: baseDir,
@@ -67,49 +84,7 @@ func Do(cli cl.CLI) {
 	}
 
 	log.Println("Showing install GUI")
-	installDir := filepath.Join(localPath, cli.AppName)
-	showInstallGUI(cli, installDir)
-}
-
-func getDirs() error {
-	var err error
-
-	localPath, err = getUserDirectory(win.CSIDL_LOCAL_APPDATA)
-	if err != nil {
-		return err
-	}
-
-	roamingPath, err = getUserDirectory(win.CSIDL_APPDATA)
-	if err != nil {
-		return err
-	}
-
-	desktopPath, err = getUserDirectory(win.CSIDL_DESKTOP)
-	if err != nil {
-		return err
-	}
-
-	execPath, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	execFolder = filepath.Dir(execPath)
-
-	log.Println("AppData local path: ", localPath)
-	log.Println("AppData roam' path: ", roamingPath)
-	log.Println("Desktop path:       ", desktopPath)
-	return nil
-}
-
-func getUserDirectory(csidl win.CSIDL) (string, error) {
-	localPathPtr := make([]uint16, 65536+2)
-	var hwnd win.HWND
-	success := win.SHGetSpecialFolderPath(hwnd, &localPathPtr[0], csidl, true)
-	if !success {
-		return "", errors.New("Could not get folder path")
-	}
-	return syscall.UTF16ToString(localPathPtr), nil
+	showInstallGUI(cli, baseDir)
 }
 
 func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
@@ -125,63 +100,9 @@ func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
 		pathsToKill = append(pathsToKill, filepath.Join(appDir, exeName(cli)))
 	}
 
-	pidsToKill := []int{}
-
-	processes, err := ps.Processes()
+	err := nwin.KillAll(pathsToKill)
 	if err != nil {
-		log.Println("While getting process list", err.Error())
-		log.Println("(Note: this just means we won't be able to kill running instances)")
-	} else {
-		for _, process := range processes {
-			func() {
-				handle, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(process.Pid()))
-				if err != nil {
-					log.Printf("Couldn't open process (pid %d): %s", process.Pid(), err.Error())
-				} else {
-					defer syscall.Close(handle)
-					fullName, err := GetModuleFileName(handle)
-					if err != nil {
-						log.Printf("Couldn't get module file name (pid %d): %s", process.Pid(), err.Error())
-					} else {
-						for _, pathToKill := range pathsToKill {
-							if fullName == pathToKill {
-								log.Printf("Should kill %d", process.Pid())
-								pidsToKill = append(pidsToKill, process.Pid())
-							}
-						}
-					}
-				}
-			}()
-		}
-
-		log.Printf("%d processes to kill", len(pidsToKill))
-		for _, pidToKill := range pidsToKill {
-			func() {
-				p, err := os.FindProcess(pidToKill)
-				if err != nil {
-					// oh well
-					log.Printf("PID %d vanished", pidToKill)
-					return
-				}
-
-				log.Printf("Killing %d...", pidToKill)
-
-				// not even going to bother with the error code - if it works, great! if it doesn't, oh well
-				p.Kill()
-			}()
-		}
-	}
-
-	log.Println("Removing marker")
-	err = os.Remove(filepath.Join(execFolder, markerName(cli)))
-	if err != nil {
-		log.Println("While removing marker", err.Error())
-	}
-
-	log.Println("Removing icon")
-	err = os.Remove(filepath.Join(execFolder, "app.ico"))
-	if err != nil {
-		log.Println("While removing icon", err.Error())
+		log.Println("While killing processes", err.Error())
 	}
 
 	log.Println("Removing shortcut...")
@@ -191,23 +112,21 @@ func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
 		log.Println("(Note: shortcut errors aren't critical)")
 	}
 
-	log.Println("Removing all versions...")
-	for _, appDir := range mv.ListAppDirs() {
-		tries := 5
-		for i := 0; i < tries; i++ {
-			err = os.RemoveAll(appDir)
-			if err != nil {
-				log.Println("While removing", filepath.Base(appDir), err.Error())
-				log.Println("Sleeping a bit then retrying")
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			break
+	log.Println("Nuking app folder")
+	tries := 5
+	for i := 0; i < tries; i++ {
+		err = os.RemoveAll(mv.GetBaseDir())
+		if err != nil {
+			log.Printf("%+v", err)
+			log.Printf("Sleeping a bit then retrying")
+			time.Sleep(1 * time.Second)
+			continue
 		}
+		break
 	}
 
 	log.Println("Removing uninstaller entry...")
-	err = RemoveUninstallerRegistryKey(cli.AppName)
+	err = nwin.RemoveUninstallerRegistryKey(cli)
 	if err != nil {
 		log.Println("While removing uninstaller entry", err.Error())
 		log.Println("(Note: these aren't critical)")
@@ -216,22 +135,36 @@ func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
 }
 
 func doRelaunch(cli cl.CLI, mv setup.Multiverse) error {
-	proc, err := os.FindProcess(cli.RelaunchPID)
-	if err != nil {
-		return errors.WithMessage(err, "could not find app process to wait on")
+	if cli.RelaunchPID <= 0 {
+		err := errors.Errorf("Relaunch cannot wait for invalid PID %d", cli.RelaunchPID)
+		showError(cli, "%+v", err)
 	}
 
-	state, err := proc.Wait()
-	if err != nil {
-		return errors.WithMessage(err, "could not wait on app before relaunch")
+	for tries := 10; tries > 0; tries-- {
+		log.Printf("Making sure PID %d has exited (%d tries left)", cli.RelaunchPID, tries)
+
+		proc, err := os.FindProcess(cli.RelaunchPID)
+		if err == nil {
+			log.Printf("PID %d still exists, sleeping for a bit...", cli.RelaunchPID)
+			proc.Release()
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		break
 	}
 
-	log.Printf("Wait result: success = %v", state.Success())
+	log.Printf("Done waiting for process to exit, looking for valid app dir...")
 
-	if appDir, ok := mv.GetValidAppDir(); ok {
+	appDir, ok := mv.GetValidAppDir()
+	if ok {
 		log.Printf("Found valid app dir, relaunching")
 		tryLaunch(cli, appDir)
+	} else {
+		err := errors.Errorf("%s is not installed properly - could not find a valid version to launch", cli.AppName)
+		showError(cli, "%+v", err)
 	}
+
 	return nil
 }
 
@@ -262,45 +195,10 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 	installDir := installDirIn
 	versionInstallDir := ""
 
-	var source setup.InstallSource
 	sourceChan := make(chan setup.InstallSource, 1)
 
 	kickoffInstall := func() {
 		kickErr := func() error {
-			err := os.MkdirAll(installDir, 0755)
-			if err != nil {
-				return err
-			}
-
-			execPath, err := os.Executable()
-			if err != nil {
-				return err
-			}
-
-			// copy ourselves in install directory
-			copyErr := func() error {
-				installedExecPath := filepath.Join(installDir, setupName(cli))
-				execWriter, err := os.Create(installedExecPath)
-				if err != nil {
-					log.Println("Couldn't open target for writing, maybe already running from install location?")
-					log.Println("Not copying and carrying on...")
-					return nil
-				}
-				defer execWriter.Close()
-
-				execReader, err := os.OpenFile(execPath, os.O_RDONLY, 0)
-				if err != nil {
-					return err
-				}
-				defer execReader.Close()
-
-				_, err = io.Copy(execWriter, execReader)
-				return err
-			}()
-			if copyErr != nil {
-				return copyErr
-			}
-
 			source := <-sourceChan
 
 			versionInstallDir = filepath.Join(installDir, fmt.Sprintf("app-%s", source.Version))
@@ -460,7 +358,7 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		mw.SetIcon(ic)
 	}
 
-	setInstallerImage(imageView)
+	nwin.SetInstallerImage(imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		Localizer: cli.Localizer,
@@ -477,26 +375,15 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		OnSource: func(sourceIn setup.InstallSource) {
 			mw.SetTitle(fmt.Sprintf("%s - %s", baseTitle, sourceIn.Version))
 			sourceChan <- sourceIn
-			source = sourceIn
 		},
 		OnFinish: func(source setup.InstallSource) {
-			markerPath := filepath.Join(installDir, markerName(cli))
-			markerWriter, err := os.Create(markerPath)
-			if err != nil {
-				showError(cli, "While creating marker: %+v", err)
-			}
-			err = markerWriter.Close()
-			if err != nil {
-				showError(cli, "While closing marker: %+v", err)
-			}
-
 			// this creates $installDir/app.ico
-			err = CreateUninstallRegistryEntry(installDir, cli.AppName, source.Version)
+			err = nwin.CreateUninstallRegistryEntry(cli, installDir, source)
 			if err != nil {
 				log.Printf("While creating registry entry: %s", err.Error())
 			}
 
-			err = CreateShortcut(ShortcutSettings{
+			err = nwin.CreateShortcut(nwin.ShortcutSettings{
 				ShortcutFilePath: shortcutPath(cli),
 				TargetPath:       filepath.Join(installDir, setupName(cli)),
 				Description:      "The best way to play your itch.io games",
@@ -523,7 +410,7 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		},
 	})
 
-	centerWindow(mw.AsFormBase())
+	nwin.CenterWindow(mw.AsFormBase())
 
 	mw.Run()
 }
@@ -534,20 +421,43 @@ func showError(cli cl.CLI, format string, a ...interface{}) {
 
 	log.Printf("Fatal error: %s", msg)
 
+	buf := new(bytes.Buffer)
+	fmt.Fprintf(buf, `%s`, cli.Localizer.T("setup.error_dialog.title"))
+	buf.WriteString("\n\n")
+	fmt.Fprintf(buf, `%s-setup, %s`, cli.AppName, cli.VersionString)
+	buf.WriteString("\n\n")
+	buf.WriteString(msg)
+
+	var te *walk.TextEdit
+
 	var err error
 	dlgDecl := ui.Dialog{
 		Title:    cli.Localizer.T("setup.error_dialog.title"),
-		MinSize:  ui.Size{Width: 350},
+		MinSize:  ui.Size{Width: 600, Height: 400},
 		Layout:   ui.VBox{},
 		AssignTo: &dlg,
 		Children: []ui.Widget{
+			ui.TextEdit{
+				Text:          strings.Replace(buf.String(), "\n", "\r\n", -1),
+				StretchFactor: 2,
+				ReadOnly:      true,
+				VScroll:       true,
+				MaxSize: ui.Size{
+					Width:  0,
+					Height: 600,
+				},
+				AssignTo: &te,
+			},
 			ui.Composite{
 				Layout: ui.HBox{
 					MarginsZero: true,
 				},
 				Children: []ui.Widget{
-					ui.Label{
-						Text: msg,
+					ui.LinkLabel{
+						Text: `<a href="https://github.com/itchio/itch/issues">Open issue tracker</a>`,
+						OnLinkActivated: func(link *walk.LinkLabelLink) {
+							open.Start(link.URL())
+						},
 					},
 					ui.HSpacer{},
 				},
@@ -570,27 +480,31 @@ func showError(cli cl.CLI, format string, a ...interface{}) {
 			},
 		},
 	}
-
-	var res int
 	if mw == nil {
 		// go's nil is misused by lxn/walk so we need this
-		res, err = dlgDecl.Run(nil)
+		err = dlgDecl.Create(nil)
 	} else {
-		res, err = dlgDecl.Run(mw)
+		err = dlgDecl.Create(mw)
 	}
-
-	centerWindow(dlg.AsFormBase())
-
 	if err != nil {
-		log.Printf("Error in dialog: %s\n", err.Error())
+		log.Printf("Error in dialog: %+v", err)
+		os.Exit(1)
 	}
+
+	nwin.CenterWindow(dlg.AsFormBase())
+
+	// cf. https://github.com/itchio/itch-setup/blob/922c8d02ecd01eebc2e920cc6b69aff64e0cc563/native/native_linux.go#L216-L241
+	// If the start is –1, any current selection is deselected.
+	te.SetTextSelection(-1, 0)
+
+	res := dlg.Run()
 	log.Printf("Dialog res: %#v\n", res)
 
 	os.Exit(1)
 }
 
 func shortcutPath(cli cl.CLI) string {
-	return filepath.Join(desktopPath, fmt.Sprintf("%s.lnk", cli.AppName))
+	return filepath.Join(folders.Desktop, fmt.Sprintf("%s.lnk", cli.AppName))
 }
 
 func markerName(cli cl.CLI) string {

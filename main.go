@@ -33,6 +33,8 @@ func init() {
 	app.Flag("uninstall", "Uninstall the itch app").BoolVar(&cli.Uninstall)
 	app.Flag("relaunch", "Relaunch a new version of the itch app").BoolVar(&cli.Relaunch)
 	app.Flag("relaunch-pid", "PID to wait for before relaunching").IntVar(&cli.RelaunchPID)
+
+	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
 }
 
 func must(err error) {
@@ -42,20 +44,25 @@ func must(err error) {
 }
 
 func detectAppName() {
-	execPath, err := os.Executable()
-	must(err)
+	if cli.AppName != "" {
+		log.Printf("App name specified on command-line: %s", cli.AppName)
+	} else {
+		execPath, err := os.Executable()
+		must(err)
 
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
+		ext := ""
+		if runtime.GOOS == "windows" {
+			ext = ".exe"
+		}
+		kitchBinary := fmt.Sprintf("kitch-setup%s", ext)
+
+		if filepath.Base(execPath) == kitchBinary {
+			cli.AppName = "kitch"
+		} else {
+			cli.AppName = "itch"
+		}
+		log.Printf("App name detected: %s", cli.AppName)
 	}
-	kitchBinary := fmt.Sprintf("kitch-setup%s", ext)
-
-	if filepath.Base(execPath) == kitchBinary {
-		cli.AppName = "kitch"
-	}
-
-	log.Println(cli.AppName, "setup starting up...")
 
 	app.Name = fmt.Sprintf("%s-setup", cli.AppName)
 }
@@ -65,7 +72,6 @@ const DefaultLocale = "en-US"
 var localizer *localize.Localizer
 
 func main() {
-	detectAppName()
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	app.HelpFlag.Short('h')
@@ -76,6 +82,9 @@ func main() {
 	} else {
 		versionString = fmt.Sprintf("%s, no build date", version)
 	}
+	if commit != "" {
+		versionString = fmt.Sprintf("%s, ref %s", versionString, commit)
+	}
 
 	app.Version(versionString)
 	app.VersionFlag.Short('V')
@@ -85,6 +94,8 @@ func main() {
 
 	_, err := app.Parse(os.Args[1:])
 	must(err)
+
+	detectAppName()
 
 	userLocale, err := jibber_jabber.DetectIETF()
 	if err != nil {
