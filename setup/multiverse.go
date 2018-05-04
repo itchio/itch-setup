@@ -86,11 +86,11 @@ func (m *multiverse) GetBaseDir() string {
 
 func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 	if params.AppName == "" {
-		return nil, errors.Errorf("MultiverParams.AppName cannot be empty")
+		return nil, errors.Errorf("MultiverseParams.AppName cannot be empty")
 	}
 
 	if params.BaseDir == "" {
-		return nil, errors.Errorf("MultiverParams.BaseDir cannot be empty")
+		return nil, errors.Errorf("MultiverseParams.BaseDir cannot be empty")
 	}
 
 	mv := &multiverse{

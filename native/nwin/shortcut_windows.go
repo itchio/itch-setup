@@ -11,6 +11,7 @@ import (
 type ShortcutSettings struct {
 	ShortcutFilePath string
 	TargetPath       string
+	Arguments        string
 	Description      string
 	IconLocation     string
 	WorkingDirectory string
@@ -18,17 +19,19 @@ type ShortcutSettings struct {
 
 const windowsShortcutContent = `
 	set WshShell = WScript.CreateObject("WScript.Shell")
-	set shellLink = WshShell.CreateShortcut("%v")
-	shellLink.TargetPath = "%v"
-	shellLink.Description = "%v"
-	shellLink.IconLocation = "%v"
-	shellLink.WorkingDirectory = "%v"
+	set shellLink = WshShell.CreateShortcut(%q)
+	shellLink.TargetPath = %q
+	shellLink.Arguments = %q
+	shellLink.Description = %q
+	shellLink.IconLocation = %q
+	shellLink.WorkingDirectory = %q
 	shellLink.Save`
 
 func CreateShortcut(settings ShortcutSettings) error {
 	shortcutScript := fmt.Sprintf(windowsShortcutContent,
 		settings.ShortcutFilePath,
 		settings.TargetPath,
+		settings.Arguments,
 		settings.Description,
 		settings.IconLocation,
 		settings.WorkingDirectory)
