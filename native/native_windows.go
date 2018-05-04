@@ -22,16 +22,6 @@ import (
 
 var mw *walk.MainWindow = nil
 
-func getUserDirectory(csidl win.CSIDL) (string, error) {
-	localPathPtr := make([]uint16, 65536+2)
-	var hwnd win.HWND
-	success := win.SHGetSpecialFolderPath(hwnd, &localPathPtr[0], csidl, true)
-	if !success {
-		return "", errors.New("Could not get folder path")
-	}
-	return syscall.UTF16ToString(localPathPtr), nil
-}
-
 var localPath, roamingPath, desktopPath, execFolder string
 
 func Do(cli cl.CLI) {
@@ -110,6 +100,16 @@ func getDirs() error {
 	log.Println("AppData roam' path: ", roamingPath)
 	log.Println("Desktop path:       ", desktopPath)
 	return nil
+}
+
+func getUserDirectory(csidl win.CSIDL) (string, error) {
+	localPathPtr := make([]uint16, 65536+2)
+	var hwnd win.HWND
+	success := win.SHGetSpecialFolderPath(hwnd, &localPathPtr[0], csidl, true)
+	if !success {
+		return "", errors.New("Could not get folder path")
+	}
+	return syscall.UTF16ToString(localPathPtr), nil
 }
 
 func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
