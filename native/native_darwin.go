@@ -1,7 +1,7 @@
 package native
 
 /*
-int StartApp(char *appName);
+int StartApp(char *setupTitle, char *appName);
 void SetLabel(char *cString);
 void SetProgress(int value);
 char *ValidateBundle(char *bundlePath);
