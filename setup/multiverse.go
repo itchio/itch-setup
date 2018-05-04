@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -8,6 +9,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/itchio/savior/seeksource"
+
+	"github.com/itchio/wharf/pwr"
 
 	"github.com/pkg/errors"
 )
@@ -47,14 +52,55 @@ func (m *multiverse) GetValidAppDir() (string, bool) {
 		return "", false
 	}
 
-	if len(m.appDirs) == 0 {
-		return "", false
+	for _, appDir := range m.appDirs {
+		absDir := filepath.Join(m.params.BaseDir, appDir)
+
+		err := m.validateAppDir(absDir)
+		if err != nil {
+			log.Printf("Ignoring appDir %s: %+v", absDir, err)
+			continue
+		}
+
+		return absDir, true
+	}
+	return "", false
+}
+
+func (m *multiverse) validateAppDir(appDir string) error {
+	sigPath := localSignaturePath(appDir)
+	sigBytes, err := ioutil.ReadFile(sigPath)
+	if err != nil {
+		return err
 	}
 
-	appDir := m.appDirs[0]
-	absDir := filepath.Join(m.params.BaseDir, appDir)
+	sigSource := seeksource.FromBytes(sigBytes)
 
-	return absDir, true
+	_, err = sigSource.Resume(nil)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	sigInfo, err := pwr.ReadSignature(ctx, sigSource)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Found valid wharf signature at %s", sigPath)
+
+	vc := &pwr.ValidatorContext{
+		Consumer: newConsumer(),
+		FailFast: true,
+	}
+
+	err = vc.Validate(ctx, appDir, sigInfo)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("App dir matches signature: %s", appDir)
+	return nil
 }
 
 func (m *multiverse) ListAppDirs() []string {
