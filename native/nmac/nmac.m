@@ -5,7 +5,7 @@ NSProgressIndicator *progressIndicator;
 
 extern void StartItchSetup(void);
 
-int StartApp(char *cSetupTitle) {
+int StartApp(char *cSetupTitle, char *cAppName) {
   [NSAutoreleasePool new];
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -34,7 +34,10 @@ int StartApp(char *cSetupTitle) {
 
   // main image
   NSImageView *imageView = [[NSImageView new] autorelease];
-  NSImage *image = [NSImage imageNamed:@"installer.png"];
+
+  id appName = [NSString stringWithUTF8String:cAppName];
+  id imageName = [NSString stringWithFormat:@"installer-%@.png", appName];
+  NSImage *image = [NSImage imageNamed:imageName];
   [image setSize:NSMakeSize(imageWidth, imageHeight)];
   [imageView setImage:image];
   [imageView setFrame:CGRectMake(0,windowHeight-imageHeight,imageWidth,imageHeight)];

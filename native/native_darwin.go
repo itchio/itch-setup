@@ -26,7 +26,7 @@ var cli cl.CLI
 func Do(cliArg cl.CLI) {
 	cli = cliArg
 	setupTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
-	C.StartApp(C.CString(setupTitle))
+	C.StartApp(C.CString(setupTitle), C.CString(cli.AppName))
 }
 
 //export StartItchSetup

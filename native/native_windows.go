@@ -360,7 +360,12 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 	}
 
 	// see itch-setup.rc
-	ic, err := walk.NewIconFromResourceId(101)
+	iconId := 101
+	if cli.AppName == "kitch" {
+		iconId = 102
+	}
+
+	ic, err := walk.NewIconFromResourceId(iconId)
 	if err != nil {
 		log.Println("Could not load icon, oh well")
 	} else {
@@ -378,7 +383,7 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		log.Fatal(err)
 	}
 
-	nwin.SetInstallerImage(imageView)
+	nwin.SetInstallerImage(cli, imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		Localizer: cli.Localizer,

@@ -84,7 +84,9 @@ func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, source setup.In
 
 	func() {
 		iconPath := filepath.Join(installDir, "app.ico")
-		icoBytes, err := bindata.Asset("data/itch.ico")
+		icoName := cli.AppName + ".ico"
+
+		icoBytes, err := bindata.Asset(fmt.Sprintf("data/%s", icoName))
 		if err != nil {
 			log.Printf("itch ico not found :()")
 			return

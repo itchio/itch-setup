@@ -95,7 +95,7 @@ func Do(cli cl.CLI) {
 		return imagePath
 	}
 
-	imagePath := loadBundledImage("data/installer.png")
+	imagePath := loadBundledImage(fmt.Sprintf("data/installer-%s.png", cli.AppName))
 
 	i, err := gtk.ImageNewFromFile(imagePath)
 	if err != nil {

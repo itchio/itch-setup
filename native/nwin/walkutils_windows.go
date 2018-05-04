@@ -1,12 +1,14 @@
 package nwin
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"unsafe"
 
 	"github.com/itchio/itch-setup/bindata"
+	"github.com/itchio/itch-setup/cl"
 	"github.com/lxn/walk"
 	"github.com/lxn/win"
 )
@@ -49,9 +51,9 @@ func CenterWindow(mw *walk.FormBase) {
 	}
 }
 
-func SetInstallerImage(imageView *walk.ImageView) {
+func SetInstallerImage(cli cl.CLI, imageView *walk.ImageView) {
 	// thanks, go-bindata!
-	data, err := bindata.Asset("data/installer.png")
+	data, err := bindata.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
 	if err != nil {
 		log.Printf("Installer image not found :()")
 		return

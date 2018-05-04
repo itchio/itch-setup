@@ -1,7 +1,8 @@
 #include "winver.h"
 #define RT_MANIFEST  24
 #define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
-#define IDI_ICON_S 101
+#define IDI_ICON_ITCH 101
+#define IDI_ICON_KITCH 102
 
 1 VERSIONINFO
 FILEVERSION     1,0,0,0
@@ -28,7 +29,8 @@ BEGIN
   END
 END
 
-IDI_ICON_S       ICON      "itch.ico"
+IDI_ICON_ITCH       ICON      "data\\itch.ico"
+IDI_ICON_KITCH      ICON      "data\\kitch.ico"
 
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST MOVEABLE PURE
 {
