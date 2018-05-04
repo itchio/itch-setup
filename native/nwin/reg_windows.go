@@ -55,6 +55,8 @@ func GetRegistryInstallDir(cli cl.CLI) (string, error) {
 // CreateUninstallRegistryEntry creates all registry entries required to
 // have the app show up in Add or Remove software and be uninstalled by the user
 func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, source setup.InstallSource) error {
+	log.Printf("Creating uninstall key under %s\\%s", uninstallRegPrefix, cli.AppName)
+
 	pk, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallRegPrefix, registry.CREATE_SUB_KEY)
 	if err != nil {
 		return err
@@ -67,7 +69,7 @@ func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, source setup.In
 	}
 	defer k.Close()
 
-	uninstallCmd := fmt.Sprintf("\"%s\" --uninstall", filepath.Join(installDir, "itch-setup.exe"))
+	uninstallCmd := fmt.Sprintf("\"%s\" --appname %s --uninstall", filepath.Join(installDir, "itch-setup.exe"), cli.AppName)
 
 	strings := []StringValue{
 		{Key: "DisplayName", Value: cli.AppName},
@@ -87,6 +89,8 @@ func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, source setup.In
 			log.Printf("itch ico not found :()")
 			return
 		}
+
+		log.Printf("Copying icon to %s", iconPath)
 
 		err = ioutil.WriteFile(iconPath, icoBytes, os.FileMode(0644))
 		if err != nil {

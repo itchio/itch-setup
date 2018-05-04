@@ -193,16 +193,26 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 	var progressComposite, optionsComposite *walk.Composite
 
 	installDir := installDirIn
-	versionInstallDir := ""
+	var appDir string
 
 	sourceChan := make(chan setup.InstallSource, 1)
 
 	kickoffInstall := func() {
 		kickErr := func() error {
 			source := <-sourceChan
+			mv, err := setup.NewMultiverse(&setup.MultiverseParams{
+				AppName: cli.AppName,
+				BaseDir: installDir,
+			})
+			if err != nil {
+				return err
+			}
 
-			versionInstallDir = filepath.Join(installDir, fmt.Sprintf("app-%s", source.Version))
-			installer.Install(versionInstallDir)
+			appDir, err = mv.MakeAppDir(source.Version)
+			if err != nil {
+				return err
+			}
+			installer.Install(appDir)
 
 			return nil
 		}()
@@ -358,6 +368,16 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		mw.SetIcon(ic)
 	}
 
+	err = ni.SetVisible(true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ni.SetToolTip(cli.Localizer.T("setup.window.title"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	nwin.SetInstallerImage(imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
@@ -377,15 +397,23 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 			sourceChan <- sourceIn
 		},
 		OnFinish: func(source setup.InstallSource) {
+			setupLocalPath, err := nwin.CopySelf(installDir)
+			if err != nil {
+				showError(cli, "%+v", err)
+			}
+
 			// this creates $installDir/app.ico
 			err = nwin.CreateUninstallRegistryEntry(cli, installDir, source)
 			if err != nil {
 				log.Printf("While creating registry entry: %s", err.Error())
 			}
 
+			shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
+
 			err = nwin.CreateShortcut(nwin.ShortcutSettings{
 				ShortcutFilePath: shortcutPath(cli),
-				TargetPath:       filepath.Join(installDir, setupName(cli)),
+				TargetPath:       setupLocalPath,
+				Arguments:        shortcutArguments,
 				Description:      "The best way to play your itch.io games",
 				IconLocation:     filepath.Join(installDir, "app.ico"),
 				WorkingDirectory: filepath.Join(installDir),
@@ -398,15 +426,7 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 
 			ni.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
 
-			exePath := filepath.Join(versionInstallDir, exeName(cli))
-			cmd := exec.Command(exePath)
-			err = cmd.Start()
-			if err != nil {
-				showError(cli, err.Error(), mw)
-			}
-
-			time.Sleep(2 * time.Second)
-			os.Exit(0)
+			tryLaunch(cli, appDir)
 		},
 	})
 
@@ -513,8 +533,4 @@ func markerName(cli cl.CLI) string {
 
 func exeName(cli cl.CLI) string {
 	return fmt.Sprintf("%s.exe", cli.AppName)
-}
-
-func setupName(cli cl.CLI) string {
-	return fmt.Sprintf("%sSetup.exe", cli.AppName)
 }
