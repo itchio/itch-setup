@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cloudfoundry-attic/jibber_jabber"
@@ -14,6 +15,7 @@ import (
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
+	"github.com/pkg/errors"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -30,11 +32,17 @@ var cli cl.CLI
 
 func init() {
 	app.Flag("prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cli.PreferLaunch)
+
+	app.Flag("upgrade", "Upgrade the itch app if necessary").BoolVar(&cli.Upgrade)
+
 	app.Flag("uninstall", "Uninstall the itch app").BoolVar(&cli.Uninstall)
+
 	app.Flag("relaunch", "Relaunch a new version of the itch app").BoolVar(&cli.Relaunch)
 	app.Flag("relaunch-pid", "PID to wait for before relaunching").IntVar(&cli.RelaunchPID)
 
 	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
+
+	app.Flag("silent", "Run installation silently").BoolVar(&cli.Silent)
 }
 
 func must(err error) {
@@ -121,5 +129,60 @@ func main() {
 	}
 	cli.Localizer = localizer
 
-	native.Do(cli)
+	nc, err := native.NewNativeCore(cli)
+	if err != nil {
+		panic(err)
+	}
+
+	var verbs []string
+
+	if cli.Upgrade {
+		verbs = append(verbs, "upgrade")
+	}
+	if cli.Relaunch {
+		verbs = append(verbs, "relaunch")
+	}
+	if cli.Uninstall {
+		verbs = append(verbs, "uninstall")
+	}
+
+	if len(verbs) > 1 {
+		nc.ErrorDialog(errors.Errorf("Cannot specify more than one verb: got %s", strings.Join(verbs, ", ")))
+	}
+
+	if len(verbs) == 0 {
+		verbs = append(verbs, "install")
+	}
+
+	switch verbs[0] {
+	case "install":
+		err = nc.Install()
+		if err != nil {
+			nc.ErrorDialog(err)
+		}
+	case "upgrade":
+		err = nc.Upgrade()
+		if err != nil {
+			jsonlBail(errors.WithMessage(err, "Fatal upgrade error"))
+		}
+	case "relaunch":
+		if cli.RelaunchPID <= 0 {
+			jsonlBail(errors.Errorf("--relaunch needs a valid --relaunch-pid (got %d)", cli.RelaunchPID))
+		}
+
+		err = nc.Relaunch()
+		if err != nil {
+			jsonlBail(errors.WithMessage(err, "Fatal relaunch error"))
+		}
+	case "uninstall":
+		err = nc.Uninstall()
+		if err != nil {
+			nc.ErrorDialog(err)
+		}
+	}
+}
+
+func jsonlBail(err error) {
+	// TODO: use json-lines
+	log.Fatalf("%+v", err)
 }

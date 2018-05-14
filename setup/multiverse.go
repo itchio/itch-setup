@@ -113,6 +113,11 @@ func (m *multiverse) ListAppDirs() []string {
 }
 
 func (m *multiverse) MakeAppDir(version string) (string, error) {
+	err := os.MkdirAll(m.params.BaseDir, 0755)
+	if err != nil {
+		return "", err
+	}
+
 	// first make sure we have a marker
 	markerPath := filepath.Join(m.params.BaseDir, m.markerName())
 	markerWriter, err := os.Create(markerPath)

@@ -11,7 +11,10 @@ type CLI struct {
 	Localizer *localize.Localizer
 
 	PreferLaunch bool
+	Upgrade      bool
 	Uninstall    bool
 	Relaunch     bool
 	RelaunchPID  int
+
+	Silent bool
 }

@@ -241,3 +241,7 @@ func newConsumer() *state.Consumer {
 		},
 	}
 }
+
+func (i *Installer) Upgrade() {
+	// Strategy:
+}

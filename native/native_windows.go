@@ -21,16 +21,24 @@ import (
 	"github.com/lxn/win"
 )
 
-var mw *walk.MainWindow = nil
-var folders nwin.Folders
+type nativeCore struct {
+	cli cl.CLI
 
-func Do(cli cl.CLI) {
-	var err error
+	mainWindow *walk.MainWindow
+	folders    nwin.Folders
+	baseDir    string
+	multiverse setup.Multiverse
+}
 
-	folders, err = nwin.GetFolders()
+func NewNativeCore(cli cl.CLI) (NativeCore, error) {
+	nc := &nativeCore{cli: cli}
+
+	folders, err := nwin.GetFolders()
 	if err != nil {
-		showError(cli, "Error during setup initialization: %+v", err)
+		return nil, errors.WithMessage(err, "During setup initialization")
 	}
+
+	nc.folders = folders
 
 	defaultBaseDir := filepath.Join(folders.LocalAppData, cli.AppName)
 	baseDir := defaultBaseDir
@@ -49,46 +57,79 @@ func Do(cli cl.CLI) {
 		}
 	}
 	log.Printf("Initial base dir: %s", baseDir)
+	nc.baseDir = baseDir
 
 	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
 		AppName: cli.AppName,
 		BaseDir: baseDir,
 	})
 	if err != nil {
-		showError(cli, "Error during setup initialization: %+v", err)
+		return nil, errors.WithMessage(err, "During setup initialization")
 	}
 
-	if cli.Uninstall {
-		err = doUninstall(cli, mv)
-		if err != nil {
-			showError(cli, "Error during uninstallation: %+v", err)
-		}
-		return
-	}
+	nc.multiverse = mv
 
-	if cli.Relaunch {
-		err = doRelaunch(cli, mv)
-		if err != nil {
-			showError(cli, "Error during relaunch: %+v", err)
-		}
-		return
-	}
+	return nc, nil
+}
+
+func (nc *nativeCore) Install() error {
+	cli := nc.cli
 
 	if cli.PreferLaunch {
 		log.Printf("Launch preferred, looking for a valid app folder")
-		if appDir, ok := mv.GetValidAppDir(); ok {
-			tryLaunch(cli, appDir)
+		if appDir, ok := nc.multiverse.GetValidAppDir(); ok {
+			nc.tryLaunch(appDir)
 		} else {
 			log.Printf("No valid app folder found, continuing with installation")
 		}
 	}
 
 	log.Println("Showing install GUI")
-	showInstallGUI(cli, baseDir)
+	return nc.showInstallGUI()
 }
 
-func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
+func (nc *nativeCore) Upgrade() error {
+	return errors.Errorf("Upgrade: stub!")
+}
+
+func (nc *nativeCore) Relaunch() error {
+	cli := nc.cli
+
+	if cli.RelaunchPID <= 0 {
+		return errors.Errorf("Relaunch cannot wait for invalid PID %d", cli.RelaunchPID)
+	}
+
+	for tries := 10; tries > 0; tries-- {
+		log.Printf("Making sure PID %d has exited (%d tries left)", cli.RelaunchPID, tries)
+
+		proc, err := os.FindProcess(cli.RelaunchPID)
+		if err == nil {
+			log.Printf("PID %d still exists, sleeping for a bit...", cli.RelaunchPID)
+			proc.Release()
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		break
+	}
+
+	log.Printf("Done waiting for process to exit, looking for valid app dir...")
+
+	appDir, ok := nc.multiverse.GetValidAppDir()
+	if ok {
+		log.Printf("Found valid app dir, relaunching")
+		nc.tryLaunch(appDir)
+	} else {
+		return errors.Errorf("%s is not installed properly - could not find a valid version to launch", cli.AppName)
+	}
+
+	return nil
+}
+
+func (nc *nativeCore) Uninstall() error {
 	log.Println("Uninstall was requested...")
+	mv := nc.multiverse
+	cli := nc.cli
 
 	if !mv.IsValid() {
 		log.Println("No valid install folder found, quitting.")
@@ -97,7 +138,7 @@ func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
 
 	pathsToKill := []string{}
 	for _, appDir := range mv.ListAppDirs() {
-		pathsToKill = append(pathsToKill, filepath.Join(appDir, exeName(cli)))
+		pathsToKill = append(pathsToKill, filepath.Join(appDir, nc.exeName()))
 	}
 
 	err := nwin.KillAll(pathsToKill)
@@ -106,7 +147,7 @@ func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
 	}
 
 	log.Println("Removing shortcut...")
-	err = os.Remove(shortcutPath(cli))
+	err = os.Remove(nc.shortcutPath())
 	if err != nil {
 		log.Println("While removing full shortcut", err.Error())
 		log.Println("(Note: shortcut errors aren't critical)")
@@ -134,58 +175,31 @@ func doUninstall(cli cl.CLI, mv setup.Multiverse) error {
 	return nil
 }
 
-func doRelaunch(cli cl.CLI, mv setup.Multiverse) error {
-	if cli.RelaunchPID <= 0 {
-		err := errors.Errorf("Relaunch cannot wait for invalid PID %d", cli.RelaunchPID)
-		showError(cli, "%+v", err)
-	}
+func (nc *nativeCore) tryLaunch(appDir string) {
+	cli := nc.cli
 
-	for tries := 10; tries > 0; tries-- {
-		log.Printf("Making sure PID %d has exited (%d tries left)", cli.RelaunchPID, tries)
-
-		proc, err := os.FindProcess(cli.RelaunchPID)
-		if err == nil {
-			log.Printf("PID %d still exists, sleeping for a bit...", cli.RelaunchPID)
-			proc.Release()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		break
-	}
-
-	log.Printf("Done waiting for process to exit, looking for valid app dir...")
-
-	appDir, ok := mv.GetValidAppDir()
-	if ok {
-		log.Printf("Found valid app dir, relaunching")
-		tryLaunch(cli, appDir)
-	} else {
-		err := errors.Errorf("%s is not installed properly - could not find a valid version to launch", cli.AppName)
-		showError(cli, "%+v", err)
-	}
-
-	return nil
-}
-
-func tryLaunch(cli cl.CLI, appDir string) {
 	log.Println("Launching app")
 
-	cmd := exec.Command(filepath.Join(appDir, exeName(cli)))
+	cmd := exec.Command(filepath.Join(appDir, nc.exeName()))
 
 	err := cmd.Start()
 	if err != nil {
-		showError(cli, "Encountered a problem while launching %s: %s", cli.AppName, err.Error())
+		prettyErr := errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", cli.AppName))
+		nc.ErrorDialog(prettyErr)
 	}
 
 	log.Printf("App launched, getting out of the way")
 	os.Exit(0)
 }
 
-func showInstallGUI(cli cl.CLI, installDirIn string) {
+func (nc *nativeCore) showInstallGUI() error {
+	cli := nc.cli
+
+	installDirIn := nc.baseDir
+
 	var installer *setup.Installer
 
-	var ni *walk.NotifyIcon
+	var trayIcon *walk.NotifyIcon
 	var installDirLabel *walk.LineEdit
 	var pb *walk.ProgressBar
 	var progressLabel *walk.Label
@@ -217,7 +231,7 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 			return nil
 		}()
 		if kickErr != nil {
-			showError(cli, "Error during installation: %+v", kickErr)
+			nc.ErrorDialog(errors.WithMessage(kickErr, "Error during installation"))
 		}
 	}
 
@@ -227,7 +241,7 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		dlg.Title = cli.Localizer.T("setup.tooltip.location")
 		dlg.FilePath = installDir
 
-		if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
+		if ok, err := dlg.ShowBrowseFolder(nc.mainWindow); err != nil {
 			log.Println(fmt.Sprintf("ShowBrowserFolder error: %s", err.Error()))
 		} else if !ok {
 			// nothing picked
@@ -334,27 +348,27 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 				AssignTo: &progressComposite,
 			},
 		},
-		AssignTo: &mw,
+		AssignTo: &nc.mainWindow,
 		OnSizeChanged: func() {
-			if mw == nil {
+			if nc.mainWindow == nil {
 				return
 			}
 			// this is kinda crap UX, but resizing the window is really ugly
-			mw.SetSize(walk.Size{Width: windowSize.Width, Height: windowSize.Height})
+			nc.mainWindow.SetSize(walk.Size{Width: windowSize.Width, Height: windowSize.Height})
 		},
 	}.Create()
 
 	// remove maximize button
-	style := win.GetWindowLong(mw.Handle(), win.GWL_STYLE)
+	style := win.GetWindowLong(nc.mainWindow.Handle(), win.GWL_STYLE)
 	style &^= win.WS_MAXIMIZEBOX
 	// style &^= win.WS_THICKFRAME
-	win.SetWindowLong(mw.Handle(), win.GWL_STYLE, style)
+	win.SetWindowLong(nc.mainWindow.Handle(), win.GWL_STYLE, style)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ni, err = walk.NewNotifyIcon()
+	trayIcon, err = walk.NewNotifyIcon()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -369,16 +383,16 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 	if err != nil {
 		log.Println("Could not load icon, oh well")
 	} else {
-		ni.SetIcon(ic)
-		mw.SetIcon(ic)
+		trayIcon.SetIcon(ic)
+		nc.mainWindow.SetIcon(ic)
 	}
 
-	err = ni.SetVisible(true)
+	err = trayIcon.SetVisible(true)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ni.SetToolTip(cli.Localizer.T("setup.window.title"))
+	trayIcon.SetToolTip(cli.Localizer.T("setup.window.title"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -389,69 +403,89 @@ func showInstallGUI(cli cl.CLI, installDirIn string) {
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
 		OnError: func(err error) {
-			go showError(cli, "Error during warm-up: %+v", err)
+			nc.mainWindow.Synchronize(func() {
+				nc.ErrorDialog(errors.WithMessage(err, "Error during warm-up"))
+			})
 		},
 		OnProgressLabel: func(label string) {
-			progressLabel.SetText(label)
+			nc.mainWindow.Synchronize(func() {
+				progressLabel.SetText(label)
+			})
 		},
 		OnProgress: func(progress float64) {
-			pb.SetValue(int(progress * 1000.0))
+			nc.mainWindow.Synchronize(func() {
+				pb.SetValue(int(progress * 1000.0))
+			})
 		},
 		OnSource: func(sourceIn setup.InstallSource) {
-			mw.SetTitle(fmt.Sprintf("%s - %s", baseTitle, sourceIn.Version))
-			sourceChan <- sourceIn
-		},
-		OnFinish: func(source setup.InstallSource) {
-			setupLocalPath, err := nwin.CopySelf(installDir)
-			if err != nil {
-				showError(cli, "%+v", err)
-			}
-
-			// this creates $installDir/app.ico
-			err = nwin.CreateUninstallRegistryEntry(cli, installDir, source)
-			if err != nil {
-				log.Printf("While creating registry entry: %s", err.Error())
-			}
-
-			shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
-
-			err = nwin.CreateShortcut(nwin.ShortcutSettings{
-				ShortcutFilePath: shortcutPath(cli),
-				TargetPath:       setupLocalPath,
-				Arguments:        shortcutArguments,
-				Description:      "The best way to play your itch.io games",
-				IconLocation:     filepath.Join(installDir, "app.ico"),
-				WorkingDirectory: filepath.Join(installDir),
+			nc.mainWindow.Synchronize(func() {
+				nc.mainWindow.SetTitle(fmt.Sprintf("%s - %s", baseTitle, sourceIn.Version))
+				sourceChan <- sourceIn
 			})
 
-			if err != nil {
-				showError(cli, "While creating shortcut marker: %+v", err)
-				os.Exit(1)
+			if nc.cli.Silent {
+				log.Printf("In silent mode, kicking off installation now...")
+				go kickoffInstall()
 			}
+		},
+		OnFinish: func(source setup.InstallSource) {
+			nc.mainWindow.Synchronize(func() {
+				setupLocalPath, err := nwin.CopySelf(installDir)
+				if err != nil {
+					nc.ErrorDialog(err)
+				}
 
-			ni.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
+				// this creates $installDir/app.ico
+				err = nwin.CreateUninstallRegistryEntry(cli, installDir, source)
+				if err != nil {
+					log.Printf("While creating registry entry: %s", err.Error())
+				}
 
-			tryLaunch(cli, appDir)
+				shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
+
+				err = nwin.CreateShortcut(nwin.ShortcutSettings{
+					ShortcutFilePath: nc.shortcutPath(),
+					TargetPath:       setupLocalPath,
+					Arguments:        shortcutArguments,
+					Description:      "The best way to play your itch.io games",
+					IconLocation:     filepath.Join(installDir, "app.ico"),
+					WorkingDirectory: filepath.Join(installDir),
+				})
+
+				if err != nil {
+					nc.ErrorDialog(errors.WithMessage(err, "While creating shortcut marker"))
+				}
+
+				trayIcon.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
+
+				nc.tryLaunch(appDir)
+			})
 		},
 	})
 
-	nwin.CenterWindow(mw.AsFormBase())
+	nwin.CenterWindow(nc.mainWindow.AsFormBase())
 
-	mw.Run()
+	if nc.cli.Silent {
+		nc.mainWindow.SetVisible(false)
+	}
+	nc.mainWindow.Run()
+
+	return nil
 }
 
-func showError(cli cl.CLI, format string, a ...interface{}) {
-	msg := fmt.Sprintf(format, a...)
+func (nc *nativeCore) ErrorDialog(errShown error) {
+	cli := nc.cli
+
 	var dlg *walk.Dialog
 
-	log.Printf("Fatal error: %s", msg)
+	log.Printf("Fatal error: %+v", errShown)
 
 	buf := new(bytes.Buffer)
 	fmt.Fprintf(buf, `%s`, cli.Localizer.T("setup.error_dialog.title"))
 	buf.WriteString("\n\n")
 	fmt.Fprintf(buf, `%s-setup, %s`, cli.AppName, cli.VersionString)
 	buf.WriteString("\n\n")
-	buf.WriteString(msg)
+	fmt.Fprintf(buf, "%+v", errShown)
 
 	var te *walk.TextEdit
 
@@ -505,11 +539,11 @@ func showError(cli cl.CLI, format string, a ...interface{}) {
 			},
 		},
 	}
-	if mw == nil {
+	if nc.mainWindow == nil {
 		// go's nil is misused by lxn/walk so we need this
 		err = dlgDecl.Create(nil)
 	} else {
-		err = dlgDecl.Create(mw)
+		err = dlgDecl.Create(nc.mainWindow)
 	}
 	if err != nil {
 		log.Printf("Error in dialog: %+v", err)
@@ -528,14 +562,14 @@ func showError(cli cl.CLI, format string, a ...interface{}) {
 	os.Exit(1)
 }
 
-func shortcutPath(cli cl.CLI) string {
-	return filepath.Join(folders.Desktop, fmt.Sprintf("%s.lnk", cli.AppName))
+func (nc *nativeCore) shortcutPath() string {
+	return filepath.Join(nc.folders.Desktop, fmt.Sprintf("%s.lnk", nc.cli.AppName))
 }
 
-func markerName(cli cl.CLI) string {
-	return fmt.Sprintf(".%s-marker", cli.AppName)
+func (nc *nativeCore) markerName() string {
+	return fmt.Sprintf(".%s-marker", nc.cli.AppName)
 }
 
-func exeName(cli cl.CLI) string {
-	return fmt.Sprintf("%s.exe", cli.AppName)
+func (nc *nativeCore) exeName() string {
+	return fmt.Sprintf("%s.exe", nc.cli.AppName)
 }
