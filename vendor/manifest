@@ -160,7 +160,7 @@
 			"importpath": "github.com/itchio/ox/macox",
 			"repository": "https://github.com/itchio/ox",
 			"vcs": "git",
-			"revision": "cb0604888ff88c926870082e4d7773f8046d286d",
+			"revision": "78365f064e087fe3260207d535d7ed510142c8e3",
 			"branch": "master",
 			"path": "/macox",
 			"notests": true

@@ -1,7 +1,7 @@
 package native
 
 /*
-int StartApp(char *setupTitle, char *appName);
+int StartApp(char *setupTitle, char *appName, char *imageBytes, int imageLen);
 void SetLabel(char *cString);
 void SetProgress(int value);
 char *ValidateBundle(char *bundlePath);
@@ -20,7 +20,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
+	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/itchio/ox/macox"
@@ -31,6 +33,7 @@ type nativeCore struct {
 	cli         cl.CLI
 	selfPath    string
 	roamingPath string
+	homePath    string
 }
 
 var globalNc *nativeCore
@@ -52,8 +55,15 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Self path: %s", selfPath)
 	nc.selfPath = selfPath
+	log.Printf("Self path: %s", nc.selfPath)
+
+	homePath, err := macox.GetHomeDirectory()
+	if err != nil {
+		return nil, err
+	}
+	nc.homePath = homePath
+	log.Printf("Home path: %s", nc.homePath)
 
 	globalNc = nc
 
@@ -63,7 +73,17 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 func (nc *nativeCore) Install() error {
 	cli := nc.cli
 	setupTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
-	C.StartApp(C.CString(setupTitle), C.CString(cli.AppName))
+
+	// thanks, go-bindata!
+	imageData, err := bindata.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
+	if err != nil {
+		log.Printf("Installer image not found :()")
+		return nil
+	}
+
+	imageBytes := unsafe.Pointer(&imageData[0])
+	imageLen := C.int(len(imageData))
+	C.StartApp(C.CString(setupTitle), C.CString(cli.AppName), (*C.char)(imageBytes), imageLen)
 	return nil
 }
 
@@ -116,6 +136,11 @@ func StartItchSetup() {
 	nc := globalNc
 	cli := nc.cli
 
+	if cli.Silent {
+		C.SetLabel(C.CString("Silent install mode is not supported on macOS"))
+		return
+	}
+
 	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-setup", cli.AppName))
 	if err != nil {
 		log.Fatal("Could not get temporary directory", err)
@@ -163,6 +188,12 @@ func StartItchSetup() {
 				return
 			}
 			defer selfSrc.Close()
+
+			err = os.MkdirAll(filepath.Dir(selfDstPath), 0755)
+			if err != nil {
+				showError(err)
+				return
+			}
 
 			selfDst, err := os.OpenFile(selfDstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
 			if err != nil {
@@ -229,5 +260,5 @@ func (nc *nativeCore) bundleName() string {
 }
 
 func (nc *nativeCore) bundlePath() string {
-	return filepath.Join("/", "Applications", nc.bundleName())
+	return filepath.Join(nc.homePath, "Applications", nc.bundleName())
 }
