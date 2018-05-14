@@ -120,13 +120,11 @@ char *ValidateBundle(char *cBundlePath) {
   return nil;
 }
 
-void Relaunch(char *cBundlePath) {
-  NSBundle *bundle = [NSBundle mainBundle];
-  NSString* relaunchPath = [bundle pathForResource:@"relaunch" ofType:nil];
-
+int LaunchBundle(char *cBundlePath) {
   id bundlePath = [NSString stringWithUTF8String:cBundlePath];
+  BOOL success = [[NSWorkspace sharedWorkspace] openFile:[bundlePath stringByExpandingTildeInPath]];
 
-  [NSTask launchedTaskWithLaunchPath:relaunchPath arguments:[NSArray arrayWithObjects:bundlePath, [NSString stringWithFormat:@"%d", [[NSProcessInfo processInfo] processIdentifier]], nil]];
+  return (int) success;
 }
 
 void Quit() {

@@ -157,6 +157,15 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/itchio/ox/macox",
+			"repository": "https://github.com/itchio/ox",
+			"vcs": "git",
+			"revision": "cb0604888ff88c926870082e4d7773f8046d286d",
+			"branch": "master",
+			"path": "/macox",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/itchio/wharf",
 			"repository": "https://github.com/itchio/wharf",
 			"vcs": "git",
