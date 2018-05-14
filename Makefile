@@ -1,4 +1,5 @@
 UPX_LEVEL ?= -1
+_GO_BUILD_FLAGS ?= -v -x -race
 
 ifeq ($(OS),Windows_NT)
 SETUP_OS:=windows
@@ -26,18 +27,18 @@ all:
 	@make $(SETUP_OS)
 
 linux:
-	go get -v -x -tags gtk_3_18
+	go get ${_GO_BUILD_FLAGS} -tags gtk_3_18
 	upx ${UPX_LEVEL} ${GOBIN}/itch-setup
 	cp -f ${GOBIN}/itch-setup ${GOBIN}/kitch-setup
 
 windows:
 	windres -o itch-setup.syso itch-setup.rc
-	go get -v -x -ldflags="-H windowsgui"
+	go get ${_GO_BUILD_FLAGS} -ldflags="-H windowsgui"
 	upx ${UPX_LEVEL} ${GOBIN}/itch-setup.exe
 	cp -f ${GOBIN}/itch-setup.exe ${GOBIN}/kitch-setup.exe
 
 darwin:
-	go get -v -x
+	go get ${_GO_BUILD_FLAGS}
 	upx ${UPX_LEVEL} ${GOBIN}/itch-setup
 	cp -f ${GOBIN}/itch-setup ${GOBIN}/kitch-setup
 
