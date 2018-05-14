@@ -92,7 +92,7 @@ func (nc *nativeCore) Uninstall() error {
 }
 
 func (nc *nativeCore) Upgrade() error {
-	return errors.Errorf("uninstall: stub!")
+	return errors.Errorf("upgrade: stub!")
 }
 
 func (nc *nativeCore) Relaunch() error {

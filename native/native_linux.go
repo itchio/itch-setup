@@ -1,6 +1,7 @@
 package native
 
 import (
+	"C"
 	"bytes"
 	"encoding/xml"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"io/ioutil"
 
@@ -16,33 +18,48 @@ import (
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
+	"github.com/pkg/errors"
 )
 
 var parentWin *gtk.Window
 
-func Do(cli cl.CLI) {
-	var err error
-	var installDir string
+type nativeCore struct {
+	cli     cl.CLI
+	baseDir string
+}
 
-	gtk.Init(nil)
+func NewNativeCore(cli cl.CLI) (NativeCore, error) {
+	nc := &nativeCore{
+		cli: cli,
+	}
 
 	// Linux policy: we default to `~/.itch` and `~/.kitch`
 	// If you want it to point elsewhere, that's what symlinks are for!
-	baseDir := filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", cli.AppName))
+	nc.baseDir = filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", cli.AppName))
+
+	return nc, nil
+}
+
+func (nc *nativeCore) Install() error {
+	var err error
+	var installDir string
+
+	cli := nc.cli
+
+	gtk.Init(nil)
 
 	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
 		AppName: cli.AppName,
-		BaseDir: baseDir,
+		BaseDir: nc.baseDir,
 	})
 	if err != nil {
-		showError(cli, "Internal error: %+v", err)
+		nc.ErrorDialog(errors.WithMessage(err, "Internal error"))
 	}
 
 	if cli.PreferLaunch {
 		log.Printf("Launch preferred, looking for a valid app dir...")
 		if appDir, ok := mv.GetValidAppDir(); ok {
-			tryLaunch(cli, appDir)
-			return
+			nc.tryLaunch(appDir)
 		}
 	}
 
@@ -157,7 +174,7 @@ func Do(cli cl.CLI) {
 		},
 		OnError: func(err error) {
 			glib.IdleAdd(func() {
-				showError(cli, "Warm-up error: %+v", err)
+				nc.ErrorDialog(errors.WithMessage(err, "Warm-up error"))
 			})
 		},
 		OnSource: func(source setup.InstallSource) {
@@ -165,7 +182,7 @@ func Do(cli cl.CLI) {
 		},
 		OnFinish: func(source setup.InstallSource) {
 			glib.IdleAdd(func() {
-				tryLaunch(cli, installDir)
+				nc.tryLaunch(installDir)
 			})
 		},
 	})
@@ -186,7 +203,7 @@ func Do(cli cl.CLI) {
 		}()
 		if kickErr != nil {
 			glib.IdleAdd(func() {
-				showError(cli, "Install error: %+v", kickErr)
+				nc.ErrorDialog(errors.WithMessage(err, "Install error"))
 			})
 		}
 	}
@@ -196,33 +213,87 @@ func Do(cli cl.CLI) {
 	// Begin executing the GTK main loop.  This blocks until
 	// gtk.MainQuit() is run.
 	gtk.Main()
+
+	return nil
+}
+
+func (nc *nativeCore) Uninstall() error {
+	return errors.Errorf("uninstall: stub!")
+}
+
+func (nc *nativeCore) Upgrade() error {
+	return errors.Errorf("upgrade: stub!")
+}
+
+func (nc *nativeCore) Relaunch() error {
+	pid := nc.cli.RelaunchPID
+
+	log.Printf("Should relaunch! Looking for PID %d...", pid)
+
+	for tries := 10; tries > 0; tries-- {
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			log.Printf("Waiting 2 seconds then retrying: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		proc.Release()
+		break
+	}
+
+	log.Printf("PID %d has exited, now looking for valid app dir in %s", nc.baseDir)
+
+	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
+		AppName: nc.cli.AppName,
+		BaseDir: nc.baseDir,
+	})
+	if err != nil {
+		nc.ErrorDialog(errors.WithMessage(err, "Internal error"))
+	}
+
+	appDir, ok := mv.GetValidAppDir()
+	if !ok {
+		err = errors.Errorf("Could not find valid installation of %s in %s", nc.cli.AppName, nc.baseDir)
+		nc.ErrorDialog(err)
+	}
+
+	nc.tryLaunch(appDir)
+
+	return nil
 }
 
 //
 
-func tryLaunch(cli cl.CLI, validAppDir string) {
-	log.Println("Launching app")
+// Tries launching the app from a valid app dir.
+// This always exits. If it fails, it shows an error dialog
+// first. If it succeeds, it exits gracefully.
+func (nc *nativeCore) tryLaunch(validAppDir string) {
+	cli := nc.cli
 
-	log.Printf("Via app dir: %s", validAppDir)
-	exePath := filepath.Join(validAppDir, exeName(cli))
+	log.Printf("Launching app dir: %s", validAppDir)
+	exePath := filepath.Join(validAppDir, nc.exeName())
 
 	cmd := exec.Command(exePath)
 
 	err := cmd.Start()
 	if err != nil {
-		showError(cli, "Encountered a problem while launching %s: %+v", cli.AppName, err.Error())
+		err = errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", cli.AppName))
+		nc.ErrorDialog(err)
 	}
 
 	log.Printf("App launched, getting out of the way")
 	os.Exit(0)
 }
 
-func exeName(cli cl.CLI) string {
-	return cli.AppName
+func (nc *nativeCore) exeName() string {
+	return nc.cli.AppName
 }
 
-func showError(cli cl.CLI, format string, a ...interface{}) {
-	msg := fmt.Sprintf(format, a...)
+func (nc *nativeCore) ErrorDialog(err error) {
+	cli := nc.cli
+
+	msg := fmt.Sprintf("%+v", err)
 	log.Printf("Fatal error: %s", msg)
 
 	dialog := gtk.MessageDialogNewWithMarkup(parentWin, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "")
