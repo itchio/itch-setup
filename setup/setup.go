@@ -2,14 +2,18 @@ package setup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/itchio/go-itchio"
 
 	"github.com/itchio/wharf/eos/option"
 
@@ -50,6 +54,7 @@ type Installer struct {
 
 	channelName string
 	consumer    *state.Consumer
+	client      *http.Client
 }
 
 type InstallSource struct {
@@ -72,20 +77,24 @@ func NewInstaller(settings InstallerSettings) *Installer {
 				log.Printf("[%s] %s", lvl, msg)
 			},
 		},
+		client: timeout.NewDefaultClient(),
 	}
 
-	go func() {
-		err := i.warmUp()
-		if err != nil {
-			log.Printf("Install error: %s", err.Error())
-			settings.OnError(err)
-		}
-	}()
 	return i
 }
 
 func (i *Installer) brothPackageURL() string {
 	return fmt.Sprintf("%s/%s/%s", brothBaseURL, i.settings.AppName, i.channelName)
+}
+
+func (i *Installer) WarmUp() {
+	go func() {
+		err := i.warmUp()
+		if err != nil {
+			log.Printf("Install error: %s", err.Error())
+			i.settings.OnError(err)
+		}
+	}()
 }
 
 func (i *Installer) warmUp() error {
@@ -113,25 +122,12 @@ func (i *Installer) getVersion() (string, error) {
 		return envVersion, nil
 	}
 
-	client := timeout.NewDefaultClient()
-
-	latestURL := fmt.Sprintf("%s/LATEST", i.brothPackageURL())
-	latestRes, err := client.Get(latestURL)
+	latestVersion, err := i.brothGetString("/LATEST")
 	if err != nil {
-		return "", errors.WithMessage(err, "looking for latest version")
+		return "", err
 	}
 
-	if latestRes.StatusCode != 200 {
-		return "", errors.Errorf("got HTTP %d for %s", latestRes.StatusCode, latestURL)
-	}
-
-	versionBytes, err := ioutil.ReadAll(latestRes.Body)
-	if err != nil {
-		return "", errors.WithMessage(err, "reading latest version")
-	}
-
-	version := strings.TrimSpace(string(versionBytes))
-	return version, nil
+	return latestVersion, nil
 }
 
 func (i *Installer) Install(appDir string) {
@@ -242,6 +238,93 @@ func newConsumer() *state.Consumer {
 	}
 }
 
-func (i *Installer) Upgrade() {
-	// Strategy:
+type BrothUpgradePath struct {
+	Patches []BrothPatch `json:"patches"`
+}
+
+type BrothPatch struct {
+	Version string            `json:"version"`
+	Files   []*BrothPatchFile `json:"files"`
+}
+
+type BrothPatchFile struct {
+	SubType itchio.BuildFileSubType `json:"subType"`
+	Size    int64                   `json:"size"`
+}
+
+func (i *Installer) brothGetBytes(format string, args ...interface{}) ([]byte, error) {
+	subpath := fmt.Sprintf(format, args...)
+	url := fmt.Sprintf("%s/%s", i.brothPackageURL(), strings.Trim(subpath, "/"))
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, errors.Errorf("Could not build GET request to %s", url)
+	}
+
+	res, err := i.client.Do(req)
+	if err != nil {
+		return nil, errors.WithMessage(err, fmt.Sprintf("While performing GET request to %s", url))
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return nil, errors.Errorf("Got HTTP %d for %s", res.StatusCode, url)
+	}
+
+	bs, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, errors.WithMessage(err, fmt.Sprintf("While reading GET request to %s", url))
+	}
+
+	return bs, nil
+}
+
+func (i *Installer) brothGetString(format string, args ...interface{}) (string, error) {
+	bs, err := i.brothGetBytes(format, args...)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(bs)), nil
+}
+
+func (i *Installer) brothGetResponse(r interface{}, format string, args ...interface{}) error {
+	bs, err := i.brothGetBytes(format, args...)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(bs, r)
+	if err != nil {
+		return errors.WithMessage(err, "unmarshalling broth response")
+	}
+
+	return nil
+}
+
+func (i *Installer) Upgrade(mv Multiverse) error {
+	appDir, ok := mv.GetValidAppDir()
+	if !ok {
+		return errors.Errorf("No valid app dir found in %s", mv.GetBaseDir())
+	}
+
+	currentVersion := strings.TrimPrefix(filepath.Base(appDir), "app-")
+	log.Printf("Installed: %s", currentVersion)
+
+	latestVersion, err := i.brothGetString("/LATEST")
+	if err != nil {
+		return err
+	}
+	log.Printf("Latest: %s", latestVersion)
+
+	upgradePath := &BrothUpgradePath{}
+	err = i.brothGetResponse(upgradePath, "/%s/upgrade-paths/%s",
+		currentVersion,
+		latestVersion,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

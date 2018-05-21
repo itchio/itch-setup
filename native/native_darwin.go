@@ -251,6 +251,7 @@ func StartItchSetup() {
 			C.SetLabel(C.CString(label))
 		},
 	})
+	installer.WarmUp()
 
 	installer.Install(installDir)
 }

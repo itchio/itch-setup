@@ -462,6 +462,7 @@ func (nc *nativeCore) showInstallGUI() error {
 			})
 		},
 	})
+	installer.WarmUp()
 
 	nwin.CenterWindow(nc.mainWindow.AsFormBase())
 

@@ -74,7 +74,8 @@ func (nc *nativeCore) Install() error {
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
 	}
-	win.SetTitle(cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName}))
+	baseTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
+	win.SetTitle(baseTitle)
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
 	})
@@ -178,6 +179,7 @@ func (nc *nativeCore) Install() error {
 			})
 		},
 		OnSource: func(source setup.InstallSource) {
+			win.SetTitle(fmt.Sprintf("%s - %s", baseTitle, source.Version))
 			sourceChan <- source
 		},
 		OnFinish: func(source setup.InstallSource) {
@@ -186,6 +188,7 @@ func (nc *nativeCore) Install() error {
 			})
 		},
 	})
+	installer.WarmUp()
 
 	kickoffInstall := func() {
 		kickErr := func() error {
@@ -222,7 +225,21 @@ func (nc *nativeCore) Uninstall() error {
 }
 
 func (nc *nativeCore) Upgrade() error {
-	return errors.Errorf("upgrade: stub!")
+	cli := nc.cli
+
+	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
+		AppName: cli.AppName,
+		BaseDir: nc.baseDir,
+	})
+	if err != nil {
+		return err
+	}
+
+	installer := setup.NewInstaller(setup.InstallerSettings{
+		Localizer: cli.Localizer,
+		AppName:   cli.AppName,
+	})
+	return installer.Upgrade(mv)
 }
 
 func (nc *nativeCore) Relaunch() error {
