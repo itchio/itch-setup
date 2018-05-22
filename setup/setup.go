@@ -15,6 +15,7 @@ import (
 
 	"github.com/itchio/savior/seeksource"
 
+	"github.com/itchio/httpkit/progress"
 	"github.com/itchio/httpkit/timeout"
 	"github.com/itchio/wharf/pwr"
 	"github.com/pkg/errors"
@@ -176,9 +177,9 @@ func (i *Installer) doInstall(appDir string, installSource InstallSource) error 
 	startTime := time.Now()
 
 	consumer := newConsumer()
-	consumer.OnProgress = func(progress float64) {
-		percent := int(progress * 100.0)
-		doneSize := int64(float64(container.Size) * progress)
+	consumer.OnProgress = func(progressVal float64) {
+		percent := int(progressVal * 100.0)
+		doneSize := int64(float64(container.Size) * progressVal)
 		secsSinceStart := time.Since(startTime).Seconds()
 		donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
 
@@ -190,7 +191,7 @@ func (i *Installer) doInstall(appDir string, installSource InstallSource) error 
 			localizer.T("setup.status.installing", map[string]string{"speed": speedStr}),
 		)
 		i.settings.OnProgressLabel(progressLabel)
-		i.settings.OnProgress(progress)
+		i.settings.OnProgress(progressVal)
 	}
 
 	log.Printf("Installing to %s", appDir)
