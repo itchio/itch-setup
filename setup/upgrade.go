@@ -9,15 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itchio/httpkit/timeout"
+	"github.com/itchio/httpkit/progress"
 
 	"github.com/itchio/wharf/eos/option"
 
-	"github.com/itchio/butler/progress"
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr/bowl"
 
-	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/go-itchio"
 	"github.com/itchio/savior/filesource"
 
@@ -175,12 +173,12 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		log.Printf("↑ No patch-based upgrade path found")
 	} else {
 		log.Printf("↑ Patching cost: %s (in %d patches)",
-			humanize.IBytes(uint64(pp.totalSize)),
+			progress.FormatBytes(pp.totalSize),
 			len(pp.path.Patches),
 		)
 	}
 	log.Printf("↺ Archive  cost: %s",
-		humanize.IBytes(uint64(ap.totalSize)),
+		progress.FormatBytes(ap.totalSize),
 	)
 
 	if pp != nil && pp.totalSize < ap.totalSize {
@@ -225,7 +223,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		if of != nil && of.Size < f.Size {
 			f = of
 		}
-		log.Printf("Using (%s) patch (%s)", f.SubType, humanize.IBytes(uint64(f.Size)))
+		log.Printf("Using (%s) patch (%s)", f.SubType, progress.FormatBytes(f.Size))
 
 		consumer := newConsumer()
 
@@ -238,10 +236,11 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		}
 		defer patchSource.Close()
 
-		counter := progress.NewCounter()
-		counter.SetSilent(true)
-		counter.SetTotalBytes(patchSource.Size())
-		counter.Start()
+		tracker := progress.NewTracker()
+		tracker.SetSilent(true)
+		tracker.SetTotalBytes(patchSource.Size())
+		tracker.Start()
+		defer tracker.Finish()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -255,11 +254,11 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 			for {
 				select {
 				case <-time.After(1 * time.Second):
-					counter.SetProgress(p.Progress())
+					tracker.SetProgress(p.Progress())
 					log.Printf("%.2f%% done - %s / s, ETA %s",
-						counter.Progress()*100,
-						humanize.IBytes(uint64(timeout.GetBPS())),
-						counter.ETA(),
+						tracker.Progress()*100,
+						progress.FormatBytes(int64(tracker.BPS())),
+						tracker.ETA(),
 					)
 				case <-ctx.Done():
 					return

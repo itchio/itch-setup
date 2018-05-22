@@ -19,7 +19,6 @@ import (
 	"github.com/itchio/wharf/pwr"
 	"github.com/pkg/errors"
 
-	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
@@ -184,7 +183,7 @@ func (i *Installer) doInstall(appDir string, installSource InstallSource) error 
 		donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
 
 		percentStr := fmt.Sprintf("%d%%", percent)
-		speedStr := fmt.Sprintf("%s/s", humanize.IBytes(uint64(donePerSec)))
+		speedStr := fmt.Sprintf("%s/s", progress.FormatBytes(donePerSec))
 
 		progressLabel := fmt.Sprintf("%s - %s",
 			localizer.T("setup.status.progress", map[string]string{"percent": percentStr}),
