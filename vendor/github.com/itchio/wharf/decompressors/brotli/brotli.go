@@ -1,4 +1,4 @@
-package cbrotli
+package brotli
 
 import (
 	"github.com/itchio/savior"

@@ -28,8 +28,7 @@ import (
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
 
-	_ "github.com/itchio/wharf/decompressors/cbrotli"
-	_ "github.com/itchio/wharf/decompressors/zstd"
+	_ "github.com/itchio/wharf/decompressors/brotli"
 )
 
 type ErrorHandler func(err error)
