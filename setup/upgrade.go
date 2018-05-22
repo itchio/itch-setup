@@ -4,12 +4,24 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/itchio/httpkit/timeout"
+
+	"github.com/itchio/wharf/eos/option"
+
+	"github.com/itchio/butler/progress"
+	"github.com/itchio/wharf/pools/fspool"
+	"github.com/itchio/wharf/pwr/bowl"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/itchio/go-itchio"
+	"github.com/itchio/savior/filesource"
 
+	"github.com/itchio/wharf/pwr/patcher"
 	"github.com/itchio/wharf/taskgroup"
 	"github.com/pkg/errors"
 )
@@ -171,5 +183,143 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		humanize.IBytes(uint64(ap.totalSize)),
 	)
 
+	if pp != nil && pp.totalSize < ap.totalSize {
+		err = i.applyPatches(mv, ls, pp)
+		if err == nil {
+			log.Printf("Patching went fine!")
+			return nil
+		}
+
+		log.Printf("Patching went wrong, falling back to archive.")
+		log.Printf("The patching error was: %+v", err)
+	}
+
+	return i.applyArchive()
+}
+
+func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) error {
+	up := pp.path
+	log.Printf("Applying %d patches...", len(up.Patches))
+
+	stagingDir := filepath.Join(mv.GetBaseDir(), ".itch-setup-staging")
+	log.Printf("Using (%s) as staging directory", stagingDir)
+
+	err := os.RemoveAll(stagingDir)
+	if err != nil {
+		return errors.WithMessage(err, "Could not clean staging dir")
+	}
+	err = os.MkdirAll(stagingDir, 0755)
+	if err != nil {
+		return errors.WithMessage(err, "Could not make staging dir")
+	}
+	defer os.RemoveAll(stagingDir)
+
+	applyOne := func(bp *BrothPatch, targetDir string, outputDir string) error {
+		log.Printf("Upgrading to %s...", bp.Version)
+		f := bp.FindSubType(itchio.BuildFileSubTypeDefault)
+		if f == nil {
+			return errors.Errorf("Could not find default patch file for version %s, giving up", bp.Version)
+		}
+
+		of := bp.FindSubType(itchio.BuildFileSubTypeOptimized)
+		if of != nil && of.Size < f.Size {
+			f = of
+		}
+		log.Printf("Using (%s) patch (%s)", f.SubType, humanize.IBytes(uint64(f.Size)))
+
+		consumer := newConsumer()
+
+		patchURL := fmt.Sprintf("%s/%s/patch/%s", i.brothPackageURL(), bp.Version, f.SubType)
+		log.Printf("☁ %s", patchURL)
+
+		patchSource, err := filesource.Open(patchURL, option.WithConsumer(consumer))
+		if err != nil {
+			return err
+		}
+		defer patchSource.Close()
+
+		counter := progress.NewCounter()
+		counter.SetSilent(true)
+		counter.SetTotalBytes(patchSource.Size())
+		counter.Start()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		p, err := patcher.New(patchSource, consumer)
+		if err != nil {
+			return err
+		}
+
+		go func() {
+			for {
+				select {
+				case <-time.After(1 * time.Second):
+					counter.SetProgress(p.Progress())
+					log.Printf("%.2f%% done - %s / s, ETA %s",
+						counter.Progress()*100,
+						humanize.IBytes(uint64(timeout.GetBPS())),
+						counter.ETA(),
+					)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		targetPool := fspool.New(p.GetTargetContainer(), targetDir)
+
+		bwl, err := bowl.NewFreshBowl(&bowl.FreshBowlParams{
+			TargetContainer: p.GetTargetContainer(),
+			TargetPool:      targetPool,
+			SourceContainer: p.GetSourceContainer(),
+			OutputFolder:    outputDir,
+		})
+		if err != nil {
+			return err
+		}
+
+		err = p.Resume(nil, targetPool, bwl)
+		if err != nil {
+			return err
+		}
+
+		err = bwl.Commit()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	targetDir := ls.appDir
+	var outputDir string
+	var latestVersion string
+	for _, p := range up.Patches {
+		outputDir = filepath.Join(stagingDir, fmt.Sprintf("app-%s", p.Version))
+		err := applyOne(p, targetDir, outputDir)
+		if err != nil {
+			return err
+		}
+		targetDir = outputDir
+		latestVersion = p.Version
+	}
+
+	log.Printf("Fully upgraded into (%s)", outputDir)
+
+	finalDir, err := mv.MakeAppDir(latestVersion)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Moving to (%s)", finalDir)
+	err = os.Rename(outputDir, finalDir)
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+func (i *Installer) applyArchive() error {
+	return errors.Errorf("Apply archive: stub!")
 }

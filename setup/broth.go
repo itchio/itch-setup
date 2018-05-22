@@ -23,7 +23,7 @@ type BrothBuildFile struct {
 }
 
 type BrothUpgradePath struct {
-	Patches []BrothPatch `json:"patches"`
+	Patches []*BrothPatch `json:"patches"`
 }
 
 type BrothPatch struct {
