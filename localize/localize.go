@@ -34,7 +34,6 @@ func NewLocalizer(loadAsset AssetLoader) (*Localizer, error) {
 }
 
 func (l *Localizer) SetLang(lang string) {
-	log.Println("Switching to lang", lang)
 	l.lang = lang
 }
 
@@ -42,11 +41,14 @@ func (l *Localizer) LoadLocale(locale string) error {
 	locale = strings.Replace(locale, "-", "_", -1)
 
 	assetPath := fmt.Sprintf("data/locales/%s.json", locale)
-	log.Println("Trying to load locale", locale)
 
 	localeBytes, err := l.loadAsset(assetPath)
 	if err != nil {
-		log.Println("While looking for locale file", locale, err.Error())
+		if strings.Contains(err.Error(), "not found") {
+			// ignore
+		} else {
+			log.Println("While looking for locale file", locale, err.Error())
+		}
 		return err
 	}
 

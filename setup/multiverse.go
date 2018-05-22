@@ -87,7 +87,7 @@ func (m *multiverse) validateAppDir(appDir string) error {
 		return err
 	}
 
-	log.Printf("Found valid wharf signature at %s", sigPath)
+	log.Printf("✓ Found valid wharf signature at %s", sigPath)
 
 	vc := &pwr.ValidatorContext{
 		Consumer: newConsumer(),
@@ -99,7 +99,7 @@ func (m *multiverse) validateAppDir(appDir string) error {
 		return err
 	}
 
-	log.Printf("App dir matches signature: %s", appDir)
+	log.Printf("✓ App dir matches signature: %s", appDir)
 	return nil
 }
 
@@ -147,7 +147,7 @@ func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 	mv := &multiverse{
 		params: params,
 	}
-	log.Printf("Initializing '%s' multiverse @ %s", params.AppName, params.BaseDir)
+	log.Printf("Initializing (%s) multiverse @ (%s)", params.AppName, params.BaseDir)
 
 	entries, err := ioutil.ReadDir(params.BaseDir)
 	if err != nil {
@@ -155,11 +155,9 @@ func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 		return mv, nil
 	}
 
-	log.Printf("Looking through %d entries...", len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			if entry.Name() == mv.markerName() {
-				log.Printf("Found marker...")
 				mv.foundMarker = true
 			}
 			continue
@@ -169,16 +167,15 @@ func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 			continue
 		}
 
-		log.Printf("Found app dir %s", entry.Name())
+		log.Printf("✓ Found app dir (%s)", entry.Name())
 		mv.appDirs = append(mv.appDirs, entry.Name())
 	}
 
 	if len(mv.appDirs) == 0 {
-		log.Printf("No app dirs in sight, it's install time!")
+		log.Printf("❌ No app dirs found")
 		return mv, nil
 	}
 
-	log.Printf("Found %d app dirs, sorting them from most recent to least recent...", len(mv.appDirs))
 	sort.Sort(sort.Reverse(sort.StringSlice(mv.appDirs)))
 
 	return mv, nil
