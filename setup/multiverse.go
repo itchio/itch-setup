@@ -194,7 +194,12 @@ func (mv *multiverse) MakeReadyCurrent() error {
 		log.Printf("(%s) already at right location", readyPath)
 	} else {
 		log.Printf("Renaming (%s) to (%s)", readyPath, newCurrentPath)
-		err := os.Rename(readyPath, newCurrentPath)
+		err := os.MkdirAll(filepath.Dir(newCurrentPath), 0755)
+		if err != nil {
+			return err
+		}
+
+		err = os.Rename(readyPath, newCurrentPath)
 		if err != nil {
 			if currentBuild != nil {
 				os.Rename(currentBuildSave, currentBuild.Path)

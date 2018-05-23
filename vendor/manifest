@@ -193,6 +193,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/itchio/go-itchio",
+			"repository": "https://github.com/itchio/go-itchio",
+			"vcs": "git",
+			"revision": "ea71d95c5f0b835e2ef5695d3b1e6cadf5df4758",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/itchio/httpkit",
 			"repository": "https://github.com/itchio/httpkit",
 			"vcs": "git",
@@ -290,6 +298,14 @@
 			"repository": "https://github.com/mitchellh/go-ps",
 			"vcs": "git",
 			"revision": "4fdf99ab29366514c69ccccddab5dc58b8d84062",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/mitchellh/mapstructure",
+			"repository": "https://github.com/mitchellh/mapstructure",
+			"vcs": "git",
+			"revision": "bb74f1db0675b241733089d5a1faa5dd8b0ef57b",
 			"branch": "master",
 			"notests": true
 		},

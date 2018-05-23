@@ -1,6 +1,3 @@
 {
-  "go.buildOnSave": "off",
-  "go.vetOnSave": "package",
-  "go.lintOnSave": "package",
   "go.lintTool": "golint"
 }
