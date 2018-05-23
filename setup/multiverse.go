@@ -15,22 +15,22 @@ import (
 type multiverseState struct {
 	// Current is the version that's installed and used.
 	// It might be currently running at that point.
-	Current string
+	Current string `json:"current"`
 
 	// Ready is a version we've installed but aren't using yet.
 	// It'll be used on next launch or when `--relaunch` is
 	// called.
-	Ready string
+	Ready string `json:"ready"`
 }
 
-type InstalledBuild struct {
+type BuildFolder struct {
 	Version string
 	Path    string
 }
 
 type Multiverse interface {
 	// Called on launch, or when upgrading
-	GetCurrentVersion() *InstalledBuild
+	GetCurrentVersion() *BuildFolder
 
 	// Called when we start patching
 	MakeStagingFolder() (string, error)
@@ -38,7 +38,7 @@ type Multiverse interface {
 	CleanStagingFolder() error
 
 	// Record a freshly-patched build as ready
-	QueueReady(build *InstalledBuild) error
+	QueueReady(build *BuildFolder) error
 
 	// Make the ready build current.
 	MakeReadyCurrent() error
@@ -94,15 +94,15 @@ func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 	return mv, nil
 }
 
-func (mv *multiverse) GetCurrentVersion() *InstalledBuild {
-	current := mv.state.Current
-	if current == "" {
+func (mv *multiverse) GetCurrentVersion() *BuildFolder {
+	currentVersion := mv.state.Current
+	if currentVersion == "" {
 		return nil
 	}
 
-	build := &InstalledBuild{
-		Version: current,
-		Path:    mv.versionToBasename(current),
+	build := &BuildFolder{
+		Version: currentVersion,
+		Path:    mv.makePathForCurrent(currentVersion),
 	}
 	return build
 }
@@ -127,7 +127,7 @@ func (mv *multiverse) CleanStagingFolder() error {
 	return os.RemoveAll(path)
 }
 
-func (mv *multiverse) QueueReady(build *InstalledBuild) error {
+func (mv *multiverse) QueueReady(build *BuildFolder) error {
 	s := mv.state
 	if s.Ready != "" {
 		log.Printf("Replacing ready (%s) with (%s)", s.Ready, build.Version)
@@ -135,10 +135,19 @@ func (mv *multiverse) QueueReady(build *InstalledBuild) error {
 		log.Printf("Queuing ready (%s)", build.Version)
 	}
 
+	if !filepath.IsAbs(build.Path) {
+		return errors.Errorf("Internal error: Ready BuildFolder must have absolute path, but got (%s)", build.Path)
+	}
+
 	readyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(build.Version))
 	log.Printf("Storing in (%s)", readyPath)
 
-	err := os.Rename(build.Path, readyPath)
+	err := os.RemoveAll(readyPath)
+	if err != nil {
+		return errors.WithMessage(err, "making sure ready version's folder does not exist")
+	}
+
+	err = os.Rename(build.Path, readyPath)
 	if err != nil {
 		return errors.WithMessage(err, "moving ready version to its proper place")
 	}
@@ -158,6 +167,8 @@ func (mv *multiverse) MakeReadyCurrent() error {
 		return errors.Errorf("No ready to make current")
 	}
 
+	log.Printf("Attempting to make (%s) the current version over (%s)", s.Ready, s.Current)
+
 	currentBuild := mv.GetCurrentVersion()
 	var currentBuildSave string
 	if currentBuild != nil {
@@ -173,7 +184,7 @@ func (mv *multiverse) MakeReadyCurrent() error {
 	newCurrentPath := mv.makePathForCurrent(s.Ready)
 
 	if readyPath == newCurrentPath {
-		log.Printf("(%s) already at right location", readyPath, newCurrentPath)
+		log.Printf("(%s) already at right location", readyPath)
 	} else {
 		log.Printf("Renaming (%s) to (%s)", readyPath, newCurrentPath)
 		err := os.Rename(readyPath, newCurrentPath)
@@ -234,6 +245,8 @@ func (mv *multiverse) readState() error {
 		return errors.WithMessage(err, "unmarshalling multiverse state file")
 	}
 
+	mv.state = state
+
 	return nil
 }
 
@@ -241,6 +254,11 @@ func (mv *multiverse) saveState() error {
 	bs, err := json.Marshal(mv.state)
 	if err != nil {
 		return errors.WithMessage(err, "marshalling multiverse state file")
+	}
+
+	err = os.MkdirAll(filepath.Dir(mv.statePath()), 0755)
+	if err != nil {
+		return errors.WithMessage(err, "creating folder for multiverse state file")
 	}
 
 	f, err := safefile.Create(mv.statePath(), 0644)
@@ -263,5 +281,5 @@ func (mv *multiverse) saveState() error {
 }
 
 func (mv *multiverse) String() string {
-	return fmt.Sprintf("(%s)(current = %q, ready = %q)", mv.params.BaseDir, mv.state.Ready, mv.state.Current)
+	return fmt.Sprintf("(%s)(current = %q, ready = %q)", mv.params.BaseDir, mv.state.Current, mv.state.Ready)
 }

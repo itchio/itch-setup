@@ -121,7 +121,8 @@ func (nc *nativeCore) Install() error {
 	}
 	box.Add(i)
 
-	win.SetIconFromFile(loadBundledImage("data/itch-icon.png"))
+	iconPath := loadBundledImage(fmt.Sprintf("data/%s-icon.png", cli.AppName))
+	win.SetIconFromFile(iconPath)
 
 	log.Printf("Setting up progress bar...")
 
@@ -275,7 +276,7 @@ func (nc *nativeCore) Relaunch() error {
 // Tries launching the app from a valid app dir.
 // This always exits. If it fails, it shows an error dialog
 // first. If it succeeds, it exits gracefully.
-func (nc *nativeCore) tryLaunch(b *setup.InstalledBuild) {
+func (nc *nativeCore) tryLaunch(b *setup.BuildFolder) {
 	cli := nc.cli
 
 	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)

@@ -561,7 +561,7 @@
   "usage_stats.never_used": "Never used",
   "setup.window.title": "{{app_name}} Setup",
   "setup.window.welcome":
-    "Welcome to the {{app_name}} installer! Pick an install location and proceed.",
+    "Welcome to the {{app_name}} installer! Grab a drink, pick an install location and proceed.",
   "setup.tooltip.location": "Click to change the install location",
   "setup.location.message": "Choose where the app should be installed",
   "setup.action.install": "Install now",

@@ -8,8 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/itchio/savior"
+
 	"github.com/itchio/httpkit/progress"
 
+	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/eos/option"
 
 	"github.com/itchio/wharf/pools/fspool"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/itchio/go-itchio"
 	"github.com/itchio/savior/filesource"
+	"github.com/itchio/savior/zipextractor"
 
 	"github.com/itchio/wharf/pwr/patcher"
 	"github.com/itchio/wharf/taskgroup"
@@ -189,7 +193,7 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		log.Printf("The patching error was: %+v", err)
 	}
 
-	return i.applyArchive()
+	return i.applyArchive(mv, rs, ap)
 }
 
 func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) error {
@@ -240,22 +244,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		if err != nil {
 			return err
 		}
-
-		go func() {
-			for {
-				select {
-				case <-time.After(1 * time.Second):
-					tracker.SetProgress(p.Progress())
-					log.Printf("%.2f%% done - %s / s, ETA %s",
-						tracker.Progress()*100,
-						progress.FormatBytes(int64(tracker.BPS())),
-						tracker.ETA(),
-					)
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
+		startPrintingProgress(ctx, tracker)
 
 		targetPool := fspool.New(p.GetTargetContainer(), targetDir)
 
@@ -296,7 +285,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 	}
 
 	log.Printf("Fully upgraded into (%s)", outputDir)
-	err = mv.QueueReady(&InstalledBuild{
+	err = mv.QueueReady(&BuildFolder{
 		Version: latestVersion,
 		Path:    outputDir,
 	})
@@ -306,6 +295,97 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 	return nil
 }
 
-func (i *Installer) applyArchive() error {
-	return errors.Errorf("Apply archive: stub!")
+func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan) error {
+	log.Printf("Upgrading to (%s) using archive...", rs.version)
+
+	archiveURL := fmt.Sprintf("%s/%s/archive/default", i.brothPackageURL(), rs.version)
+	log.Printf("☁ %s", archiveURL)
+
+	consumer := newConsumer()
+
+	archiveFile, err := eos.Open(archiveURL, option.WithConsumer(i.consumer))
+	if err != nil {
+		return err
+	}
+
+	archiveStats, err := archiveFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	ex, err := zipextractor.New(archiveFile, archiveStats.Size())
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tracker := progress.NewTracker()
+	tracker.SetSilent(true)
+	tracker.SetTotalBytes(archiveStats.Size())
+	tracker.Start()
+	defer tracker.Finish()
+
+	consumer.OnProgress = tracker.SetProgress
+	ex.SetConsumer(consumer)
+	startPrintingProgress(ctx, tracker)
+
+	stagingFolder, err := mv.MakeStagingFolder()
+	if err != nil {
+		return err
+	}
+	defer mv.CleanStagingFolder()
+
+	outputDir := filepath.Join(stagingFolder, fmt.Sprintf("app-%s", rs.version))
+	log.Printf("Extracting %s to (%s)", progress.FormatBytes(archiveStats.Size()), outputDir)
+
+	sink := &savior.FolderSink{
+		Consumer:  consumer,
+		Directory: outputDir,
+	}
+	defer sink.Close()
+
+	startTime := time.Now()
+
+	res, err := ex.Resume(nil, sink)
+	if err != nil {
+		return err
+	}
+
+	duration := time.Since(startTime)
+
+	log.Printf("Extracted %s (%s) at %s (%s total)",
+		progress.FormatBytes(res.Size()),
+		res.Stats(),
+		progress.FormatBPS(res.Size(), duration),
+		progress.FormatDuration(duration),
+	)
+
+	err = mv.QueueReady(&BuildFolder{
+		Version: rs.version,
+		Path:    outputDir,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func startPrintingProgress(ctx context.Context, tracker *progress.Tracker) {
+	go func() {
+		for {
+			select {
+			case <-time.After(1 * time.Second):
+				log.Printf("%.2f%% done - %s / s, ETA %s",
+					tracker.Progress()*100,
+					progress.FormatBytes(int64(tracker.BPS())),
+					tracker.ETA(),
+				)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }

@@ -142,8 +142,8 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 
 	version := installSource.Version
 
-	signatureURL := fmt.Sprintf("%s/%s/signature", i.brothPackageURL(), version)
-	archiveURL := fmt.Sprintf("%s/%s/archive", i.brothPackageURL(), version)
+	signatureURL := fmt.Sprintf("%s/%s/signature/default", i.brothPackageURL(), version)
+	archiveURL := fmt.Sprintf("%s/%s/archive/default", i.brothPackageURL(), version)
 
 	sigSource, err := filesource.Open(signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {
@@ -158,7 +158,7 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 	}
 
 	container := sigInfo.Container
-	log.Printf("To install: %s", container.Stats())
+	log.Printf("Installing %s", container)
 
 	startTime := time.Now()
 
@@ -180,12 +180,29 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 		i.settings.OnProgress(progressVal)
 	}
 
-	stagingFolder, err := mv.MakeStagingFolder()
-	if err != nil {
-		return err
+	useStaging := false
+
+	var appDir string
+	currentBuildFolder := mv.GetCurrentVersion()
+	if currentBuildFolder != nil && currentBuildFolder.Version == version {
+		log.Printf("Looks like (%s) is already installed to (%s)", version, currentBuildFolder.Path)
+		log.Printf("Let's just heal that")
+		appDir = currentBuildFolder.Path
+	} else {
+		log.Printf("(%s) is not installed yet, let's go through staging", version)
+		if currentBuildFolder != nil {
+			log.Printf("(Note: current version is (%s) at this time)", currentBuildFolder.Version)
+		}
+		useStaging = true
+
+		stagingFolder, err := mv.MakeStagingFolder()
+		if err != nil {
+			return err
+		}
+		defer mv.CleanStagingFolder()
+		appDir = filepath.Join(stagingFolder, fmt.Sprintf("app-%s", version))
 	}
 
-	appDir := filepath.Join(stagingFolder, fmt.Sprintf("app-%s", version))
 	log.Printf("Installing to %s", appDir)
 
 	healPath := fmt.Sprintf("archive,%s", archiveURL)
@@ -202,17 +219,35 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 		return errors.WithMessage(err, "while installing")
 	}
 
-	err = mv.QueueReady(&InstalledBuild{
-		Path:    appDir,
-		Version: version,
-	})
-	if err != nil {
-		return err
+	duration := time.Since(startTime)
+
+	wc := vc.WoundsConsumer
+	if wc != nil {
+		if ah, ok := wc.(*pwr.ArchiveHealer); ok {
+			log.Printf("%s was healed @ %s (%s total)",
+				progress.FormatBytes(ah.TotalHealed()),
+				progress.FormatBPS(ah.TotalHealed(), duration),
+				progress.FormatDuration(duration),
+			)
+		}
 	}
 
-	err = mv.MakeReadyCurrent()
-	if err != nil {
-		return err
+	if useStaging {
+		log.Printf("Used staging, queuing as ready then making current...")
+		err = mv.QueueReady(&BuildFolder{
+			Path:    appDir,
+			Version: version,
+		})
+		if err != nil {
+			return err
+		}
+
+		err = mv.MakeReadyCurrent()
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Printf("Healed in-place, nothing left to do")
 	}
 
 	i.settings.OnProgressLabel(localizer.T("setup.status.done"))
