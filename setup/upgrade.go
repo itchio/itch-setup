@@ -14,6 +14,7 @@ import (
 
 	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/eos/option"
+	"github.com/itchio/wharf/pwr"
 
 	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr/bowl"
@@ -199,6 +200,37 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) error {
 	up := pp.path
 	log.Printf("Applying %d patches...", len(up.Patches))
+
+	{
+		log.Printf("But first, let's check (%s) is a valid build for (%s)", ls.appDir, ls.version)
+
+		signatureURL := fmt.Sprintf("%s/%s/signature/default", i.brothPackageURL(), ls.version)
+		log.Printf("☁ %s", signatureURL)
+
+		consumer := newConsumer()
+		sigSource, err := filesource.Open(signatureURL, option.WithConsumer(consumer))
+		if err != nil {
+			return err
+		}
+		defer sigSource.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		sigInfo, err := pwr.ReadSignature(ctx, sigSource)
+		if err != nil {
+			return err
+		}
+
+		vc := pwr.ValidatorContext{
+			Consumer:   consumer,
+			FailFast:   true,
+			NumWorkers: 2,
+		}
+		err = vc.Validate(ctx, ls.appDir, sigInfo)
+		if err != nil {
+			return err
+		}
+	}
 
 	stagingDir, err := mv.MakeStagingFolder()
 	if err != nil {

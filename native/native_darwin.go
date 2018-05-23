@@ -11,14 +11,11 @@ void Quit();
 import "C"
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -30,10 +27,10 @@ import (
 )
 
 type nativeCore struct {
-	cli         cl.CLI
-	selfPath    string
-	roamingPath string
-	homePath    string
+	cli                  cl.CLI
+	selfPath             string
+	roamingSetupPath     string
+	homeApplicationsPath string
 }
 
 var globalNc *nativeCore
@@ -47,9 +44,9 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 	if err != nil {
 		return nil, err
 	}
-	nc.roamingPath = filepath.Join(appSupportPath, cli.AppName)
+	nc.roamingSetupPath = filepath.Join(appSupportPath, fmt.Sprintf("%s-setup", cli.AppName))
 
-	log.Printf("Roaming path: %s", nc.roamingPath)
+	log.Printf("Base dir: %s", nc.roamingSetupPath)
 
 	selfPath, err := os.Executable()
 	if err != nil {
@@ -62,8 +59,8 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 	if err != nil {
 		return nil, err
 	}
-	nc.homePath = homePath
-	log.Printf("Home path: %s", nc.homePath)
+	nc.homeApplicationsPath = filepath.Join(homePath, "Applications")
+	log.Printf("Home Applications path: %s", nc.homeApplicationsPath)
 
 	globalNc = nc
 
@@ -92,36 +89,39 @@ func (nc *nativeCore) Uninstall() error {
 }
 
 func (nc *nativeCore) Upgrade() error {
-	return errors.Errorf("upgrade: stub!")
+	cli := nc.cli
+
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+
+	installer := setup.NewInstaller(setup.InstallerSettings{
+		Localizer: cli.Localizer,
+		AppName:   cli.AppName,
+	})
+	return installer.Upgrade(mv)
 }
 
 func (nc *nativeCore) Relaunch() error {
 	pid := nc.cli.RelaunchPID
 
-	log.Printf("Should relaunch! Looking for PID %d...", pid)
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	setup.WaitForProcessToExit(ctx, pid)
 
-	for tries := 10; tries > 0; tries-- {
-		proc, err := os.FindProcess(pid)
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+
+	if mv.HasReadyPending() {
+		err = mv.MakeReadyCurrent()
 		if err != nil {
-			log.Printf("Waiting 2 seconds then retrying: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
+			return err
 		}
-
-		proc.Release()
-		break
 	}
 
-	bundlePath := nc.bundlePath()
-	log.Printf("PID %d has exited, now launching bundle %s", pid, bundlePath)
-
-	ret := C.LaunchBundle(C.CString(bundlePath))
-	if int(ret) != 0 {
-		log.Printf("Launched bundle successfully!")
-	} else {
-		log.Printf("Could not launch bundle successfully")
-	}
-
+	nc.tryLaunchCurrent(mv)
 	return nil
 }
 
@@ -136,110 +136,36 @@ func StartItchSetup() {
 	nc := globalNc
 	cli := nc.cli
 
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		nc.ErrorDialog(err)
+	}
+
 	if cli.Silent {
 		C.SetLabel(C.CString("Silent install mode is not supported on macOS"))
 		return
 	}
 
-	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-setup", cli.AppName))
-	if err != nil {
-		log.Fatal("Could not get temporary directory", err)
+	if cli.PreferLaunch {
+		log.Printf("--prefer-launch passed, looking for valid install")
+		err := nc.tryLaunchCurrent(mv)
+		if err != nil {
+			log.Printf("Could not launch current: %v", err)
+			log.Printf("Carrying on with install")
+		}
 	}
-
-	trash := filepath.Join(tmpDir, "trash")
-
-	err = os.MkdirAll(trash, os.FileMode(0755))
-	if err != nil {
-		log.Fatal("Could not create temporary directory", err)
-	}
-
-	bundleName := nc.bundleName()
-	installDir := filepath.Join(tmpDir, bundleName)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
 		OnError: func(err error) {
+			log.Printf("Error: %+v", err)
 			C.SetLabel(C.CString(fmt.Sprintf("%+v", err)))
 		},
 		OnFinish: func(source setup.InstallSource) {
-			bundlePath := nc.bundlePath()
-
-			log.Printf("Validating bundle for %s...\n", source.Version)
-			errMsg := C.ValidateBundle(C.CString(installDir))
-			if errMsg != nil {
-				C.SetLabel(errMsg)
-				return
-			}
-			log.Printf("New bundle is valid!\n")
-
-			// always, even when installing kitch
-			selfName := "itch-setup"
-			selfDstPath := filepath.Join(nc.roamingPath, selfName)
-			log.Printf("Copying self to %s", selfDstPath)
-
-			showError := func(err error) {
-				C.SetLabel(C.CString(fmt.Sprintf("%+v", err)))
-			}
-
-			selfSrc, err := os.Open(nc.selfPath)
+			err := nc.tryLaunchCurrent(mv)
 			if err != nil {
-				showError(err)
-				return
-			}
-			defer selfSrc.Close()
-
-			err = os.MkdirAll(filepath.Dir(selfDstPath), 0755)
-			if err != nil {
-				showError(err)
-				return
-			}
-
-			selfDst, err := os.OpenFile(selfDstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
-			if err != nil {
-				showError(err)
-				return
-			}
-			defer selfDst.Close()
-
-			_, err = io.Copy(selfDst, selfSrc)
-			if err != nil {
-				showError(err)
-				return
-			}
-			selfDst.Close()
-
-			pidString := fmt.Sprintf("%d", os.Getpid())
-			var args = []string{
-				"--appname",
-				cli.AppName,
-				"--relaunch",
-				"--relaunch-pid",
-				pidString,
-			}
-			log.Printf("Starting %s ::: %s", selfDstPath, strings.Join(args, " ::: "))
-			cmd := exec.Command(selfDstPath, args...)
-			err = cmd.Start()
-			if err != nil {
-				showError(err)
-				return
-			}
-
-			log.Printf("Trashing existing %s if any\n", bundlePath)
-			os.Rename(bundlePath, filepath.Join(trash, bundleName))
-
-			log.Printf("Moving %s into %s\n", installDir, bundlePath)
-			err = os.Rename(installDir, bundlePath)
-			if err != nil {
-				showError(err)
-				return
-			}
-
-			log.Printf("Cleaning up %s\n", tmpDir)
-			err = os.RemoveAll(tmpDir)
-			if err != nil {
-				showError(err)
-				return
+				nc.ErrorDialog(err)
 			}
 
 			C.Quit()
@@ -253,13 +179,43 @@ func StartItchSetup() {
 	})
 	installer.WarmUp()
 
-	installer.Install(installDir)
+	installer.Install(mv)
 }
 
-func (nc *nativeCore) bundleName() string {
-	return fmt.Sprintf("%s.app", nc.cli.AppName)
+func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
+	b := mv.GetCurrentVersion()
+	if b == nil {
+		return errors.Errorf("No valid version of %s found installed", nc.cli.AppName)
+	}
+
+	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
+	if C.LaunchBundle(C.CString(b.Path)) == 0 {
+		return errors.Errorf("Could not launch (%s)", b.Path)
+	}
+
+	log.Printf("Bundle launched successfully, getting out of the way")
+	C.Quit()
+
+	// unreachable, but the go compiler doesn't know it
+	return nil
 }
 
-func (nc *nativeCore) bundlePath() string {
-	return filepath.Join(nc.homePath, "Applications", nc.bundleName())
+func (nc *nativeCore) validateBundle(bundlePath string) error {
+	log.Printf("Making sure (%s) is signed and valid", bundlePath)
+
+	result := C.ValidateBundle(C.CString(bundlePath))
+	if result != nil {
+		return errors.Errorf("Bundle (%s) invalid: %s", bundlePath, C.GoString(result))
+	}
+	return nil
+}
+
+func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
+	return setup.NewMultiverse(&setup.MultiverseParams{
+		AppName:         nc.cli.AppName,
+		BaseDir:         nc.roamingSetupPath,
+		ApplicationsDir: nc.homeApplicationsPath,
+
+		OnValidate: nc.validateBundle,
+	})
 }

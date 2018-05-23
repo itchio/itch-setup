@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+type ValidateHandler func(dir string) error
+
 type multiverseState struct {
 	// Current is the version that's installed and used.
 	// It might be currently running at that point.
@@ -46,6 +48,10 @@ type Multiverse interface {
 	// Make the ready build current.
 	MakeReadyCurrent() error
 
+	// Validates the current build (can be used after heal)
+	ValidateCurrent() error
+
+	// Returns a human-friendly representation of the state of this multiverse
 	String() string
 }
 
@@ -66,6 +72,9 @@ type MultiverseParams struct {
 	// If non-empty, this is where we'll store current
 	// on macOS, this is `~/Applications`
 	ApplicationsDir string
+
+	// This is called with a folder before making it the current version
+	OnValidate ValidateHandler
 }
 
 func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
@@ -175,6 +184,12 @@ func (mv *multiverse) MakeReadyCurrent() error {
 	}
 
 	log.Printf("Attempting to make (%s) the current version over (%s)", s.Ready, s.Current)
+	readyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(s.Ready))
+
+	err := mv.validateDir(readyPath)
+	if err != nil {
+		return err
+	}
 
 	currentBuild := mv.GetCurrentVersion()
 	var currentBuildSave string
@@ -187,14 +202,18 @@ func (mv *multiverse) MakeReadyCurrent() error {
 		}
 	}
 
-	readyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(s.Ready))
 	newCurrentPath := mv.makePathForCurrent(s.Ready)
 
 	if readyPath == newCurrentPath {
 		log.Printf("(%s) already at right location", readyPath)
 	} else {
 		log.Printf("Renaming (%s) to (%s)", readyPath, newCurrentPath)
-		err := os.Rename(readyPath, newCurrentPath)
+		err := os.MkdirAll(filepath.Dir(newCurrentPath), 0755)
+		if err != nil {
+			return err
+		}
+
+		err = os.Rename(readyPath, newCurrentPath)
 		if err != nil {
 			if currentBuild != nil {
 				os.Rename(currentBuildSave, currentBuild.Path)
@@ -210,11 +229,29 @@ func (mv *multiverse) MakeReadyCurrent() error {
 
 	s.Current = s.Ready
 	s.Ready = ""
-	err := mv.saveState()
+	err = mv.saveState()
 	if err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (mv *multiverse) ValidateCurrent() error {
+	return mv.validateDir(mv.makePathForCurrent(mv.state.Current))
+}
+
+func (mv *multiverse) validateDir(dir string) error {
+	if mv.params.OnValidate == nil {
+		log.Printf("No validate handler, assuming good!")
+		return nil
+	}
+
+	log.Printf("Validating (%s) ...", dir)
+	err := mv.params.OnValidate(dir)
+	if err != nil {
+		return errors.WithMessage(err, "while validating new version")
+	}
 	return nil
 }
 

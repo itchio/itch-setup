@@ -122,14 +122,17 @@ char *ValidateBundle(char *cBundlePath) {
     return "Bundle isn't signed/valid";
   }
 
+  NSLog(@"Bundle %@ is signed and valid.", bundleURL);
   return nil;
 }
 
 int LaunchBundle(char *cBundlePath) {
   id bundlePath = [NSString stringWithUTF8String:cBundlePath];
-  BOOL success = [[NSWorkspace sharedWorkspace] openFile:[bundlePath stringByExpandingTildeInPath]];
+  NSLog(@"Opening bundle %@", bundlePath);
+  BOOL success = [[NSWorkspace sharedWorkspace] launchApplication:bundlePath];
+  NSLog(@"Success? %@", success ? @"yes" : @"no");
 
-  return (int) success;
+  return success ? 1 : 0;
 }
 
 void Quit() {

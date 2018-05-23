@@ -247,7 +247,11 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 			return err
 		}
 	} else {
-		log.Printf("Healed in-place, nothing left to do")
+		log.Printf("Healed in-place")
+		err = mv.ValidateCurrent()
+		if err != nil {
+			return err
+		}
 	}
 
 	i.settings.OnProgressLabel(localizer.T("setup.status.done"))

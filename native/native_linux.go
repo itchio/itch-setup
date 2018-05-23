@@ -221,10 +221,7 @@ func (nc *nativeCore) Uninstall() error {
 func (nc *nativeCore) Upgrade() error {
 	cli := nc.cli
 
-	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
-		AppName: cli.AppName,
-		BaseDir: nc.baseDir,
-	})
+	mv, err := nc.newMultiverse()
 	if err != nil {
 		return err
 	}
