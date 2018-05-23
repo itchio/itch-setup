@@ -89,7 +89,18 @@ func (nc *nativeCore) Uninstall() error {
 }
 
 func (nc *nativeCore) Upgrade() error {
-	return errors.Errorf("upgrade: stub!")
+	cli := nc.cli
+
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+
+	installer := setup.NewInstaller(setup.InstallerSettings{
+		Localizer: cli.Localizer,
+		AppName:   cli.AppName,
+	})
+	return installer.Upgrade(mv)
 }
 
 func (nc *nativeCore) Relaunch() error {
