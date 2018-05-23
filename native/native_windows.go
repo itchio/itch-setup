@@ -2,6 +2,7 @@ package native
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -27,7 +28,6 @@ type nativeCore struct {
 	mainWindow *walk.MainWindow
 	folders    nwin.Folders
 	baseDir    string
-	multiverse setup.Multiverse
 }
 
 func NewNativeCore(cli cl.CLI) (NativeCore, error) {
@@ -59,16 +59,6 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 	log.Printf("Initial base dir: %s", baseDir)
 	nc.baseDir = baseDir
 
-	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
-		AppName: cli.AppName,
-		BaseDir: baseDir,
-	})
-	if err != nil {
-		return nil, errors.WithMessage(err, "During setup initialization")
-	}
-
-	nc.multiverse = mv
-
 	return nc, nil
 }
 
@@ -77,10 +67,10 @@ func (nc *nativeCore) Install() error {
 
 	if cli.PreferLaunch {
 		log.Printf("Launch preferred, looking for a valid app folder")
-		if appDir, ok := nc.multiverse.GetValidAppDir(); ok {
-			nc.tryLaunch(appDir)
-		} else {
-			log.Printf("No valid app folder found, continuing with installation")
+		err := nc.tryLaunchCurrent(nil)
+		if err != nil {
+			log.Printf("While launching current: %+v", err)
+			log.Printf("Continuing with setup")
 		}
 	}
 
@@ -95,32 +85,25 @@ func (nc *nativeCore) Upgrade() error {
 func (nc *nativeCore) Relaunch() error {
 	cli := nc.cli
 
-	if cli.RelaunchPID <= 0 {
-		return errors.Errorf("Relaunch cannot wait for invalid PID %d", cli.RelaunchPID)
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
 	}
 
-	for tries := 10; tries > 0; tries-- {
-		log.Printf("Making sure PID %d has exited (%d tries left)", cli.RelaunchPID, tries)
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	setup.WaitForProcessToExit(ctx, cli.RelaunchPID)
 
-		proc, err := os.FindProcess(cli.RelaunchPID)
-		if err == nil {
-			log.Printf("PID %d still exists, sleeping for a bit...", cli.RelaunchPID)
-			proc.Release()
-			time.Sleep(1 * time.Second)
-			continue
+	if mv.HasReadyPending() {
+		log.Printf("Has ready pending, trying to make it current...")
+		err := mv.MakeReadyCurrent()
+		if err != nil {
+			log.Printf("Could not make ready current: %+v", err)
 		}
-
-		break
 	}
 
-	log.Printf("Done waiting for process to exit, looking for valid app dir...")
-
-	appDir, ok := nc.multiverse.GetValidAppDir()
-	if ok {
-		log.Printf("Found valid app dir, relaunching")
-		nc.tryLaunch(appDir)
-	} else {
-		return errors.Errorf("%s is not installed properly - could not find a valid version to launch", cli.AppName)
+	err = nc.tryLaunchCurrent(nil)
+	if err != nil {
+		nc.ErrorDialog(err)
 	}
 
 	return nil
@@ -128,35 +111,38 @@ func (nc *nativeCore) Relaunch() error {
 
 func (nc *nativeCore) Uninstall() error {
 	log.Println("Uninstall was requested...")
-	mv := nc.multiverse
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+
 	cli := nc.cli
 
-	if !mv.IsValid() {
-		log.Println("No valid install folder found, quitting.")
-		return nil
-	}
-
 	pathsToKill := []string{}
-	for _, appDir := range mv.ListAppDirs() {
-		pathsToKill = append(pathsToKill, filepath.Join(appDir, nc.exeName()))
+	currentBuild := mv.GetCurrentVersion()
+	if currentBuild != nil {
+		pathsToKill = append(pathsToKill, filepath.Join(currentBuild.Path, nc.exeName()))
 	}
 
-	err := nwin.KillAll(pathsToKill)
+	err = nwin.KillAll(pathsToKill)
 	if err != nil {
 		log.Println("While killing processes", err.Error())
 	}
 
-	log.Println("Removing shortcut...")
+	log.Println("Removing desktop shortcut...")
 	err = os.Remove(nc.shortcutPath())
 	if err != nil {
 		log.Println("While removing full shortcut", err.Error())
 		log.Println("(Note: shortcut errors aren't critical)")
 	}
 
+	// FIXME: this should be a method of mv - it knows what to remove
+	// and what not to remove
+
 	log.Println("Nuking app folder")
 	tries := 5
 	for i := 0; i < tries; i++ {
-		err = os.RemoveAll(mv.GetBaseDir())
+		err = os.RemoveAll(nc.baseDir)
 		if err != nil {
 			log.Printf("%+v", err)
 			log.Printf("Sleeping a bit then retrying")
@@ -175,21 +161,41 @@ func (nc *nativeCore) Uninstall() error {
 	return nil
 }
 
-func (nc *nativeCore) tryLaunch(appDir string) {
+type onSuccessFunc func()
+
+// returns true if it successfully launched
+func (nc *nativeCore) tryLaunchCurrent(onSuccess onSuccessFunc) error {
 	cli := nc.cli
 
-	log.Println("Launching app")
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
 
-	cmd := exec.Command(filepath.Join(appDir, nc.exeName()))
+	build := mv.GetCurrentVersion()
+	if build == nil {
+		return nil
+	}
 
-	err := cmd.Start()
+	log.Printf("Launching (%s) from (%s)", build.Version, build.Path)
+
+	cmd := exec.Command(filepath.Join(build.Path, nc.exeName()))
+
+	err = cmd.Start()
 	if err != nil {
 		prettyErr := errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", cli.AppName))
 		nc.ErrorDialog(prettyErr)
 	}
 
+	if onSuccess != nil {
+		onSuccess()
+	}
+
 	log.Printf("App launched, getting out of the way")
 	os.Exit(0)
+
+	// unreachable, but go's compiler doesn't know it
+	return nil
 }
 
 func (nc *nativeCore) showInstallGUI() error {
@@ -207,26 +213,16 @@ func (nc *nativeCore) showInstallGUI() error {
 	var progressComposite, optionsComposite *walk.Composite
 
 	installDir := installDirIn
-	var appDir string
-
-	sourceChan := make(chan setup.InstallSource, 1)
 
 	kickoffInstall := func() {
 		kickErr := func() error {
-			source := <-sourceChan
-			mv, err := setup.NewMultiverse(&setup.MultiverseParams{
-				AppName: cli.AppName,
-				BaseDir: installDir,
-			})
-			if err != nil {
-				return err
-			}
+			nc.baseDir = installDir
 
-			appDir, err = mv.MakeAppDir(source.Version)
+			mv, err := nc.newMultiverse()
 			if err != nil {
 				return err
 			}
-			installer.Install(appDir)
+			installer.Install(mv)
 
 			return nil
 		}()
@@ -420,7 +416,6 @@ func (nc *nativeCore) showInstallGUI() error {
 		OnSource: func(sourceIn setup.InstallSource) {
 			nc.mainWindow.Synchronize(func() {
 				nc.mainWindow.SetTitle(fmt.Sprintf("%s - %s", baseTitle, sourceIn.Version))
-				sourceChan <- sourceIn
 			})
 
 			if nc.cli.Silent {
@@ -456,9 +451,12 @@ func (nc *nativeCore) showInstallGUI() error {
 					nc.ErrorDialog(errors.WithMessage(err, "While creating shortcut marker"))
 				}
 
-				trayIcon.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
-
-				nc.tryLaunch(appDir)
+				err = nc.tryLaunchCurrent(func() {
+					trayIcon.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
+				})
+				if err != nil {
+					nc.ErrorDialog(err)
+				}
 			})
 		},
 	})
@@ -567,10 +565,13 @@ func (nc *nativeCore) shortcutPath() string {
 	return filepath.Join(nc.folders.Desktop, fmt.Sprintf("%s.lnk", nc.cli.AppName))
 }
 
-func (nc *nativeCore) markerName() string {
-	return fmt.Sprintf(".%s-marker", nc.cli.AppName)
-}
-
 func (nc *nativeCore) exeName() string {
 	return fmt.Sprintf("%s.exe", nc.cli.AppName)
+}
+
+func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
+	return setup.NewMultiverse(&setup.MultiverseParams{
+		AppName: nc.cli.AppName,
+		BaseDir: nc.baseDir,
+	})
 }

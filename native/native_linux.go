@@ -242,11 +242,9 @@ func (nc *nativeCore) Relaunch() error {
 	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 	setup.WaitForProcessToExit(ctx, pid)
 
-	// TODO: here's where we should apply ready if any
-
 	mv, err := nc.newMultiverse()
 	if err != nil {
-		nc.ErrorDialog(errors.WithMessage(err, "Internal error"))
+		return err
 	}
 
 	if mv.HasReadyPending() {
@@ -260,7 +258,7 @@ func (nc *nativeCore) Relaunch() error {
 	currentBuild := mv.GetCurrentVersion()
 	if currentBuild == nil {
 		err = errors.Errorf("Could not find valid installation of %s in %s", nc.cli.AppName, nc.baseDir)
-		nc.ErrorDialog(err)
+		return err
 	}
 
 	nc.tryLaunch(currentBuild)
