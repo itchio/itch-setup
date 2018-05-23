@@ -110,7 +110,7 @@ func (nc *nativeCore) Relaunch() error {
 		}
 	}
 
-	nc.tryLaunchCurrent()
+	nc.tryLaunchCurrent(mv)
 	return nil
 }
 
@@ -125,6 +125,11 @@ func StartItchSetup() {
 	nc := globalNc
 	cli := nc.cli
 
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		nc.ErrorDialog(err)
+	}
+
 	if cli.Silent {
 		C.SetLabel(C.CString("Silent install mode is not supported on macOS"))
 		return
@@ -132,19 +137,13 @@ func StartItchSetup() {
 
 	if cli.PreferLaunch {
 		log.Printf("--prefer-launch passed, looking for valid install")
-		err := nc.tryLaunchCurrent()
+		err := nc.tryLaunchCurrent(mv)
 		if err != nil {
 			log.Printf("Could not launch current: %v", err)
 			log.Printf("Carrying on with install")
 		}
 	}
 
-	mv, err := nc.newMultiverse()
-	if err != nil {
-		nc.ErrorDialog(err)
-	}
-
-	// TODO: add hook to validate bundle
 	installer = setup.NewInstaller(setup.InstallerSettings{
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
@@ -153,7 +152,7 @@ func StartItchSetup() {
 			C.SetLabel(C.CString(fmt.Sprintf("%+v", err)))
 		},
 		OnFinish: func(source setup.InstallSource) {
-			err := nc.tryLaunchCurrent()
+			err := nc.tryLaunchCurrent(mv)
 			if err != nil {
 				nc.ErrorDialog(err)
 			}
@@ -172,12 +171,7 @@ func StartItchSetup() {
 	installer.Install(mv)
 }
 
-func (nc *nativeCore) tryLaunchCurrent() error {
-	mv, err := nc.newMultiverse()
-	if err != nil {
-		return err
-	}
-
+func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 	b := mv.GetCurrentVersion()
 	if b == nil {
 		return errors.Errorf("No valid version of %s found installed", nc.cli.AppName)
