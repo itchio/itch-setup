@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"io/ioutil"
 
@@ -19,6 +18,10 @@ import (
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/pkg/errors"
+)
+import (
+	"context"
+	"time"
 )
 
 var parentWin *gtk.Window
@@ -236,28 +239,22 @@ func (nc *nativeCore) Upgrade() error {
 func (nc *nativeCore) Relaunch() error {
 	pid := nc.cli.RelaunchPID
 
-	log.Printf("Should relaunch! Looking for PID %d...", pid)
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	setup.WaitForProcessToExit(ctx, pid)
 
-	for tries := 10; tries > 0; tries-- {
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			log.Printf("Waiting 2 seconds then retrying: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
+	// TODO: here's where we should apply ready if any
 
-		proc.Release()
-		break
-	}
-
-	log.Printf("PID %d has exited, now looking for valid app dir in %s", nc.baseDir)
-
-	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
-		AppName: nc.cli.AppName,
-		BaseDir: nc.baseDir,
-	})
+	mv, err := nc.newMultiverse()
 	if err != nil {
 		nc.ErrorDialog(errors.WithMessage(err, "Internal error"))
+	}
+
+	if mv.HasReadyPending() {
+		log.Printf("Has ready pending, trying to make it current...")
+		err = mv.MakeReadyCurrent()
+		if err != nil {
+			log.Printf("Could not make ready current: %+v", err)
+		}
 	}
 
 	currentBuild := mv.GetCurrentVersion()
@@ -269,6 +266,13 @@ func (nc *nativeCore) Relaunch() error {
 	nc.tryLaunch(currentBuild)
 
 	return nil
+}
+
+func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
+	return setup.NewMultiverse(&setup.MultiverseParams{
+		AppName: nc.cli.AppName,
+		BaseDir: nc.baseDir,
+	})
 }
 
 //

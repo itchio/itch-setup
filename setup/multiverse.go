@@ -40,6 +40,9 @@ type Multiverse interface {
 	// Record a freshly-patched build as ready
 	QueueReady(build *BuildFolder) error
 
+	// Returns true if we have a ready build pending
+	HasReadyPending() bool
+
 	// Make the ready build current.
 	MakeReadyCurrent() error
 
@@ -159,6 +162,10 @@ func (mv *multiverse) QueueReady(build *BuildFolder) error {
 	}
 
 	return nil
+}
+
+func (mv *multiverse) HasReadyPending() bool {
+	return mv.state.Ready != ""
 }
 
 func (mv *multiverse) MakeReadyCurrent() error {
