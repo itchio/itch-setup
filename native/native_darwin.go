@@ -195,10 +195,22 @@ func (nc *nativeCore) tryLaunchCurrent() error {
 	return nil
 }
 
+func (nc *nativeCore) validateBundle(bundlePath string) error {
+	log.Printf("Making sure (%s) is signed and valid", bundlePath)
+
+	result := C.ValidateBundle(C.CString(bundlePath))
+	if result != nil {
+		return errors.Errorf("Bundle (%s) invalid: %s", bundlePath, C.GoString(result))
+	}
+	return nil
+}
+
 func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 	return setup.NewMultiverse(&setup.MultiverseParams{
 		AppName:         nc.cli.AppName,
 		BaseDir:         nc.roamingSetupPath,
 		ApplicationsDir: nc.homeApplicationsPath,
+
+		OnValidate: nc.validateBundle,
 	})
 }

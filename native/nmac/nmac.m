@@ -122,6 +122,7 @@ char *ValidateBundle(char *cBundlePath) {
     return "Bundle isn't signed/valid";
   }
 
+  NSLog(@"Bundle %@ is signed and valid.", bundleURL);
   return nil;
 }
 
