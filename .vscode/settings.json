@@ -1,6 +1,6 @@
 {
   "go.buildOnSave": "off",
-  "go.vetOnSave": "workspace",
-  "go.lintOnSave": "workspace",
+  "go.vetOnSave": "package",
+  "go.lintOnSave": "package",
   "go.lintTool": "golint"
 }

@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -11,9 +10,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/itchio/savior/filesource"
 	"github.com/itchio/wharf/eos/option"
-
-	"github.com/itchio/savior/seeksource"
 
 	"github.com/itchio/httpkit/progress"
 	"github.com/itchio/httpkit/timeout"
@@ -21,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/itchio/itch-setup/localize"
-	"github.com/itchio/wharf/eos"
 	"github.com/itchio/wharf/state"
 
 	_ "github.com/itchio/wharf/decompressors/brotli"
@@ -125,10 +122,10 @@ func (i *Installer) getVersion() (string, error) {
 	return latestVersion, nil
 }
 
-func (i *Installer) Install(appDir string) {
+func (i *Installer) Install(mv Multiverse) {
 	go func() {
 		installSource := <-i.sourceChan
-		err := i.doInstall(appDir, installSource)
+		err := i.doInstall(mv, installSource)
 		if err != nil {
 			i.settings.OnError(err)
 		} else {
@@ -137,7 +134,7 @@ func (i *Installer) Install(appDir string) {
 	}()
 }
 
-func (i *Installer) doInstall(appDir string, installSource InstallSource) error {
+func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error {
 	ctx := context.Background()
 	localizer := i.settings.Localizer
 
@@ -148,24 +145,13 @@ func (i *Installer) doInstall(appDir string, installSource InstallSource) error 
 	signatureURL := fmt.Sprintf("%s/%s/signature", i.brothPackageURL(), version)
 	archiveURL := fmt.Sprintf("%s/%s/archive", i.brothPackageURL(), version)
 
-	sigFile, err := eos.Open(signatureURL, option.WithConsumer(i.consumer))
+	sigSource, err := filesource.Open(signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {
 		return errors.WithMessage(err, "while opening remote signature file")
 	}
-	defer sigFile.Close()
+	defer sigSource.Close()
 
-	log.Printf("Downloading signature...")
-	sigBytes, err := ioutil.ReadAll(sigFile)
-	if err != nil {
-		return errors.WithMessage(err, "reading remote signature file")
-	}
-
-	sigSource := seeksource.FromBytes(sigBytes)
-	_, err = sigSource.Resume(nil)
-	if err != nil {
-		return errors.WithMessage(err, "while opening signature file")
-	}
-
+	log.Printf("Reading signature...")
 	sigInfo, err := pwr.ReadSignature(ctx, sigSource)
 	if err != nil {
 		return errors.WithMessage(err, "while parsing signature file")
@@ -194,13 +180,20 @@ func (i *Installer) doInstall(appDir string, installSource InstallSource) error 
 		i.settings.OnProgress(progressVal)
 	}
 
+	stagingFolder, err := mv.MakeStagingFolder()
+	if err != nil {
+		return err
+	}
+
+	appDir := filepath.Join(stagingFolder, fmt.Sprintf("app-%s", version))
 	log.Printf("Installing to %s", appDir)
 
 	healPath := fmt.Sprintf("archive,%s", archiveURL)
 
 	vc := pwr.ValidatorContext{
-		Consumer: consumer,
-		HealPath: healPath,
+		Consumer:   consumer,
+		HealPath:   healPath,
+		NumWorkers: 2,
 	}
 
 	log.Printf("Healing %s...", appDir)
@@ -209,12 +202,17 @@ func (i *Installer) doInstall(appDir string, installSource InstallSource) error 
 		return errors.WithMessage(err, "while installing")
 	}
 
-	sigPath := localSignaturePath(appDir)
-	log.Printf("Writing signature to %s", sigPath)
-
-	err = ioutil.WriteFile(sigPath, sigBytes, os.FileMode(0644))
+	err = mv.QueueReady(&InstalledBuild{
+		Path:    appDir,
+		Version: version,
+	})
 	if err != nil {
-		return errors.WithMessage(err, "while writing local signature file")
+		return err
+	}
+
+	err = mv.MakeReadyCurrent()
+	if err != nil {
+		return err
 	}
 
 	i.settings.OnProgressLabel(localizer.T("setup.status.done"))

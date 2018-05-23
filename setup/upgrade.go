@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -62,16 +61,14 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 
 		// check local version
 		func() error {
-			appDir, ok := mv.GetValidAppDir()
-			if !ok {
-				return errors.Errorf("No valid app dir found in %s", mv.GetBaseDir())
+			currentBuild := mv.GetCurrentVersion()
+			if currentBuild == nil {
+				return errors.Errorf("No version currently installed")
 			}
 
-			currentVersion := strings.TrimPrefix(filepath.Base(appDir), "app-")
-
 			ls = &localState{
-				appDir:  appDir,
-				version: currentVersion,
+				appDir:  currentBuild.Path,
+				version: currentBuild.Version,
 			}
 			return nil
 		},
@@ -199,18 +196,12 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 	up := pp.path
 	log.Printf("Applying %d patches...", len(up.Patches))
 
-	stagingDir := filepath.Join(mv.GetBaseDir(), ".itch-setup-staging")
+	stagingDir, err := mv.MakeStagingFolder()
+	if err != nil {
+		return err
+	}
+	defer mv.CleanStagingFolder()
 	log.Printf("Using (%s) as staging directory", stagingDir)
-
-	err := os.RemoveAll(stagingDir)
-	if err != nil {
-		return errors.WithMessage(err, "Could not clean staging dir")
-	}
-	err = os.MkdirAll(stagingDir, 0755)
-	if err != nil {
-		return errors.WithMessage(err, "Could not make staging dir")
-	}
-	defer os.RemoveAll(stagingDir)
 
 	applyOne := func(bp *BrothPatch, targetDir string, outputDir string) error {
 		log.Printf("Upgrading to %s...", bp.Version)
@@ -305,14 +296,10 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 	}
 
 	log.Printf("Fully upgraded into (%s)", outputDir)
-
-	finalDir, err := mv.MakeAppDir(latestVersion)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Moving to (%s)", finalDir)
-	err = os.Rename(outputDir, finalDir)
+	err = mv.QueueReady(&InstalledBuild{
+		Version: latestVersion,
+		Path:    outputDir,
+	})
 	if err != nil {
 		return err
 	}

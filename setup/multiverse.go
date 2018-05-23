@@ -1,138 +1,68 @@
 package setup
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
-	"github.com/itchio/savior/seeksource"
-
-	"github.com/itchio/wharf/pwr"
-
+	"github.com/dchest/safefile"
 	"github.com/pkg/errors"
 )
 
-type Multiverse interface {
-	// true if the basedir had a marker
-	// the rest of the fields won't make sense
-	IsValid() bool
+type multiverseState struct {
+	// Current is the version that's installed and used.
+	// It might be currently running at that point.
+	Current string
 
-	GetValidAppDir() (string, bool)
-	MakeAppDir(version string) (string, error)
-	ListAppDirs() []string
-	GetBaseDir() string
+	// Ready is a version we've installed but aren't using yet.
+	// It'll be used on next launch or when `--relaunch` is
+	// called.
+	Ready string
+}
+
+type InstalledBuild struct {
+	Version string
+	Path    string
+}
+
+type Multiverse interface {
+	// Called on launch, or when upgrading
+	GetCurrentVersion() *InstalledBuild
+
+	// Called when we start patching
+	MakeStagingFolder() (string, error)
+	// defer'd at the end of patching
+	CleanStagingFolder() error
+
+	// Record a freshly-patched build as ready
+	QueueReady(build *InstalledBuild) error
+
+	// Make the ready build current.
+	MakeReadyCurrent() error
+
+	String() string
 }
 
 type multiverse struct {
-	params      *MultiverseParams
-	foundMarker bool
-	appDirs     []string
+	params *MultiverseParams
+	state  *multiverseState
 }
 
 type MultiverseParams struct {
 	// `itch`, `kitch`
 	AppName string
 
-	// on linux, this would be `~/.itch`
-	// on windows, this would be `%LOCALAPPDATA%/itch`
+	// on Linux, `~/.itch`
+	// on Windows, `%LOCALAPPDATA%/itch`
+	// on macOS, `~/Library/Application Support/itch-setup`
 	BaseDir string
-}
 
-func (m *multiverse) IsValid() bool {
-	return m.foundMarker
-}
-
-func (m *multiverse) GetValidAppDir() (string, bool) {
-	if !m.IsValid() {
-		return "", false
-	}
-
-	for _, appDir := range m.appDirs {
-		absDir := filepath.Join(m.params.BaseDir, appDir)
-
-		err := m.validateAppDir(absDir)
-		if err != nil {
-			log.Printf("Ignoring appDir %s: %+v", absDir, err)
-			continue
-		}
-
-		return absDir, true
-	}
-	return "", false
-}
-
-func (m *multiverse) validateAppDir(appDir string) error {
-	sigPath := localSignaturePath(appDir)
-	sigBytes, err := ioutil.ReadFile(sigPath)
-	if err != nil {
-		return err
-	}
-
-	sigSource := seeksource.FromBytes(sigBytes)
-
-	_, err = sigSource.Resume(nil)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-
-	sigInfo, err := pwr.ReadSignature(ctx, sigSource)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("✓ Found valid wharf signature at %s", sigPath)
-
-	vc := &pwr.ValidatorContext{
-		Consumer: newConsumer(),
-		FailFast: true,
-	}
-
-	err = vc.Validate(ctx, appDir, sigInfo)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("✓ App dir matches signature: %s", appDir)
-	return nil
-}
-
-func (m *multiverse) ListAppDirs() []string {
-	var appDirs []string
-
-	for _, appDir := range m.appDirs {
-		appDirs = append(appDirs, filepath.Join(m.params.BaseDir, appDir))
-	}
-	return appDirs
-}
-
-func (m *multiverse) MakeAppDir(version string) (string, error) {
-	err := os.MkdirAll(m.params.BaseDir, 0755)
-	if err != nil {
-		return "", err
-	}
-
-	// first make sure we have a marker
-	markerPath := filepath.Join(m.params.BaseDir, m.markerName())
-	markerWriter, err := os.Create(markerPath)
-	if err != nil {
-		return "", err
-	}
-	defer markerWriter.Close()
-
-	name := fmt.Sprintf("app-%s", version)
-	appDir := filepath.Join(m.params.BaseDir, name)
-	return appDir, nil
-}
-
-func (m *multiverse) GetBaseDir() string {
-	return m.params.BaseDir
+	// If non-empty, this is where we'll store current
+	// on macOS, this is `~/Applications`
+	ApplicationsDir string
 }
 
 func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
@@ -146,41 +76,192 @@ func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 
 	mv := &multiverse{
 		params: params,
+		state:  &multiverseState{},
 	}
 	log.Printf("Initializing (%s) multiverse @ (%s)", params.AppName, params.BaseDir)
 
-	entries, err := ioutil.ReadDir(params.BaseDir)
+	err := mv.readState()
 	if err != nil {
-		log.Printf("Empty (%s), that's ok", params.BaseDir)
-		return mv, nil
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			if entry.Name() == mv.markerName() {
-				mv.foundMarker = true
-			}
-			continue
+		if os.IsNotExist(errors.Cause(err)) {
+			log.Printf("No multiverse information yet")
+		} else {
+			log.Printf("Ignoring: %v", err)
 		}
-
-		if !strings.HasPrefix(entry.Name(), "app-") {
-			continue
-		}
-
-		log.Printf("✓ Found app dir (%s)", entry.Name())
-		mv.appDirs = append(mv.appDirs, entry.Name())
+	} else {
+		log.Printf("%s", mv)
 	}
-
-	if len(mv.appDirs) == 0 {
-		log.Printf("❌ No app dirs found")
-		return mv, nil
-	}
-
-	sort.Sort(sort.Reverse(sort.StringSlice(mv.appDirs)))
 
 	return mv, nil
 }
 
-func (mv *multiverse) markerName() string {
-	return fmt.Sprintf(".%s-marker", mv.params.AppName)
+func (mv *multiverse) GetCurrentVersion() *InstalledBuild {
+	current := mv.state.Current
+	if current == "" {
+		return nil
+	}
+
+	build := &InstalledBuild{
+		Version: current,
+		Path:    mv.versionToBasename(current),
+	}
+	return build
+}
+
+func (mv *multiverse) MakeStagingFolder() (string, error) {
+	path := mv.stagingFolderPath()
+	err := os.RemoveAll(path)
+	if err != nil {
+		return "", err
+	}
+
+	err = os.MkdirAll(path, 0755)
+	if err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+func (mv *multiverse) CleanStagingFolder() error {
+	path := mv.stagingFolderPath()
+	return os.RemoveAll(path)
+}
+
+func (mv *multiverse) QueueReady(build *InstalledBuild) error {
+	s := mv.state
+	if s.Ready != "" {
+		log.Printf("Replacing ready (%s) with (%s)", s.Ready, build.Version)
+	} else {
+		log.Printf("Queuing ready (%s)", build.Version)
+	}
+
+	readyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(build.Version))
+	log.Printf("Storing in (%s)", readyPath)
+
+	err := os.Rename(build.Path, readyPath)
+	if err != nil {
+		return errors.WithMessage(err, "moving ready version to its proper place")
+	}
+
+	s.Ready = build.Version
+	err = mv.saveState()
+	if err != nil {
+		return errors.WithMessage(err, "updating multiverse state with new ready")
+	}
+
+	return nil
+}
+
+func (mv *multiverse) MakeReadyCurrent() error {
+	s := mv.state
+	if s.Ready == "" {
+		return errors.Errorf("No ready to make current")
+	}
+
+	currentBuild := mv.GetCurrentVersion()
+	var currentBuildSave string
+	if currentBuild != nil {
+		currentBuildSave = currentBuild.Path + ".old"
+		log.Printf("Renaming (%s) to (%s)", currentBuild.Path, currentBuildSave)
+		err := os.Rename(currentBuild.Path, currentBuildSave)
+		if err != nil {
+			return err
+		}
+	}
+
+	readyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(s.Ready))
+	newCurrentPath := mv.makePathForCurrent(s.Ready)
+
+	if readyPath == newCurrentPath {
+		log.Printf("(%s) already at right location", readyPath, newCurrentPath)
+	} else {
+		log.Printf("Renaming (%s) to (%s)", readyPath, newCurrentPath)
+		err := os.Rename(readyPath, newCurrentPath)
+		if err != nil {
+			if currentBuild != nil {
+				os.Rename(currentBuildSave, currentBuild.Path)
+			}
+			return err
+		}
+	}
+
+	if currentBuild != nil {
+		log.Printf("Cleaning up (%s)", currentBuildSave)
+		os.RemoveAll(currentBuildSave)
+	}
+
+	s.Current = s.Ready
+	s.Ready = ""
+	err := mv.saveState()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mv *multiverse) makePathForCurrent(version string) string {
+	p := mv.params
+	if p.ApplicationsDir != "" {
+		bundleName := fmt.Sprintf("%s.app", mv.params.AppName)
+		return filepath.Join(p.ApplicationsDir, bundleName)
+	}
+
+	return filepath.Join(p.BaseDir, mv.versionToBasename(version))
+}
+
+func (mv *multiverse) versionToBasename(version string) string {
+	return fmt.Sprintf("app-%s", version)
+}
+
+func (mv *multiverse) stagingFolderPath() string {
+	return filepath.Join(mv.params.BaseDir, "staging")
+}
+
+func (mv *multiverse) statePath() string {
+	return filepath.Join(mv.params.BaseDir, "state.json")
+}
+
+func (mv *multiverse) readState() error {
+	bs, err := ioutil.ReadFile(mv.statePath())
+	if err != nil {
+		return errors.WithMessage(err, "reading multiverse state file")
+	}
+
+	state := &multiverseState{}
+	err = json.Unmarshal(bs, state)
+	if err != nil {
+		return errors.WithMessage(err, "unmarshalling multiverse state file")
+	}
+
+	return nil
+}
+
+func (mv *multiverse) saveState() error {
+	bs, err := json.Marshal(mv.state)
+	if err != nil {
+		return errors.WithMessage(err, "marshalling multiverse state file")
+	}
+
+	f, err := safefile.Create(mv.statePath(), 0644)
+	if err != nil {
+		return errors.WithMessage(err, "creating multiverse state file")
+	}
+	defer f.Close()
+
+	_, err = f.Write(bs)
+	if err != nil {
+		return errors.WithMessage(err, "writing multiverse state file")
+	}
+
+	err = f.Commit()
+	if err != nil {
+		return errors.WithMessage(err, "committing multiverse state file")
+	}
+
+	return nil
+}
+
+func (mv *multiverse) String() string {
+	return fmt.Sprintf("(%s)(current = %q, ready = %q)", mv.params.BaseDir, mv.state.Ready, mv.state.Current)
 }

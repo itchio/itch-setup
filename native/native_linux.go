@@ -42,8 +42,6 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 
 func (nc *nativeCore) Install() error {
 	var err error
-	var installDir string
-
 	cli := nc.cli
 
 	gtk.Init(nil)
@@ -58,8 +56,9 @@ func (nc *nativeCore) Install() error {
 
 	if cli.PreferLaunch {
 		log.Printf("Launch preferred, looking for a valid app dir...")
-		if appDir, ok := mv.GetValidAppDir(); ok {
-			nc.tryLaunch(appDir)
+		b := mv.GetCurrentVersion()
+		if b != nil {
+			nc.tryLaunch(b)
 		}
 	}
 
@@ -158,8 +157,6 @@ func (nc *nativeCore) Install() error {
 	win.ShowAll()
 	parentWin = win
 
-	sourceChan := make(chan setup.InstallSource, 1)
-
 	installer := setup.NewInstaller(setup.InstallerSettings{
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
@@ -180,11 +177,13 @@ func (nc *nativeCore) Install() error {
 		},
 		OnSource: func(source setup.InstallSource) {
 			win.SetTitle(fmt.Sprintf("%s - %s", baseTitle, source.Version))
-			sourceChan <- source
 		},
 		OnFinish: func(source setup.InstallSource) {
 			glib.IdleAdd(func() {
-				nc.tryLaunch(installDir)
+				b := mv.GetCurrentVersion()
+				if b != nil {
+					nc.tryLaunch(b)
+				}
 			})
 		},
 	})
@@ -192,16 +191,7 @@ func (nc *nativeCore) Install() error {
 
 	kickoffInstall := func() {
 		kickErr := func() error {
-			source := <-sourceChan
-			appDir, err := mv.MakeAppDir(source.Version)
-			if err != nil {
-				return err
-			}
-
-			installDir = appDir
-
-			installer.Install(appDir)
-
+			installer.Install(mv)
 			return nil
 		}()
 		if kickErr != nil {
@@ -269,13 +259,13 @@ func (nc *nativeCore) Relaunch() error {
 		nc.ErrorDialog(errors.WithMessage(err, "Internal error"))
 	}
 
-	appDir, ok := mv.GetValidAppDir()
-	if !ok {
+	currentBuild := mv.GetCurrentVersion()
+	if currentBuild == nil {
 		err = errors.Errorf("Could not find valid installation of %s in %s", nc.cli.AppName, nc.baseDir)
 		nc.ErrorDialog(err)
 	}
 
-	nc.tryLaunch(appDir)
+	nc.tryLaunch(currentBuild)
 
 	return nil
 }
@@ -285,11 +275,11 @@ func (nc *nativeCore) Relaunch() error {
 // Tries launching the app from a valid app dir.
 // This always exits. If it fails, it shows an error dialog
 // first. If it succeeds, it exits gracefully.
-func (nc *nativeCore) tryLaunch(validAppDir string) {
+func (nc *nativeCore) tryLaunch(b *setup.InstalledBuild) {
 	cli := nc.cli
 
-	log.Printf("Launching app dir: %s", validAppDir)
-	exePath := filepath.Join(validAppDir, nc.exeName())
+	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
+	exePath := filepath.Join(b.Path, nc.exeName())
 
 	cmd := exec.Command(exePath)
 
