@@ -45,6 +45,9 @@ type Multiverse interface {
 	// Returns true if we have a ready build pending
 	HasReadyPending() bool
 
+	// Returns true if the ready pending version is 'version'
+	ReadyPendingIs(version string) bool
+
 	// Make the ready build current.
 	MakeReadyCurrent() error
 
@@ -175,6 +178,13 @@ func (mv *multiverse) QueueReady(build *BuildFolder) error {
 
 func (mv *multiverse) HasReadyPending() bool {
 	return mv.state.Ready != ""
+}
+
+func (mv *multiverse) ReadyPendingIs(version string) bool {
+	if !mv.HasReadyPending() {
+		return false
+	}
+	return mv.state.Ready == version
 }
 
 func (mv *multiverse) MakeReadyCurrent() error {

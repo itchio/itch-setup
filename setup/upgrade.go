@@ -6,6 +6,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/itchio/savior"
@@ -47,6 +48,9 @@ type archivePlan struct {
 }
 
 func (i *Installer) Upgrade(mv Multiverse) error {
+	EnableJSON()
+	defer DisableJSON()
+
 	var ls *localState
 	var rs *remoteState
 
@@ -87,6 +91,16 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 
 	if ls.version == rs.version {
 		log.Printf("We're up-to-date!")
+		Emit(NoUpdateAvailable{})
+		return nil
+	}
+
+	if mv.HasReadyPending() {
+		log.Printf("Current is behind, but we have a ready version...")
+		if mv.ReadyPendingIs(rs.version) {
+			log.Printf("...and it is the latest! (%s)", rs.version)
+		}
+		Emit(UpdateReady{Version: rs.version})
 		return nil
 	}
 
@@ -194,7 +208,14 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		log.Printf("The patching error was: %+v", err)
 	}
 
-	return i.applyArchive(mv, rs, ap)
+	err = i.applyArchive(mv, rs, ap)
+	if err != nil {
+		Emit(UpdateFailed{Message: fmt.Sprintf("%+v", err)})
+		return err
+	}
+
+	Emit(UpdateReady{Version: rs.version})
+	return nil
 }
 
 func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) error {
@@ -241,6 +262,8 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 
 	applyOne := func(bp *BrothPatch, targetDir string, outputDir string) error {
 		log.Printf("Upgrading to %s...", bp.Version)
+		Emit(InstallingUpdate{Version: bp.Version})
+
 		f := bp.FindSubType(itchio.BuildFileSubTypeDefault)
 		if f == nil {
 			return errors.Errorf("Could not find default patch file for version %s, giving up", bp.Version)
@@ -324,11 +347,13 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan) error {
 	log.Printf("Upgrading to (%s) using archive...", rs.version)
+	Emit(InstallingUpdate{Version: rs.version})
 
 	archiveURL := fmt.Sprintf("%s/%s/archive/default", i.brothPackageURL(), rs.version)
 	log.Printf("☁ %s", archiveURL)
@@ -376,7 +401,10 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 		Consumer:  consumer,
 		Directory: outputDir,
 	}
-	defer sink.Close()
+	var closeSinkOnce sync.Once
+	defer closeSinkOnce.Do(func() {
+		sink.Close()
+	})
 
 	startTime := time.Now()
 
@@ -387,12 +415,13 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 
 	duration := time.Since(startTime)
 
-	log.Printf("Extracted %s (%s) at %s (%s total)",
-		progress.FormatBytes(res.Size()),
-		res.Stats(),
+	log.Printf("Overall extract speed: %s (%s total)",
 		progress.FormatBPS(res.Size(), duration),
 		progress.FormatDuration(duration),
 	)
+	closeSinkOnce.Do(func() {
+		sink.Close()
+	})
 
 	err = mv.QueueReady(&BuildFolder{
 		Version: rs.version,
@@ -410,6 +439,11 @@ func startPrintingProgress(ctx context.Context, tracker *progress.Tracker) {
 		for {
 			select {
 			case <-time.After(1 * time.Second):
+				Emit(Progress{
+					Progress: tracker.Progress(),
+					ETA:      tracker.ETA().Seconds(),
+					BPS:      tracker.BPS(),
+				})
 				log.Printf("%.2f%% done - %s / s, ETA %s",
 					tracker.Progress()*100,
 					progress.FormatBytes(int64(tracker.BPS())),
