@@ -21,6 +21,7 @@ import (
 )
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -43,11 +44,19 @@ func NewNativeCore(cli cl.CLI) (NativeCore, error) {
 	return nc, nil
 }
 
+var gtkOnce sync.Once
+
+func initGtkOnce() {
+	gtkOnce.Do(func() {
+		gtk.Init(nil)
+	})
+}
+
 func (nc *nativeCore) Install() error {
 	var err error
 	cli := nc.cli
 
-	gtk.Init(nil)
+	initGtkOnce()
 
 	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
 		AppName: cli.AppName,
@@ -299,6 +308,7 @@ func (nc *nativeCore) exeName() string {
 
 func (nc *nativeCore) ErrorDialog(err error) {
 	cli := nc.cli
+	initGtkOnce()
 
 	msg := fmt.Sprintf("%+v", err)
 	log.Printf("Fatal error: %s", msg)
