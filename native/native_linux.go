@@ -246,7 +246,8 @@ func (nc *nativeCore) Upgrade() error {
 func (nc *nativeCore) Relaunch() error {
 	pid := nc.cli.RelaunchPID
 
-	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	setup.WaitForProcessToExit(ctx, pid)
 
 	mv, err := nc.newMultiverse()

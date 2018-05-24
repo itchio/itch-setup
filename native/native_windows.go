@@ -69,10 +69,10 @@ func (nc *nativeCore) Install() error {
 		log.Printf("Launch preferred, looking for a valid app folder")
 		mv, err := nc.newMultiverse()
 		if err != nil {
-			log.Printf("Could not make multiverse: %v")
+			log.Printf("Could not make multiverse: %v", err)
 			log.Printf("Won't be able to launch.")
 		} else {
-			err := nc.tryLaunchCurrent(nil)
+			err := nc.tryLaunchCurrent(mv, nil)
 			if err != nil {
 				log.Printf("While launching current: %+v", err)
 				log.Printf("Continuing with setup...")
@@ -107,18 +107,11 @@ func (nc *nativeCore) Relaunch() error {
 		return err
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	setup.WaitForProcessToExit(ctx, cli.RelaunchPID)
 
-	if mv.HasReadyPending() {
-		log.Printf("Has ready pending, trying to make it current...")
-		err := mv.MakeReadyCurrent()
-		if err != nil {
-			log.Printf("Could not make ready current: %+v", err)
-		}
-	}
-
-	err = nc.tryLaunchCurrent(nil)
+	err = nc.tryLaunchCurrent(mv, nil)
 	if err != nil {
 		nc.ErrorDialog(err)
 	}
@@ -181,10 +174,10 @@ func (nc *nativeCore) Uninstall() error {
 type onSuccessFunc func()
 
 // returns true if it successfully launched
-func (nc *nativeCore) tryLaunchCurrent(mv Multiverse, onSuccess onSuccessFunc) error {
+func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessFunc) error {
 	if mv.HasReadyPending() {
 		log.Printf("Has ready pending, trying to make it current...")
-		err = mv.MakeReadyCurrent()
+		err := mv.MakeReadyCurrent()
 		if err != nil {
 			log.Printf("Could not make ready current: %+v", err)
 		}
@@ -199,7 +192,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv Multiverse, onSuccess onSuccessFunc) e
 
 	cmd := exec.Command(filepath.Join(build.Path, nc.exeName()))
 
-	err = cmd.Start()
+	err := cmd.Start()
 	if err != nil {
 		prettyErr := errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", nc.cli.AppName))
 		nc.ErrorDialog(prettyErr)
@@ -219,8 +212,6 @@ func (nc *nativeCore) tryLaunchCurrent(mv Multiverse, onSuccess onSuccessFunc) e
 func (nc *nativeCore) showInstallGUI() error {
 	cli := nc.cli
 
-	installDirIn := nc.baseDir
-
 	var installer *setup.Installer
 
 	var trayIcon *walk.NotifyIcon
@@ -230,7 +221,7 @@ func (nc *nativeCore) showInstallGUI() error {
 	var imageView *walk.ImageView
 	var progressComposite, optionsComposite *walk.Composite
 
-	installDir := installDirIn
+	installDir := nc.baseDir
 
 	kickoffInstall := func() {
 		kickErr := func() error {
@@ -469,7 +460,12 @@ func (nc *nativeCore) showInstallGUI() error {
 					nc.ErrorDialog(errors.WithMessage(err, "While creating shortcut marker"))
 				}
 
-				err = nc.tryLaunchCurrent(func() {
+				mv, err := nc.newMultiverse()
+				if err != nil {
+					nc.ErrorDialog(err)
+				}
+
+				err = nc.tryLaunchCurrent(mv, func() {
 					trayIcon.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
 				})
 				if err != nil {
