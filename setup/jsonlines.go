@@ -53,7 +53,7 @@ func Emit(p Payload) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "%s\n", string(bs))
+	fmt.Fprintf(os.Stdout, "%s\n", string(bs))
 }
 
 //-------------------------------
@@ -104,3 +104,9 @@ type UpdateFailed struct {
 }
 
 func (p UpdateFailed) GetType() string { return "update-failed" }
+
+//-------------------------------
+
+type ReadyToRelaunch struct{}
+
+func (p ReadyToRelaunch) GetType() string { return "ready-to-relaunch" }

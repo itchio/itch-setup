@@ -9,9 +9,12 @@ import (
 )
 
 func WaitForProcessToExit(ctx context.Context, pid int) {
-	retryDuration := 2 * time.Second
+	retryDuration := 1 * time.Second
+	sentReady := false
 
 	log.Printf("Looking for PID %d", pid)
+	EnableJSON()
+	defer DisableJSON()
 
 	for {
 		select {
@@ -32,11 +35,14 @@ func WaitForProcessToExit(ctx context.Context, pid int) {
 		if proc == nil {
 			log.Printf("Process exited!")
 			return
-		} else {
-			log.Printf("Process still exists (%s)", proc.Executable())
-			log.Printf("Retrying in %s", retryDuration)
-			time.Sleep(retryDuration)
-			continue
 		}
+
+		log.Printf("Process still exists (%s)", proc.Executable())
+		if !sentReady {
+			Emit(ReadyToRelaunch{})
+			sentReady = true
+		}
+		log.Printf("Retrying in %s", retryDuration)
+		time.Sleep(retryDuration)
 	}
 }
