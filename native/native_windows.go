@@ -67,10 +67,16 @@ func (nc *nativeCore) Install() error {
 
 	if cli.PreferLaunch {
 		log.Printf("Launch preferred, looking for a valid app folder")
-		err := nc.tryLaunchCurrent(nil)
+		mv, err := nc.newMultiverse()
 		if err != nil {
-			log.Printf("While launching current: %+v", err)
-			log.Printf("Continuing with setup")
+			log.Printf("Could not make multiverse: %v")
+			log.Printf("Won't be able to launch.")
+		} else {
+			err := nc.tryLaunchCurrent(nil)
+			if err != nil {
+				log.Printf("While launching current: %+v", err)
+				log.Printf("Continuing with setup...")
+			}
 		}
 	}
 
@@ -175,12 +181,13 @@ func (nc *nativeCore) Uninstall() error {
 type onSuccessFunc func()
 
 // returns true if it successfully launched
-func (nc *nativeCore) tryLaunchCurrent(onSuccess onSuccessFunc) error {
-	cli := nc.cli
-
-	mv, err := nc.newMultiverse()
-	if err != nil {
-		return err
+func (nc *nativeCore) tryLaunchCurrent(mv Multiverse, onSuccess onSuccessFunc) error {
+	if mv.HasReadyPending() {
+		log.Printf("Has ready pending, trying to make it current...")
+		err = mv.MakeReadyCurrent()
+		if err != nil {
+			log.Printf("Could not make ready current: %+v", err)
+		}
 	}
 
 	build := mv.GetCurrentVersion()
@@ -194,7 +201,7 @@ func (nc *nativeCore) tryLaunchCurrent(onSuccess onSuccessFunc) error {
 
 	err = cmd.Start()
 	if err != nil {
-		prettyErr := errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", cli.AppName))
+		prettyErr := errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", nc.cli.AppName))
 		nc.ErrorDialog(prettyErr)
 	}
 

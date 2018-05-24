@@ -67,10 +67,11 @@ func (nc *nativeCore) Install() error {
 	}
 
 	if cli.PreferLaunch {
-		log.Printf("Launch preferred, looking for a valid app dir...")
-		b := mv.GetCurrentVersion()
-		if b != nil {
-			nc.tryLaunch(b)
+		log.Printf("Launch preferred, attempting...")
+		err := nc.tryLaunchCurrent(mv)
+		if err != nil {
+			log.Printf("While launching current: %+v", err)
+			log.Printf("Continuing with setup...")
 		}
 	}
 
@@ -193,9 +194,9 @@ func (nc *nativeCore) Install() error {
 		},
 		OnFinish: func(source setup.InstallSource) {
 			glib.IdleAdd(func() {
-				b := mv.GetCurrentVersion()
-				if b != nil {
-					nc.tryLaunch(b)
+				err := nc.tryLaunchCurrent(mv)
+				if err != nil {
+					nc.ErrorDialog(err)
 				}
 			})
 		},
@@ -253,23 +254,7 @@ func (nc *nativeCore) Relaunch() error {
 		return err
 	}
 
-	if mv.HasReadyPending() {
-		log.Printf("Has ready pending, trying to make it current...")
-		err = mv.MakeReadyCurrent()
-		if err != nil {
-			log.Printf("Could not make ready current: %+v", err)
-		}
-	}
-
-	currentBuild := mv.GetCurrentVersion()
-	if currentBuild == nil {
-		err = errors.Errorf("Could not find valid installation of %s in %s", nc.cli.AppName, nc.baseDir)
-		return err
-	}
-
-	nc.tryLaunch(currentBuild)
-
-	return nil
+	return nc.tryLaunchCurrent(mv)
 }
 
 func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
@@ -281,11 +266,19 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 
 //
 
-// Tries launching the app from a valid app dir.
-// This always exits. If it fails, it shows an error dialog
-// first. If it succeeds, it exits gracefully.
-func (nc *nativeCore) tryLaunch(b *setup.BuildFolder) {
-	cli := nc.cli
+func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
+	if mv.HasReadyPending() {
+		log.Printf("Has ready pending, trying to make it current...")
+		err := mv.MakeReadyCurrent()
+		if err != nil {
+			log.Printf("Could not make ready current: %+v", err)
+		}
+	}
+
+	b := mv.GetCurrentVersion()
+	if b == nil {
+		return errors.Errorf("No valid version of %s found installed", nc.cli.AppName)
+	}
 
 	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
 	exePath := filepath.Join(b.Path, nc.exeName())
@@ -294,12 +287,15 @@ func (nc *nativeCore) tryLaunch(b *setup.BuildFolder) {
 
 	err := cmd.Start()
 	if err != nil {
-		err = errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", cli.AppName))
+		err = errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", nc.cli.AppName))
 		nc.ErrorDialog(err)
 	}
 
 	log.Printf("App launched, getting out of the way")
 	os.Exit(0)
+
+	// unreachable, but the go compiler doesn't know it
+	return nil
 }
 
 func (nc *nativeCore) exeName() string {

@@ -204,11 +204,20 @@ func (mv *multiverse) MakeReadyCurrent() error {
 	currentBuild := mv.GetCurrentVersion()
 	var currentBuildSave string
 	if currentBuild != nil {
-		currentBuildSave = currentBuild.Path + ".old"
-		log.Printf("Renaming (%s) to (%s)", currentBuild.Path, currentBuildSave)
-		err := os.Rename(currentBuild.Path, currentBuildSave)
-		if err != nil {
-			return err
+		_, statErr := os.Stat(currentBuild.Path)
+		if statErr == nil {
+			// current build path exists
+			currentBuildSave = currentBuild.Path + ".old"
+			log.Printf("Renaming (%s) to (%s)", currentBuild.Path, currentBuildSave)
+			err := os.Rename(currentBuild.Path, currentBuildSave)
+			if err != nil {
+				return err
+			}
+		} else {
+			currentBuild = nil
+			log.Printf("Was going to back up current's folder, but got: %v", statErr)
+			log.Printf("This means state.json didn't match what was actually on disk")
+			log.Printf("Let's just go with the ready version and cross fingers")
 		}
 	}
 
