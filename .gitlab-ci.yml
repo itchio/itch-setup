@@ -12,6 +12,7 @@ build:linux:386:
   tags:
     - docker-itchsetup-32
   artifacts:
+    expire_in: 1 week
     paths:
       - broth
 
@@ -24,6 +25,7 @@ build:linux:amd64:
   tags:
     - docker-itchsetup-64
   artifacts:
+    expire_in: 1 week
     paths:
       - broth
 
@@ -36,6 +38,7 @@ build:windows:386:
   tags:
     - windows
   artifacts:
+    expire_in: 1 week
     paths:
       - broth
 
@@ -48,6 +51,7 @@ build:windows:amd64:
   tags:
     - windows
   artifacts:
+    expire_in: 1 week
     paths:
       - broth
 
@@ -60,6 +64,7 @@ build:darwin:amd64:
   tags: 
     - darwin
   artifacts:
+    expire_in: 1 week
     paths:
       - broth
 
