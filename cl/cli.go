@@ -17,4 +17,5 @@ type CLI struct {
 	RelaunchPID  int
 
 	Silent bool
+	Args   []string
 }

@@ -284,7 +284,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
 	exePath := filepath.Join(b.Path, nc.exeName())
 
-	cmd := exec.Command(exePath)
+	cmd := exec.Command(exePath, nc.cli.Args...)
 
 	err := cmd.Start()
 	if err != nil {
