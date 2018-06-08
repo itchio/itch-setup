@@ -192,7 +192,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessF
 
 	log.Printf("Launching (%s) from (%s)", build.Version, build.Path)
 
-	cmd := exec.Command(filepath.Join(build.Path, nc.exeName()), ...nc.cli.Args)
+	cmd := exec.Command(filepath.Join(build.Path, nc.exeName()), nc.cli.Args...)
 
 	err := cmd.Start()
 	if err != nil {
