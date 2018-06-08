@@ -139,11 +139,13 @@ func (nc *nativeCore) Uninstall() error {
 		log.Println("While killing processes", err.Error())
 	}
 
-	log.Println("Removing desktop shortcut...")
-	err = os.Remove(nc.shortcutPath())
-	if err != nil {
-		log.Println("While removing full shortcut", err.Error())
-		log.Println("(Note: shortcut errors aren't critical)")
+	for n, shortcutPath := range nc.shortcutPaths() {
+		log.Printf("Removing shortcut %d...", n)
+		err = os.Remove(shortcutPath)
+		if err != nil {
+			log.Println("While removing desktop shortcut", err.Error())
+			log.Println("(Note: shortcut errors aren't critical)")
+		}
 	}
 
 	// FIXME: this should be a method of mv - it knows what to remove
@@ -447,14 +449,17 @@ func (nc *nativeCore) showInstallGUI() error {
 
 				shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
 
-				err = nwin.CreateShortcut(nwin.ShortcutSettings{
-					ShortcutFilePath: nc.shortcutPath(),
-					TargetPath:       setupLocalPath,
-					Arguments:        shortcutArguments,
-					Description:      "The best way to play your itch.io games",
-					IconLocation:     filepath.Join(installDir, "app.ico"),
-					WorkingDirectory: filepath.Join(installDir),
-				})
+				for n, shortcutPath := range nc.shortcutPaths() {
+					log.Printf("Creating shortcut %d...", n)
+					err = nwin.CreateShortcut(nwin.ShortcutSettings{
+						ShortcutFilePath: shortcutPath,
+						TargetPath:       setupLocalPath,
+						Arguments:        shortcutArguments,
+						Description:      "The best way to play your itch.io games",
+						IconLocation:     filepath.Join(installDir, "app.ico"),
+						WorkingDirectory: filepath.Join(installDir),
+					})
+				}
 
 				if err != nil {
 					nc.ErrorDialog(errors.WithMessage(err, "While creating shortcut marker"))
@@ -569,14 +574,23 @@ func (nc *nativeCore) ErrorDialog(errShown error) {
 	// If the start is –1, any current selection is deselected.
 	te.SetTextSelection(-1, 0)
 
-	res := dlg.Run()
-	log.Printf("Dialog res: %#v\n", res)
-
+	dlg.Run()
 	os.Exit(1)
 }
 
-func (nc *nativeCore) shortcutPath() string {
+func (nc *nativeCore) shortcutPaths() []string {
+	return []string{
+		nc.desktopShortcutPath(),
+		nc.startMenuShortcutPath(),
+	}
+}
+
+func (nc *nativeCore) desktopShortcutPath() string {
 	return filepath.Join(nc.folders.Desktop, fmt.Sprintf("%s.lnk", nc.cli.AppName))
+}
+
+func (nc *nativeCore) startMenuShortcutPath() string {
+	return filepath.Join(nc.folders.Programs, "Itch Corp", fmt.Sprintf("%s.lnk", nc.cli.AppName))
 }
 
 func (nc *nativeCore) exeName() string {

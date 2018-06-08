@@ -11,6 +11,7 @@ type Folders struct {
 	LocalAppData   string
 	RoamingAppData string
 	Desktop        string
+	Programs       string
 }
 
 func GetFolders() (f Folders, err error) {
@@ -25,6 +26,11 @@ func GetFolders() (f Folders, err error) {
 	}
 
 	f.Desktop, err = getUserDirectory(win.CSIDL_DESKTOP)
+	if err != nil {
+		return
+	}
+
+	f.Programs, err = getUserDirectory(win.CSIDL_PROGRAMS)
 	if err != nil {
 		return
 	}
