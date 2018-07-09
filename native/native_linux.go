@@ -246,6 +246,25 @@ func (nc *nativeCore) Upgrade() error {
 func (nc *nativeCore) Relaunch() error {
 	pid := nc.cli.RelaunchPID
 
+	killIfExists := func() error {
+		log.Printf("Finding PID (%d)...", pid)
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			return err
+		}
+		log.Printf("Found PID %d, killing...", pid)
+		err = proc.Kill()
+		if err != nil {
+			return err
+		}
+		log.Printf("Killed!")
+		return nil
+	}
+	err := killIfExists()
+	if err != nil {
+		log.Printf("While killing: %+v", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	setup.WaitForProcessToExit(ctx, pid)
