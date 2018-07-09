@@ -196,7 +196,7 @@
 			"importpath": "github.com/itchio/go-itchio",
 			"repository": "https://github.com/itchio/go-itchio",
 			"vcs": "git",
-			"revision": "ea71d95c5f0b835e2ef5695d3b1e6cadf5df4758",
+			"revision": "9a69e6214b59beb788a074cc94d694bf8a8ed007",
 			"branch": "master",
 			"notests": true
 		},
@@ -204,7 +204,7 @@
 			"importpath": "github.com/itchio/httpkit",
 			"repository": "https://github.com/itchio/httpkit",
 			"vcs": "git",
-			"revision": "a507e904f82f9fc90c40eec62bb64eb453cfbc18",
+			"revision": "975c326430eed875a6dabf7e219077018192b960",
 			"branch": "master",
 			"notests": true
 		},
@@ -248,7 +248,7 @@
 			"importpath": "github.com/itchio/savior",
 			"repository": "https://github.com/itchio/savior",
 			"vcs": "git",
-			"revision": "ad73ed9cbdfbd38d4f869357db707a7bb0ac19c4",
+			"revision": "a9f8c3af201ef807ef6107294cb36bc3893bb02e",
 			"branch": "master",
 			"notests": true
 		},
@@ -256,7 +256,7 @@
 			"importpath": "github.com/itchio/wharf",
 			"repository": "https://github.com/itchio/wharf",
 			"vcs": "git",
-			"revision": "49e7d6fac06e39e01c405567c059c0b2de221dfe",
+			"revision": "a85677b5ed74c0bb4cf742781236c68eaec70559",
 			"branch": "master",
 			"notests": true
 		},

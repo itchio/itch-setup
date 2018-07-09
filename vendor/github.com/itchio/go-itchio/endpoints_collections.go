@@ -11,8 +11,8 @@ type GetCollectionResponse struct {
 	Collection *Collection `json:"collection"`
 }
 
-func (c *Client) GetCollection(params *GetCollectionParams) (*GetCollectionResponse, error) {
-	q := NewQuery(c, "/collections/%d")
+func (c *Client) GetCollection(params GetCollectionParams) (*GetCollectionResponse, error) {
+	q := NewQuery(c, "/collections/%d", params.CollectionID)
 	r := &GetCollectionResponse{}
 	return r, q.Get(r)
 }
@@ -27,10 +27,10 @@ type GetCollectionGamesParams struct {
 type GetCollectionGamesResponse struct {
 	Page            int64             `json:"page"`
 	PerPage         int64             `json:"perPage"`
-	CollectionGames []*CollectionGame `json:"collection_games"`
+	CollectionGames []*CollectionGame `json:"collectionGames"`
 }
 
-func (c *Client) GetCollectionGames(params *GetCollectionGamesParams) (*GetCollectionGamesResponse, error) {
+func (c *Client) GetCollectionGames(params GetCollectionGamesParams) (*GetCollectionGamesResponse, error) {
 	q := NewQuery(c, "/collections/%d/collection-games", params.CollectionID)
 	q.AddInt64IfNonZero("page", params.Page)
 	r := &GetCollectionGamesResponse{}

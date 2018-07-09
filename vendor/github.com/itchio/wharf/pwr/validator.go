@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync/atomic"
+	"sync"
+
+	"github.com/itchio/wharf/tlc"
 
 	"github.com/itchio/wharf/counter"
 	"github.com/itchio/wharf/pools"
@@ -65,23 +67,25 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 	cancelled := make(chan struct{})
 
 	var woundsStateConsumer *state.Consumer
-	var healerProgressInt int64
+	var healerProgress float64
 	var bytesDone int64
+	var progressMutex sync.Mutex
 
 	updateProgress := func() {
-		currentBytesDone := atomic.LoadInt64(&bytesDone)
-		scanProgress := float64(currentBytesDone) / float64(signature.Container.Size)
-
+		progressMutex.Lock()
 		if woundsStateConsumer == nil {
+			scanProgress := float64(bytesDone) / float64(signature.Container.Size)
 			vctx.Consumer.Progress(scanProgress)
 		} else {
-			p := float64(atomic.LoadInt64(&healerProgressInt)) / floatIntFactor
-			vctx.Consumer.Progress(p)
+			vctx.Consumer.Progress(healerProgress)
 		}
+		progressMutex.Unlock()
 	}
 
 	onProgress := func(delta int64) {
-		atomic.AddInt64(&bytesDone, delta)
+		progressMutex.Lock()
+		bytesDone += delta
+		progressMutex.Unlock()
 		updateProgress()
 	}
 
@@ -112,7 +116,9 @@ func (vctx *ValidatorContext) Validate(ctx context.Context, target string, signa
 
 		woundsStateConsumer = &state.Consumer{
 			OnProgress: func(progress float64) {
-				atomic.StoreInt64(&healerProgressInt, int64(progress*floatIntFactor))
+				progressMutex.Lock()
+				healerProgress = progress
+				progressMutex.Unlock()
 				updateProgress()
 			},
 			OnProgressLabel: func(label string) {
@@ -377,6 +383,16 @@ func AssertValid(target string, signature *SignatureInfo) error {
 	}
 
 	return nil
+}
+
+func AssertNoGhosts(target string, signature *SignatureInfo) error {
+	refContainer := signature.Container
+	gotContainer, err := tlc.WalkAny(target, &tlc.WalkOpts{})
+	if err != nil {
+		return err
+	}
+
+	return refContainer.EnsureEqual(gotContainer)
 }
 
 // IsNotExist is a variant of os.IsNotExist that works with nested errors

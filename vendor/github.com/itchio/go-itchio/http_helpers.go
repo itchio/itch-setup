@@ -70,12 +70,18 @@ func (c *Client) PostFormResponse(url string, data url.Values, dst interface{}) 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Add("Authorization", c.Key)
 	req.Header.Set("User-Agent", c.UserAgent)
+	req.Header.Set("Accept", "application/vnd.itch.v2")
 
 	var res *http.Response
 	var err error
 
 	if dumpApiCalls {
 		fmt.Fprintf(os.Stderr, "[request] %s %s\n", req.Method, req.URL)
+		for k, vv := range req.Header {
+			for _, v := range vv {
+				fmt.Fprintf(os.Stderr, "[request] %s: %s\n", k, v)
+			}
+		}
 	}
 
 	retryPatterns := append(c.RetryPatterns, time.Millisecond)
@@ -178,7 +184,11 @@ func ParseAPIResponse(dst interface{}, res *http.Response) error {
 		Result:  dst,
 		// see https://github.com/itchio/itch/issues/1549
 		WeaklyTypedInput: true,
-		DecodeHook:       mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
+			GameHookFunc,
+			UploadHookFunc,
+		),
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -198,6 +208,16 @@ func ParseAPIResponse(dst interface{}, res *http.Response) error {
 func FindBuildFile(fileType BuildFileType, files []*BuildFile) *BuildFile {
 	for _, f := range files {
 		if f.Type == fileType && f.State == BuildFileStateUploaded {
+			return f
+		}
+	}
+
+	return nil
+}
+
+func FindBuildFileEx(fileType BuildFileType, fileSubType BuildFileSubType, files []*BuildFile) *BuildFile {
+	for _, f := range files {
+		if f.Type == fileType && f.SubType == fileSubType && f.State == BuildFileStateUploaded {
 			return f
 		}
 	}

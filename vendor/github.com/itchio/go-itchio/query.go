@@ -72,5 +72,6 @@ func (q *Query) Get(r interface{}) error {
 }
 
 func (q *Query) Post(r interface{}) error {
-	return q.Client.PostFormResponse(q.Path, q.Values, r)
+	url := q.Client.MakePath(q.Path)
+	return q.Client.PostFormResponse(url, q.Values, r)
 }
