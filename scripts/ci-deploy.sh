@@ -1,6 +1,6 @@
 #!/bin/bash -xe
 
-if [ -n "${CI_TARGET}" ]; then
+if [ -z "${CI_TARGET}" ]; then
   echo "CI_TARGET is not set, refusing to deploy"
   exit 1
 fi
