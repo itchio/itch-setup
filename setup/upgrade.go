@@ -201,6 +201,7 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		err = i.applyPatches(mv, ls, pp)
 		if err == nil {
 			log.Printf("Patching went fine!")
+			Emit(UpdateReady{Version: rs.version})
 			return nil
 		}
 
