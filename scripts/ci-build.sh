@@ -83,7 +83,6 @@ if [ "$CI_OS" = "darwin" ]; then
   SIGNKEY="Developer ID Application: Amos Wenger (B2N6FSRTPV)"
   codesign --deep --force --verbose --sign "${SIGNKEY}" "${TARGET}"
   codesign --verify -vvvv "${TARGET}"
-  spctl -a -vvvv "${TARGET}"
 fi
 
 BINARIES=broth/$CI_OS-$CI_ARCH
