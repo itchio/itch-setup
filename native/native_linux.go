@@ -77,9 +77,6 @@ func (nc *nativeCore) Install() error {
 
 	log.Printf("Initializing installer GUI...")
 
-	imageWidth := 622
-	imageHeight := 301
-
 	// Create a new toplevel window, set its title, and connect it to the
 	// "destroy" signal to exit the GTK main loop when it is destroyed.
 	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
@@ -161,10 +158,7 @@ func (nc *nativeCore) Install() error {
 
 	log.Printf("Positioning and showing window...")
 
-	// Set the default window size.
-	win.SetDefaultSize(imageWidth, imageHeight+260)
 	win.SetResizable(false)
-
 	win.SetPosition(gtk.WIN_POS_CENTER)
 
 	// Recursively show all widgets contained in this window.
