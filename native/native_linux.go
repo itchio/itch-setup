@@ -353,6 +353,70 @@ func (nc *nativeCore) ErrorDialog(err error) {
 	os.Exit(1)
 }
 
+// Typically `~/.local/share`
+func (nc *nativeCore) xdgDataHome() string {
+	xdgDataHome := os.Getenv("XDG_DATA_HOME")
+	if xdgDataHome == "" {
+		home := os.Getenv("HOME")
+		xdgDataHome = filepath.Join(home, ".local", "share")
+	}
+	return xdgDataHome
+}
+
+// Typically `~/.local/share/applications`
+func (nc *nativeCore) xdgAppDir() string {
+	return filepath.Join(nc.xdgDataHome(), "applications")
+}
+
+// Typically `~/.local/share/applications/io.itch.kitch.desktop
+func (nc *nativeCore) desktopFileName() string {
+	desktopFileName := fmt.Sprintf("io.itch.%s.desktop", nc.cli.AppName)
+	return filepath.Join(nc.xdgAppDir(), desktopFileName)
+}
+
+func (nc *nativeCore) installedFiles() []string {
+	return []string{
+		nc.desktopFileName(),
+	}
+}
+
+func (nc *nativeCore) updateDesktopDatabase() error {
+	log.Printf("Updating desktop database for (%s)", nc.xdgAppDir())
+	{
+		cmd := exec.Command("update-desktop-database", "-v", nc.xdgAppDir())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			return errors.WithMessage(err, "while updating desktop database")
+		}
+	}
+	return nil
+}
+
+func (nc *nativeCore) writeFile(path string, contents []byte, perm os.FileMode) error {
+	err := os.MkdirAll(filepath.Dir(path), 0755)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("install (%s)", path)
+	return ioutil.WriteFile(path, contents, perm)
+}
+
+func (nc *nativeCore) interpolate(source string, vars map[string]string) (string, error) {
+	res := source
+	for k, v := range vars {
+		res = strings.Replace(res, "{{"+k+"}}", v, -1)
+	}
+
+	if strings.Contains(res, "{{") || strings.Contains(res, "}}") {
+		return "", errors.Errorf("internal error: not fully interpolated:\n%s", res)
+	}
+
+	return res, nil
+}
+
 func (nc *nativeCore) installDesktopFiles() error {
 	appName := nc.cli.AppName
 
@@ -393,41 +457,33 @@ func (nc *nativeCore) installDesktopFiles() error {
 	launchScript := `#!/bin/sh
 {{SETUPPATH}} --prefer-launch --appname {{APPNAME}} -- "$@"
 `
-	launchScript = strings.Replace(launchScript, "{{SETUPPATH}}", targetExecPath, -1)
-	launchScript = strings.Replace(launchScript, "{{APPNAME}}", appName, -1)
 
-	if strings.Contains(launchScript, "{{") {
-		return errors.Errorf("Internal error: script is not fully interpolated:\n%s", launchScript)
+	launchScript, err = nc.interpolate(launchScript, map[string]string{
+		"SETUPPATH": targetExecPath,
+		"APPNAME":   appName,
+	})
+	if err != nil {
+		return err
 	}
 
 	launchDstPath := filepath.Join(nc.baseDir, appName)
-	log.Printf("Writing launcher script (%s)...", launchDstPath)
-
-	err = ioutil.WriteFile(launchDstPath, []byte(launchScript), 0755)
+	err = nc.writeFile(launchDstPath, []byte(launchScript), 0755)
 	if err != nil {
 		return errors.WithMessage(err, "creating launch script")
 	}
 
 	iconPath := filepath.Join(nc.baseDir, "icon.png")
-	log.Printf("Writing icon (%s)...", iconPath)
 
 	imageData, err := bindata.Asset(fmt.Sprintf("data/%s-icon.png", appName))
 	if err != nil {
 		return errors.WithMessage(err, "while reading icon")
 	}
-	err = ioutil.WriteFile(iconPath, imageData, 0644)
+	err = nc.writeFile(iconPath, imageData, 0644)
 	if err != nil {
 		return errors.WithMessage(err, "while writing icon")
 	}
 
-	xdgDataHome := os.Getenv("XDG_DATA_HOME")
-	if xdgDataHome == "" {
-		home := os.Getenv("HOME")
-		xdgDataHome = filepath.Join(home, ".local", "share")
-	}
-
-	xdgAppDir := filepath.Join(xdgDataHome, "applications")
-
+	xdgAppDir := nc.xdgAppDir()
 	desktopFileName := fmt.Sprintf("io.itch.%s.desktop", appName)
 	desktopFilePath := filepath.Join(xdgAppDir, desktopFileName)
 
@@ -443,31 +499,25 @@ MimeType=x-scheme-handler/{{FIRST_PROTOCOL}};x-scheme-handler/{{SECOND_PROTOCOL}
 X-GNOME-Autostart-enabled=true
 Comment=Install and play itch.io games easily`
 
-	desktopContents = strings.Replace(desktopContents, "{{APPNAME}}", appName, -1)
-	desktopContents = strings.Replace(desktopContents, "{{APPPATH}}", launchDstPath, -1)
-	desktopContents = strings.Replace(desktopContents, "{{ICONPATH}}", iconPath, -1)
-	desktopContents = strings.Replace(desktopContents, "{{FIRST_PROTOCOL}}", appName+"io", -1)
-	desktopContents = strings.Replace(desktopContents, "{{SECOND_PROTOCOL}}", appName, -1)
-
-	if strings.Contains(desktopContents, "{{") {
-		return errors.Errorf("Internal error: %s is not fully interpolated", desktopContents)
+	desktopContents, err = nc.interpolate(desktopContents, map[string]string{
+		"APPNAME":         appName,
+		"APPPATH":         launchDstPath,
+		"ICONPATH":        iconPath,
+		"FIRST_PROTOCOL":  appName + "io",
+		"SECOND_PROTOCOL": appName,
+	})
+	if err != nil {
+		return err
 	}
 
-	log.Printf("Writing desktop file (%s)...", desktopFilePath)
-	err = ioutil.WriteFile(desktopFilePath, []byte(desktopContents), 0644)
+	err = nc.writeFile(desktopFilePath, []byte(desktopContents), 0644)
 	if err != nil {
 		return errors.WithMessage(err, "writing desktop file")
 	}
 
-	log.Printf("Updating desktop database for (%s)", xdgAppDir)
-	{
-		cmd := exec.Command("update-desktop-database", "-v", xdgAppDir)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			return errors.WithMessage(err, "while updating desktop database")
-		}
+	err = nc.updateDesktopDatabase()
+	if err != nil {
+		return err
 	}
 
 	return nil
