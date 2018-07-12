@@ -75,7 +75,7 @@ upx -1 $TARGET
 
 if [ "$CI_OS" = "windows" ]; then
   # sign *after* packing
-  tools/signtool.exe sign //v //s //n "itch corp." //fd sha256 //tr http://timestamp.comodoca.com/?td=sha256 //td sha256 $TARGET
+  tools/signtool.exe sign //v //s MY //n "itch corp." //fd sha256 //tr http://timestamp.comodoca.com/?td=sha256 //td sha256 $TARGET
 fi
 
 if [ "$CI_OS" = "darwin" ]; then
