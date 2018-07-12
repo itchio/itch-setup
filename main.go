@@ -58,6 +58,7 @@ func detectAppName() {
 	if cli.AppName != "" {
 		log.Printf("App name specified on command-line: %s", cli.AppName)
 	} else if appName != "" {
+		cli.AppName = appName
 		log.Printf("App name specified at build time: %s", cli.AppName)
 	} else {
 		execPath, err := os.Executable()
