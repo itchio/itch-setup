@@ -226,7 +226,95 @@ func (nc *nativeCore) Install() error {
 }
 
 func (nc *nativeCore) Uninstall() error {
-	return errors.Errorf("uninstall: stub!")
+	warn := func(err error) {
+		log.Printf("warning: %v", err)
+		log.Printf("(continuing anyway)")
+	}
+
+	installedFiles := nc.installedFiles()
+	for _, installedFile := range installedFiles {
+		_, statErr := os.Lstat(installedFile)
+		if statErr == nil {
+			log.Printf("remove (%s)", installedFile)
+			err := os.Remove(installedFile)
+			if err != nil {
+				warn(err)
+			}
+		}
+	}
+
+	cleanBaseDir := func() error {
+		dir, err := os.Open(nc.baseDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// good!
+				return nil
+			}
+			return err
+		}
+		defer dir.Close()
+
+		names, err := dir.Readdirnames(-1)
+		if err != nil {
+			return err
+		}
+
+		deleteMap := map[string]bool{
+			// application icon
+			"icon.png": true,
+			// copy of itch-setup
+			"itch-setup": true,
+			// installed version state
+			"state.json": true,
+			// launcher script
+			nc.cli.AppName: true,
+		}
+
+		for _, name := range names {
+			fullPath := filepath.Join(nc.baseDir, name)
+
+			if deleteMap[name] {
+				log.Printf("delete (%s)", fullPath)
+				err := os.Remove(fullPath)
+				if err != nil {
+					warn(err)
+				}
+			} else if strings.HasPrefix(name, "app-") {
+				log.Printf("delete (%s)/", fullPath)
+				err := os.RemoveAll(fullPath)
+				if err != nil {
+					warn(err)
+				}
+			} else {
+				log.Printf("keep (%s)", fullPath)
+			}
+		}
+		return nil
+	}
+
+	err := cleanBaseDir()
+	if err != nil {
+		warn(err)
+	}
+
+	err = nc.updateDesktopDatabase()
+	if err != nil {
+		warn(err)
+	}
+
+	// don't check result for that.
+	// it may fail if the dir is not empty, which is fine
+	os.Remove(nc.baseDir)
+
+	log.Printf("%s is uninstalled.", nc.cli.AppName)
+	log.Printf("")
+	log.Printf("You might want to remove `~/.config/%s` as well: ", nc.cli.AppName)
+	log.Printf("it contains your profile data and default install location.")
+	log.Printf("")
+	log.Printf("Have a nice day!")
+	log.Printf("")
+
+	return err
 }
 
 func (nc *nativeCore) Upgrade() error {
