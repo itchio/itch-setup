@@ -37,7 +37,7 @@ elif [ "master" != "$CI_BUILD_REF_NAME" ]; then
   export CI_VERSION="$CI_BUILD_REF_NAME"
 fi
 
-export CI_LDFLAGS="-X main.version=$CI_VERSION -X main.builtAt=$CI_BUILT_AT -X main.commit=$CI_BUILD_REF -X main.appName=$CI_TARGET -w -s"
+export CI_LDFLAGS="-X main.version=$CI_VERSION -X main.builtAt=$CI_BUILT_AT -X main.commit=$CI_BUILD_REF -X main.target=$CI_TARGET -w -s"
 
 if [ "$CI_OS" = "windows" ]; then
   export CI_LDFLAGS="$CI_LDFLAGS -H windowsgui"

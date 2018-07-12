@@ -24,7 +24,7 @@ var (
 	version       = "head" // set by command-line on CI release builds
 	builtAt       = ""     // set by command-line on CI release builds
 	commit        = ""     // set by command-line on CI release builds
-	appName       = ""     // set by command-line on CI release builds
+	target        = ""     // set by command-line on CI release builds
 	versionString = ""     // formatted on boot from 'version' and 'builtAt'
 	app           = kingpin.New("itch-setup", "The itch installer and self-updater")
 )
@@ -57,8 +57,8 @@ func must(err error) {
 func detectAppName() {
 	if cli.AppName != "" {
 		log.Printf("App name specified on command-line: %s", cli.AppName)
-	} else if appName != "" {
-		cli.AppName = appName
+	} else if target != "" {
+		cli.AppName = strings.TrimSuffix(target, "-setup")
 		log.Printf("App name specified at build time: %s", cli.AppName)
 	} else {
 		execPath, err := os.Executable()
