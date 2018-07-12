@@ -1,5 +1,10 @@
 #!/bin/bash -xe
 
+if [ -n "${CI_TARGET}" ]; then
+  echo "CI_TARGET is not set, refusing to deploy"
+  exit 1
+fi
+
 if [ -n "${CI_COMMIT_TAG}" ]; then
   # pushing a stable version
   export CHANNEL_SUFFIX=""
@@ -24,9 +29,9 @@ popd
 
 ${TOOLS_DIR}/butler -V
 
-pushd broth
+pushd broth/$CI_TARGET
 for i in *; do
     CHANNEL_NAME="${i}${CHANNEL_SUFFIX}"
-    ${TOOLS_DIR}/butler push --userversion "${USER_VERSION}" ./$i "fasterthanlime/itch-setup:${CHANNEL_NAME}"
+    ${TOOLS_DIR}/butler push --userversion "${USER_VERSION}" ./$i "fasterthanlime/${CI_TARGET}:${CHANNEL_NAME}"
 done
 popd

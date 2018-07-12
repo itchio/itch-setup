@@ -8,6 +8,9 @@ build:linux:386:
   script:
     - export CI_OS=linux
     - export CI_ARCH=386
+    - export CI_TARGET=itch-setup
+    - scripts/ci-build.sh
+    - export CI_TARGET=kitch-setup
     - scripts/ci-build.sh
   tags:
     - docker-itchsetup-32
@@ -21,6 +24,9 @@ build:linux:amd64:
   script:
     - export CI_OS=linux
     - export CI_ARCH=amd64
+    - export CI_TARGET=itch-setup
+    - scripts/ci-build.sh
+    - export CI_TARGET=kitch-setup
     - scripts/ci-build.sh
   tags:
     - docker-itchsetup-64
@@ -34,6 +40,9 @@ build:windows:386:
   script:
     - export CI_OS=windows
     - export CI_ARCH=386
+    - export CI_TARGET=itch-setup
+    - scripts/ci-build.sh
+    - export CI_TARGET=kitch-setup
     - scripts/ci-build.sh
   tags:
     - windows
@@ -47,6 +56,9 @@ build:windows:amd64:
   script:
     - export CI_OS=windows
     - export CI_ARCH=amd64
+    - export CI_TARGET=itch-setup
+    - scripts/ci-build.sh
+    - export CI_TARGET=kitch-setup
     - scripts/ci-build.sh
   tags:
     - windows
@@ -60,6 +72,9 @@ build:darwin:amd64:
   script:
     - export CI_OS=darwin
     - export CI_ARCH=amd64
+    - export CI_TARGET=itch-setup
+    - scripts/ci-build.sh
+    - export CI_TARGET=kitch-setup
     - scripts/ci-build.sh
   tags: 
     - darwin
@@ -73,4 +88,7 @@ deploy:
   tags:
     - dropsy
   script:
+    - export CI_TARGET=itch-setup
+    - scripts/ci-deploy.sh
+    - export CI_TARGET=kitch-setup
     - scripts/ci-deploy.sh

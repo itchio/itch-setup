@@ -1,5 +1,10 @@
 #!/bin/sh -xe
 
+if [ -n "${CI_TARGET}" ]; then
+  echo "CI_TARGET is not set, refusing to build"
+  exit 1
+fi
+
 echo "Building for $CI_OS-$CI_ARCH"
 
 if [ "$CI_OS" = "linux" ]; then
@@ -32,13 +37,14 @@ elif [ "master" != "$CI_BUILD_REF_NAME" ]; then
   export CI_VERSION="$CI_BUILD_REF_NAME"
 fi
 
-export CI_LDFLAGS="-X main.version=$CI_VERSION -X main.builtAt=$CI_BUILT_AT -X main.commit=$CI_BUILD_REF -w -s"
+export CI_LDFLAGS="-X main.version=$CI_VERSION -X main.builtAt=$CI_BUILT_AT -X
+main.commit=$CI_BUILD_REF -X main.appName=$CI_TARGET -w -s"
 
 if [ "$CI_OS" = "windows" ]; then
   export CI_LDFLAGS="$CI_LDFLAGS -H windowsgui"
 fi
 
-TARGET=itch-setup
+TARGET=$CI_TARGET
 if [ "$CI_OS" = "windows" ]; then
   TARGET=$TARGET.exe
 fi
@@ -67,7 +73,7 @@ export GOARCH=$CI_ARCH
 export CGO_ENABLED=1
 
 # compile
-go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS $PKG
+go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS $PKG -o $TARGET
 
 file $TARGET
 
