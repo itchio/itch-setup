@@ -90,7 +90,7 @@ if [ "$CI_OS" = "darwin" ]; then
   codesign --verify -vvvv "${TARGET}"
 fi
 
-BINARIES=broth/$CI_OS-$CI_ARCH
+BINARIES=broth/$CI_TARGET/$CI_OS-$CI_ARCH
 mkdir -p $BINARIES
 cp -rf $TARGET $BINARIES/
 
