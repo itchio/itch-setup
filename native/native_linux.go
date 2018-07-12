@@ -329,7 +329,17 @@ func (nc *nativeCore) Upgrade() error {
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
 	})
-	return installer.Upgrade(mv)
+	err = installer.Upgrade(mv)
+	if err != nil {
+		return err
+	}
+
+	err = nc.installDesktopFiles()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (nc *nativeCore) Relaunch() error {
