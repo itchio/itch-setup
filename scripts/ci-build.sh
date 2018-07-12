@@ -75,15 +75,15 @@ upx -1 $TARGET
 
 if [ "$CI_OS" = "windows" ]; then
   # sign *after* packing
-  vendor/signtool.exe sign //v //s //n "itch corp." //fd sha256 //tr http://timestamp.comodoca.com/?td=sha256 //td sha256 $TARGET
+  tools/signtool.exe sign //v //s //n "itch corp." //fd sha256 //tr http://timestamp.comodoca.com/?td=sha256 //td sha256 $TARGET
 fi
 
 if [ "$CI_OS" = "darwin" ]; then
   # sign *after* packing
   SIGNKEY="Developer ID Application: Amos Wenger (B2N6FSRTPV)"
-  codesign --deep --force --verbose --sign $SIGNKEY $TARGET
-  codesign --verify -vvvv $TARGET
-  spctl -a -vvvv $TARGET
+  codesign --deep --force --verbose --sign "${SIGNKEY}" "${TARGET}"
+  codesign --verify -vvvv "${TARGET}"
+  spctl -a -vvvv "${TARGET}"
 fi
 
 BINARIES=broth/$CI_OS-$CI_ARCH
