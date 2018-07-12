@@ -88,7 +88,4 @@ deploy:
   tags:
     - dropsy
   script:
-    - export CI_TARGET=itch-setup
-    - scripts/ci-deploy.sh
-    - export CI_TARGET=kitch-setup
     - scripts/ci-deploy.sh
