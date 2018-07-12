@@ -21,6 +21,8 @@ import (
 )
 import (
 	"context"
+	"io"
+	"strings"
 	"sync"
 	"time"
 )
@@ -188,7 +190,12 @@ func (nc *nativeCore) Install() error {
 		},
 		OnFinish: func(source setup.InstallSource) {
 			glib.IdleAdd(func() {
-				err := nc.tryLaunchCurrent(mv)
+				err := nc.installDesktopFiles()
+				if err != nil {
+					nc.ErrorDialog(err)
+				}
+
+				err = nc.tryLaunchCurrent(mv)
 				if err != nil {
 					nc.ErrorDialog(err)
 				}
@@ -344,4 +351,124 @@ func (nc *nativeCore) ErrorDialog(err error) {
 
 	gtk.Main()
 	os.Exit(1)
+}
+
+func (nc *nativeCore) installDesktopFiles() error {
+	appName := nc.cli.AppName
+
+	log.Printf("Determining whether or not we've been installed via an OS package...")
+
+	execPath, err := os.Executable()
+	if err != nil {
+		return errors.WithMessage(err, "while getting self path")
+	}
+
+	if filepath.HasPrefix(execPath, "/usr") {
+		log.Printf("Our execPath (%s) is somewhere in /usr, not installing desktop files", execPath)
+		return nil
+	}
+
+	src, err := os.Open(execPath)
+	if err != nil {
+		return errors.WithMessage(err, "while opening self")
+	}
+
+	targetExecPath := filepath.Join(nc.baseDir, "itch-setup")
+	dst, err := os.Create(targetExecPath)
+	if err != nil {
+		return errors.WithMessage(err, "while creating copy of self in install folder")
+	}
+	defer dst.Close()
+
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		return errors.WithMessage(err, "while copying self to install folder")
+	}
+
+	err = dst.Chmod(0755)
+	if err != nil {
+		return errors.WithMessage(err, "while making self executable")
+	}
+
+	launchScript := `#!/bin/sh
+{{SETUPPATH}} --prefer-launch --appname {{APPNAME}} -- "$@"
+`
+	launchScript = strings.Replace(launchScript, "{{SETUPPATH}}", targetExecPath, -1)
+	launchScript = strings.Replace(launchScript, "{{APPNAME}}", appName, -1)
+
+	if strings.Contains(launchScript, "{{") {
+		return errors.Errorf("Internal error: script is not fully interpolated:\n%s", launchScript)
+	}
+
+	launchDstPath := filepath.Join(nc.baseDir, appName)
+	log.Printf("Writing launcher script (%s)...", launchDstPath)
+
+	err = ioutil.WriteFile(launchDstPath, []byte(launchScript), 0755)
+	if err != nil {
+		return errors.WithMessage(err, "creating launch script")
+	}
+
+	iconPath := filepath.Join(nc.baseDir, "icon.png")
+	log.Printf("Writing icon (%s)...", iconPath)
+
+	imageData, err := bindata.Asset(fmt.Sprintf("data/%s-icon.png", appName))
+	if err != nil {
+		return errors.WithMessage(err, "while reading icon")
+	}
+	err = ioutil.WriteFile(iconPath, imageData, 0644)
+	if err != nil {
+		return errors.WithMessage(err, "while writing icon")
+	}
+
+	xdgDataHome := os.Getenv("XDG_DATA_HOME")
+	if xdgDataHome == "" {
+		home := os.Getenv("HOME")
+		xdgDataHome = filepath.Join(home, ".local", "share")
+	}
+
+	xdgAppDir := filepath.Join(xdgDataHome, "applications")
+
+	desktopFileName := fmt.Sprintf("io.itch.%s.desktop", appName)
+	desktopFilePath := filepath.Join(xdgAppDir, desktopFileName)
+
+	desktopContents := `[Desktop Entry]
+Type=Application
+Name={{APPNAME}}
+TryExec={{APPPATH}}
+Exec={{APPPATH}} %U
+Icon={{ICONPATH}}
+Terminal=false
+Categories=Game;
+MimeType=x-scheme-handler/{{FIRST_PROTOCOL}};x-scheme-handler/{{SECOND_PROTOCOL}};
+X-GNOME-Autostart-enabled=true
+Comment=Install and play itch.io games easily`
+
+	desktopContents = strings.Replace(desktopContents, "{{APPNAME}}", appName, -1)
+	desktopContents = strings.Replace(desktopContents, "{{APPPATH}}", launchDstPath, -1)
+	desktopContents = strings.Replace(desktopContents, "{{ICONPATH}}", iconPath, -1)
+	desktopContents = strings.Replace(desktopContents, "{{FIRST_PROTOCOL}}", appName+"io", -1)
+	desktopContents = strings.Replace(desktopContents, "{{SECOND_PROTOCOL}}", appName, -1)
+
+	if strings.Contains(desktopContents, "{{") {
+		return errors.Errorf("Internal error: %s is not fully interpolated", desktopContents)
+	}
+
+	log.Printf("Writing desktop file (%s)...", desktopFilePath)
+	err = ioutil.WriteFile(desktopFilePath, []byte(desktopContents), 0644)
+	if err != nil {
+		return errors.WithMessage(err, "writing desktop file")
+	}
+
+	log.Printf("Updating desktop database for (%s)", xdgAppDir)
+	{
+		cmd := exec.Command("update-desktop-database", "-v", xdgAppDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			return errors.WithMessage(err, "while updating desktop database")
+		}
+	}
+
+	return nil
 }
