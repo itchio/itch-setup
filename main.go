@@ -29,7 +29,7 @@ var (
 	app           = kingpin.New("itch-setup", "The itch installer and self-updater")
 )
 
-var cli = cl.CLI
+var cli cl.CLI
 
 func init() {
 	app.Flag("prefer-launch", "Launch if a valid version of itch is installed").BoolVar(&cli.PreferLaunch)
