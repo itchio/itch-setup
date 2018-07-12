@@ -72,7 +72,7 @@ export GOARCH=$CI_ARCH
 export CGO_ENABLED=1
 
 # compile
-go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS $PKG -o $TARGET
+go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS -o $TARGET $PKG
 
 file $TARGET
 
