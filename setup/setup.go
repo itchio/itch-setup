@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
+	"github.com/itchio/ox"
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/wharf/eos/option"
 
@@ -56,9 +56,8 @@ type InstallSource struct {
 const brothBaseURL = "https://broth.itch.ovh"
 
 func NewInstaller(settings InstallerSettings) *Installer {
-	goos := runtime.GOOS
-	goarch := runtime.GOARCH
-	channelName := fmt.Sprintf("%s-%s", goos, goarch)
+	runtime := ox.CurrentRuntime()
+	channelName := fmt.Sprintf("%s-%s", runtime.OS(), runtime.Arch())
 
 	i := &Installer{
 		settings:    settings,

@@ -236,12 +236,11 @@
 			"notests": true
 		},
 		{
-			"importpath": "github.com/itchio/ox/macox",
+			"importpath": "github.com/itchio/ox",
 			"repository": "https://github.com/itchio/ox",
 			"vcs": "git",
 			"revision": "78365f064e087fe3260207d535d7ed510142c8e3",
 			"branch": "master",
-			"path": "/macox",
 			"notests": true
 		},
 		{
@@ -420,6 +419,15 @@
 			"revision": "88942b9c40a4c9d203b82b3731787b672d6e809b",
 			"branch": "master",
 			"path": "/sha3",
+			"notests": true
+		},
+		{
+			"importpath": "golang.org/x/sys/windows",
+			"repository": "https://go.googlesource.com/sys",
+			"vcs": "git",
+			"revision": "1b2967e3c290b7c545b3db0deeda16e9be4f98a2",
+			"branch": "master",
+			"path": "/windows",
 			"notests": true
 		},
 		{
