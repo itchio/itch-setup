@@ -106,7 +106,9 @@ func (nc *nativeCore) Upgrade() error {
 		return err
 	}
 
-	// TODO: do we have something to do if res.DidUpgrade is true?
+	if res.DidUpgrade {
+		log.Printf("Did upgrade! But nothing to do about it on macOS.")
+	}
 
 	return nil
 }
