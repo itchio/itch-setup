@@ -56,7 +56,7 @@ func NewCore(cli cl.CLI) (Core, error) {
 			log.Printf("Same as default, moving on")
 		} else {
 			log.Printf("Strays from defaults, taking it into account")
-			baseDir = defaultBaseDir
+			baseDir = registryBaseDir
 		}
 	}
 	log.Printf("Initial base dir: %s", baseDir)
