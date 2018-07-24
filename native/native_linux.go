@@ -34,7 +34,8 @@ type nativeCore struct {
 	baseDir string
 }
 
-func NewNativeCore(cli cl.CLI) (NativeCore, error) {
+// NewCore returns a Linux-specific Core implementation
+func NewCore(cli cl.CLI) (Core, error) {
 	nc := &nativeCore{
 		cli: cli,
 	}

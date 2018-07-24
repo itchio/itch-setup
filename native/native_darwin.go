@@ -35,7 +35,8 @@ type nativeCore struct {
 
 var globalNc *nativeCore
 
-func NewNativeCore(cli cl.CLI) (NativeCore, error) {
+// NewCore returns a macOS-specific Core implementation
+func NewCore(cli cl.CLI) (Core, error) {
 	nc := &nativeCore{
 		cli: cli,
 	}

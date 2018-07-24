@@ -1,6 +1,8 @@
 package native
 
-type NativeCore interface {
+// The Core type is where platform-specific actions are
+// implemented, often using cross-platform facilities (but not always).
+type Core interface {
 	// Perform install from scratch or heals existing installation
 	Install() error
 

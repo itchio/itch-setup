@@ -135,7 +135,7 @@ func main() {
 	}
 	cli.Localizer = localizer
 
-	nc, err := native.NewNativeCore(cli)
+	nc, err := native.NewCore(cli)
 	if err != nil {
 		panic(err)
 	}

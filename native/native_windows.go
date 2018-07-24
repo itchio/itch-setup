@@ -30,7 +30,8 @@ type nativeCore struct {
 	baseDir    string
 }
 
-func NewNativeCore(cli cl.CLI) (NativeCore, error) {
+// NewCore returns a windows-specific Core implementation
+func NewCore(cli cl.CLI) (Core, error) {
 	nc := &nativeCore{cli: cli}
 
 	folders, err := nwin.GetFolders()
@@ -383,12 +384,12 @@ func (nc *nativeCore) showInstallGUI() error {
 	}
 
 	// see itch-setup.rc
-	iconId := 101
+	iconID := 101
 	if cli.AppName == "kitch" {
-		iconId = 102
+		iconID = 102
 	}
 
-	ic, err := walk.NewIconFromResourceId(iconId)
+	ic, err := walk.NewIconFromResourceId(iconID)
 	if err != nil {
 		log.Println("Could not load icon, oh well")
 	} else {
