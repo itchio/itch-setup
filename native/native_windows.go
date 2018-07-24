@@ -305,14 +305,16 @@ func (nc *nativeCore) showInstallGUI() error {
 							MarginsZero: true,
 						},
 						Children: []ui.Widget{
+							ui.PushButton{
+								Text: cli.Localizer.T("setup.action.browse"),
+								OnClicked: func() {
+									pickInstallLocation()
+								},
+							},
 							ui.LineEdit{
 								AssignTo:    &installDirLabel,
 								Text:        installDir,
-								ReadOnly:    true,
 								ToolTipText: cli.Localizer.T("setup.tooltip.location"),
-								OnMouseUp: func(x, y int, button walk.MouseButton) {
-									pickInstallLocation()
-								},
 							},
 							ui.PushButton{
 								Text: cli.Localizer.T("setup.action.install"),
