@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -97,7 +99,64 @@ func (nc *nativeCore) Upgrade() error {
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
 	})
-	return installer.Upgrade(mv)
+	res, err := installer.Upgrade(mv)
+	if err != nil {
+		return err
+	}
+
+	if res.DidUpgrade {
+		err = nc.doPostInstall(mv)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (nc *nativeCore) doPostInstall(mv setup.Multiverse) error {
+	installDir := nc.baseDir
+	cli := nc.cli
+
+	currentBuild := mv.GetCurrentVersion()
+	if currentBuild == nil {
+		return errors.Errorf("internal error (in post-install with a nil currentBuild)")
+	}
+
+	setupLocalPath, err := nwin.CopySelf(installDir)
+	if err != nil {
+		nc.ErrorDialog(err)
+	}
+
+	// this creates $installDir/app.ico
+	err = nwin.CreateUninstallRegistryEntry(cli, installDir, currentBuild.Version)
+	if err != nil {
+		log.Printf("While creating registry entry: %s", err.Error())
+	}
+
+	// this needs to be done before the shortcut is created
+	err = nc.writeVisualElementsManifest()
+	if err != nil {
+		return err
+	}
+
+	shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
+
+	for _, shortcutPath := range nc.shortcutPaths() {
+		log.Printf("Creating shortcut (%s)...", shortcutPath)
+		err = nwin.CreateShortcut(nwin.ShortcutSettings{
+			ShortcutFilePath: shortcutPath,
+			TargetPath:       setupLocalPath,
+			Arguments:        shortcutArguments,
+			Description:      "The best way to play your itch.io games",
+			IconLocation:     filepath.Join(installDir, "app.ico"),
+			WorkingDirectory: filepath.Join(installDir),
+		})
+		if err != nil {
+			nc.ErrorDialog(errors.WithMessage(err, "while creating shortcut"))
+		}
+	}
+
+	return nil
 }
 
 func (nc *nativeCore) Relaunch() error {
@@ -218,7 +277,7 @@ func (nc *nativeCore) showInstallGUI() error {
 	var installer *setup.Installer
 
 	var trayIcon *walk.NotifyIcon
-	var installDirLabel *walk.LineEdit
+	var installDirLineEdit *walk.LineEdit
 	var pb *walk.ProgressBar
 	var progressLabel *walk.Label
 	var imageView *walk.ImageView
@@ -254,8 +313,10 @@ func (nc *nativeCore) showInstallGUI() error {
 		} else if !ok {
 			// nothing picked
 		} else {
-			installDir = dlg.FilePath
-			installDirLabel.SetText(installDir)
+			if nc.ensureWritable(dlg.FilePath, installDirLineEdit) {
+				installDir = dlg.FilePath
+				installDirLineEdit.SetText(installDir)
+			}
 		}
 	}
 
@@ -271,6 +332,18 @@ func (nc *nativeCore) showInstallGUI() error {
 	}
 
 	baseTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
+
+	onTriggerInstall := func() {
+		installDir = strings.TrimSpace(installDirLineEdit.Text())
+		if !nc.ensureWritable(installDir, installDirLineEdit) {
+			return
+		}
+
+		progressComposite.SetVisible(true)
+		optionsComposite.SetVisible(false)
+
+		go kickoffInstall()
+	}
 
 	err := ui.MainWindow{
 		Title:   baseTitle,
@@ -313,18 +386,18 @@ func (nc *nativeCore) showInstallGUI() error {
 								},
 							},
 							ui.LineEdit{
-								AssignTo:    &installDirLabel,
+								AssignTo:    &installDirLineEdit,
 								Text:        installDir,
 								ToolTipText: cli.Localizer.T("setup.tooltip.location"),
+								OnKeyPress: func(key walk.Key) {
+									if key == walk.KeyReturn {
+										onTriggerInstall()
+									}
+								},
 							},
 							ui.PushButton{
-								Text: cli.Localizer.T("setup.action.install"),
-								OnClicked: func() {
-									progressComposite.SetVisible(true)
-									optionsComposite.SetVisible(false)
-
-									go kickoffInstall()
-								},
+								Text:      cli.Localizer.T("setup.action.install"),
+								OnClicked: onTriggerInstall,
 							},
 						},
 					},
@@ -439,36 +512,12 @@ func (nc *nativeCore) showInstallGUI() error {
 		},
 		OnFinish: func(source setup.InstallSource) {
 			nc.mainWindow.Synchronize(func() {
-				setupLocalPath, err := nwin.CopySelf(installDir)
+				mv, err := nc.newMultiverse()
 				if err != nil {
 					nc.ErrorDialog(err)
 				}
 
-				// this creates $installDir/app.ico
-				err = nwin.CreateUninstallRegistryEntry(cli, installDir, source)
-				if err != nil {
-					log.Printf("While creating registry entry: %s", err.Error())
-				}
-
-				shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
-
-				for n, shortcutPath := range nc.shortcutPaths() {
-					log.Printf("Creating shortcut %d...", n)
-					err = nwin.CreateShortcut(nwin.ShortcutSettings{
-						ShortcutFilePath: shortcutPath,
-						TargetPath:       setupLocalPath,
-						Arguments:        shortcutArguments,
-						Description:      "The best way to play your itch.io games",
-						IconLocation:     filepath.Join(installDir, "app.ico"),
-						WorkingDirectory: filepath.Join(installDir),
-					})
-				}
-
-				if err != nil {
-					nc.ErrorDialog(errors.WithMessage(err, "While creating shortcut marker"))
-				}
-
-				mv, err := nc.newMultiverse()
+				err = nc.doPostInstall(mv)
 				if err != nil {
 					nc.ErrorDialog(err)
 				}
@@ -605,4 +654,70 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 		AppName: nc.cli.AppName,
 		BaseDir: nc.baseDir,
 	})
+}
+
+func (nc *nativeCore) writeVisualElementsManifest() error {
+	manifestContents := `<Application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <VisualElements
+    BackgroundColor="#2E2B2C"
+    ShowNameOnSquare150x150Logo="on"
+    ForegroundText="light"/>
+</Application>`
+
+	manifestName := "VisualElementsManifest.xml"
+	manifestPath := path.Join(nc.baseDir, manifestName)
+
+	log.Printf("Writing visual elements manifest (%s)", manifestPath)
+	err := ioutil.WriteFile(manifestPath, []byte(manifestContents), 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (nc *nativeCore) isValidInstallDir(dir string) bool {
+	return filepath.IsAbs(dir)
+}
+
+func (nc *nativeCore) isWritableInstallDir(dir string) bool {
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return false
+	}
+
+	testFile := filepath.Join(dir, ".write-test")
+	contents := []byte("not program files please")
+	err = ioutil.WriteFile(testFile, contents, 0644)
+	if err != nil {
+		return false
+	}
+
+	os.Remove(testFile)
+	return true
+}
+
+func (nc *nativeCore) ensureWritable(dir string, installDirLineEdit *walk.LineEdit) bool {
+	if dir == "" {
+		installDirLineEdit.SetText(nc.baseDir)
+		msg := "Please choose a non-empty install location.\nThe install location has been reset to the default."
+		walk.MsgBox(nc.mainWindow, "Error", msg, walk.MsgBoxOK)
+		return false
+	}
+
+	if !nc.isValidInstallDir(dir) {
+		installDirLineEdit.SetText(nc.baseDir)
+		msg := fmt.Sprintf("\"%s\" is not a valid install location.\nThe install location has been reset to the default.", dir)
+		walk.MsgBox(nc.mainWindow, "Error", msg, walk.MsgBoxOK)
+		return false
+	}
+
+	if !nc.isWritableInstallDir(dir) {
+		installDirLineEdit.SetText(nc.baseDir)
+		msg := fmt.Sprintf("You do not have permission to install to folder \"%s\".\nThe install location has been reset to the default.", dir)
+		walk.MsgBox(nc.mainWindow, "Error", msg, walk.MsgBoxOK)
+		return false
+	}
+
+	return true
 }

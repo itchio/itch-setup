@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/itchio/itch-setup/setup"
-
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"golang.org/x/sys/windows/registry"
@@ -54,7 +52,7 @@ func GetRegistryInstallDir(cli cl.CLI) (string, error) {
 
 // CreateUninstallRegistryEntry creates all registry entries required to
 // have the app show up in Add or Remove software and be uninstalled by the user
-func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, source setup.InstallSource) error {
+func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, version string) error {
 	log.Printf("Creating uninstall key under %s\\%s", uninstallRegPrefix, cli.AppName)
 
 	pk, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallRegPrefix, registry.CREATE_SUB_KEY)
@@ -73,7 +71,7 @@ func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, source setup.In
 
 	strings := []StringValue{
 		{Key: "DisplayName", Value: cli.AppName},
-		{Key: "DisplayVersion", Value: source.Version},
+		{Key: "DisplayVersion", Value: version},
 		{Key: "InstallDate", Value: time.Now().Format(RegDateFormat)},
 		{Key: "InstallLocation", Value: installDir},
 		{Key: "Publisher", Value: "itch corp."},

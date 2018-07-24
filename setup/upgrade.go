@@ -47,9 +47,15 @@ type archivePlan struct {
 	totalSize int64
 }
 
-func (i *Installer) Upgrade(mv Multiverse) error {
+type UpgradeResult struct {
+	DidUpgrade bool
+}
+
+func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 	EnableJSON()
 	defer DisableJSON()
+
+	res := &UpgradeResult{}
 
 	var ls *localState
 	var rs *remoteState
@@ -83,7 +89,7 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		},
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Printf("Installed %s", ls.version)
@@ -92,7 +98,7 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 	if ls.version == rs.version {
 		log.Printf("We're up-to-date!")
 		Emit(NoUpdateAvailable{})
-		return nil
+		return res, nil
 	}
 
 	if mv.HasReadyPending() {
@@ -101,7 +107,8 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 			log.Printf("...and it is the latest! (%s)", rs.version)
 		}
 		Emit(UpdateReady{Version: rs.version})
-		return nil
+		res.DidUpgrade = true
+		return res, nil
 	}
 
 	var pp *patchPlan
@@ -182,7 +189,7 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		},
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if pp == nil {
@@ -202,7 +209,8 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 		if err == nil {
 			log.Printf("Patching went fine!")
 			Emit(UpdateReady{Version: rs.version})
-			return nil
+			res.DidUpgrade = true
+			return res, nil
 		}
 
 		log.Printf("Patching went wrong, falling back to archive.")
@@ -212,11 +220,12 @@ func (i *Installer) Upgrade(mv Multiverse) error {
 	err = i.applyArchive(mv, rs, ap)
 	if err != nil {
 		Emit(UpdateFailed{Message: fmt.Sprintf("%+v", err)})
-		return err
+		return nil, err
 	}
 
 	Emit(UpdateReady{Version: rs.version})
-	return nil
+	res.DidUpgrade = true
+	return res, nil
 }
 
 func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) error {

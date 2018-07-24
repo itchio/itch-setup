@@ -101,7 +101,14 @@ func (nc *nativeCore) Upgrade() error {
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
 	})
-	return installer.Upgrade(mv)
+	res, err := installer.Upgrade(mv)
+	if err != nil {
+		return err
+	}
+
+	// TODO: do we have something to do if res.DidUpgrade is true?
+
+	return nil
 }
 
 func (nc *nativeCore) Relaunch() error {
