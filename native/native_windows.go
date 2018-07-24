@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -50,8 +49,8 @@ func NewCore(cli cl.CLI) (Core, error) {
 	if err != nil {
 		log.Printf("Could not get registry base dir: %+v", err)
 	} else {
-		log.Printf("Default base dir:  %s", defaultBaseDir)
-		log.Printf("Registry base dir: %s", registryBaseDir)
+		log.Printf("Default base dir:  (%s)", defaultBaseDir)
+		log.Printf("Registry base dir: (%s)", registryBaseDir)
 		if defaultBaseDir == registryBaseDir {
 			log.Printf("Same as default, moving on")
 		} else {
@@ -59,7 +58,7 @@ func NewCore(cli cl.CLI) (Core, error) {
 			baseDir = registryBaseDir
 		}
 	}
-	log.Printf("Initial base dir: %s", baseDir)
+	log.Printf("Initial base dir: (%s)", baseDir)
 	nc.baseDir = baseDir
 
 	return nc, nil
@@ -665,7 +664,7 @@ func (nc *nativeCore) writeVisualElementsManifest() error {
 </Application>`
 
 	manifestName := "VisualElementsManifest.xml"
-	manifestPath := path.Join(nc.baseDir, manifestName)
+	manifestPath := filepath.Join(nc.baseDir, manifestName)
 
 	log.Printf("Writing visual elements manifest (%s)", manifestPath)
 	err := ioutil.WriteFile(manifestPath, []byte(manifestContents), 0644)

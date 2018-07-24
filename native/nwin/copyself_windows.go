@@ -10,11 +10,21 @@ import (
 )
 
 func CopySelf(installDir string) (string, error) {
-	log.Printf("Copying self to %s", installDir)
+	log.Printf("Copying self to (%s)", installDir)
 
 	execPath, err := os.Executable()
 	if err != nil {
 		return "", errors.WithMessage(err, "while getting self path")
+	}
+
+	targetExecPath := filepath.Join(installDir, "itch-setup.exe")
+
+	execPath = filepath.Clean(execPath)
+	targetExecPath = filepath.Clean(targetExecPath)
+
+	if execPath == targetExecPath {
+		log.Printf("Wait, no, (%s) is precisely what we're running off of, skipping...", execPath)
+		return targetExecPath, nil
 	}
 
 	src, err := os.Open(execPath)
@@ -22,7 +32,6 @@ func CopySelf(installDir string) (string, error) {
 		return "", errors.WithMessage(err, "while opening self")
 	}
 
-	targetExecPath := filepath.Join(installDir, "itch-setup.exe")
 	dst, err := os.Create(targetExecPath)
 	if err != nil {
 		return "", errors.WithMessage(err, "while creating copy of self in install folder")

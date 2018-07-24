@@ -53,7 +53,7 @@ func GetRegistryInstallDir(cli cl.CLI) (string, error) {
 // CreateUninstallRegistryEntry creates all registry entries required to
 // have the app show up in Add or Remove software and be uninstalled by the user
 func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, version string) error {
-	log.Printf("Creating uninstall key under %s\\%s", uninstallRegPrefix, cli.AppName)
+	log.Printf("Creating uninstall key under (%s\\%s)", uninstallRegPrefix, cli.AppName)
 
 	pk, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallRegPrefix, registry.CREATE_SUB_KEY)
 	if err != nil {

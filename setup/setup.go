@@ -202,7 +202,7 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 		appDir = filepath.Join(stagingFolder, fmt.Sprintf("app-%s", version))
 	}
 
-	log.Printf("Installing to %s", appDir)
+	log.Printf("Installing to (%s)", appDir)
 
 	healPath := fmt.Sprintf("archive,%s", archiveURL)
 
@@ -212,7 +212,7 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 		NumWorkers: 2,
 	}
 
-	log.Printf("Healing %s...", appDir)
+	log.Printf("Healing (%s)...", appDir)
 	err = vc.Validate(ctx, appDir, sigInfo)
 	if err != nil {
 		return errors.WithMessage(err, "while installing")
