@@ -24,6 +24,10 @@ func KillAll(pathsToKill []string) error {
 	handleProc := func(process ps.Process) {
 		handle, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(process.Pid()))
 		if err != nil {
+			if errno, ok := err.(syscall.Errno); ok && errno == syscall.ERROR_ACCESS_DENIED {
+				// ignore
+				return
+			}
 			log.Printf("Couldn't open process (pid %d): %s", process.Pid(), err.Error())
 		} else {
 			defer syscall.Close(handle)

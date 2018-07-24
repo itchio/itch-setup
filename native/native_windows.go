@@ -198,29 +198,82 @@ func (nc *nativeCore) Uninstall() error {
 		log.Println("While killing processes", err.Error())
 	}
 
-	for n, shortcutPath := range nc.shortcutPaths() {
-		log.Printf("Removing shortcut %d...", n)
+	warn := func(err error) {
+		log.Printf("warning: %v", err)
+		log.Printf("(continuing anyway)")
+	}
+
+	for _, shortcutPath := range nc.shortcutPaths() {
+		log.Printf("remove (%s)", shortcutPath)
 		err = os.Remove(shortcutPath)
 		if err != nil {
-			log.Println("While removing desktop shortcut", err.Error())
-			log.Println("(Note: shortcut errors aren't critical)")
+			warn(err)
 		}
 	}
 
-	// FIXME: this should be a method of mv - it knows what to remove
-	// and what not to remove
-
-	log.Println("Nuking app folder")
-	tries := 5
-	for i := 0; i < tries; i++ {
-		err = os.RemoveAll(nc.baseDir)
+	cleanBaseDir := func() error {
+		dir, err := os.Open(nc.baseDir)
 		if err != nil {
-			log.Printf("%+v", err)
-			log.Printf("Sleeping a bit then retrying")
-			time.Sleep(1 * time.Second)
-			continue
+			if os.IsNotExist(err) {
+				// good!
+				return nil
+			}
 		}
-		break
+		defer dir.Close()
+
+		names, err := dir.Readdirnames(-1)
+		if err != nil {
+			return err
+		}
+
+		// N.B: we can't remove `itch-setup.exe`, because
+		// it is us! and we are currently running!
+		deleteMap := map[string]bool{
+			// app icon
+			"app.ico": true,
+			// weird UWP stuff, Windows 10 visual tile styles, ugh
+			nc.visualElementsManifestName(): true,
+			// installed version state
+			"state.json": true,
+		}
+
+		for _, name := range names {
+			fullPath := filepath.Join(nc.baseDir, name)
+
+			if deleteMap[name] {
+				log.Printf("delete (%s)", fullPath)
+				err := os.Remove(fullPath)
+				if err != nil {
+					warn(err)
+				}
+			} else if strings.HasPrefix(name, "app-") {
+				tries := 3
+
+				for {
+					log.Printf("delete (%s)/", fullPath)
+					err := os.RemoveAll(fullPath)
+					if err != nil {
+						if tries > 0 {
+							log.Printf("retrying in 1 second...")
+							time.Sleep(1 * time.Second)
+							tries--
+							continue
+						}
+						warn(err)
+					}
+					break
+				}
+
+			} else {
+				log.Printf("keep (%s)", fullPath)
+			}
+		}
+		return nil
+	}
+
+	err = cleanBaseDir()
+	if err != nil {
+		nc.ErrorDialog(err)
 	}
 
 	log.Println("Removing uninstaller entry...")
@@ -229,6 +282,40 @@ func (nc *nativeCore) Uninstall() error {
 		log.Println("While removing uninstaller entry", err.Error())
 		log.Println("(Note: these aren't critical)")
 	}
+
+	renameSelfToTrash := func() error {
+		log.Println("Renaming self to temp directory...")
+		trashPath := filepath.Join(os.TempDir(), ".itch-setup-trash")
+		err := os.MkdirAll(trashPath, 0755)
+		if err != nil {
+			return err
+		}
+
+		selfPath := filepath.Join(nc.baseDir, "itch-setup.exe")
+
+		selfTrashPath := filepath.Join(trashPath, "itch-setup.exe")
+		log.Printf("We'll leave file at (%s), best we can do, sorry :(", selfTrashPath)
+		err = os.Rename(selfPath, selfTrashPath)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	err = renameSelfToTrash()
+	if err != nil {
+		warn(err)
+	} else {
+		log.Printf("Attempting to remove folder (will fail if we've kept files)")
+		err := os.Remove(nc.baseDir)
+		if err != nil {
+			log.Printf("Yup, it's staying")
+		} else {
+			log.Printf("Ooh, clean uninstall. Neat!")
+		}
+	}
+
 	return nil
 }
 
@@ -655,6 +742,14 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 	})
 }
 
+func (nc *nativeCore) visualElementsManifestName() string {
+	return "itch-setup.VisualElementsManifest.xml"
+}
+
+func (nc *nativeCore) visualElementsManifestPath() string {
+	return filepath.Join(nc.baseDir, nc.visualElementsManifestName())
+}
+
 func (nc *nativeCore) writeVisualElementsManifest() error {
 	manifestContents := `<Application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <VisualElements
@@ -663,8 +758,7 @@ func (nc *nativeCore) writeVisualElementsManifest() error {
     ForegroundText="light"/>
 </Application>`
 
-	manifestName := "VisualElementsManifest.xml"
-	manifestPath := filepath.Join(nc.baseDir, manifestName)
+	manifestPath := nc.visualElementsManifestPath()
 
 	log.Printf("Writing visual elements manifest (%s)", manifestPath)
 	err := ioutil.WriteFile(manifestPath, []byte(manifestContents), 0644)
