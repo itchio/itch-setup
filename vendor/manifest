@@ -123,6 +123,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/go-ole/go-ole",
+			"repository": "https://github.com/go-ole/go-ole",
+			"vcs": "git",
+			"revision": "7a0fa49edf48165190530c675167e2f319a05268",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/golang/protobuf/proto",
 			"repository": "https://github.com/golang/protobuf",
 			"vcs": "git",
@@ -138,6 +146,22 @@
 			"revision": "e09c5db296004fbe3f74490e84dcd62c3c5ddb1b",
 			"branch": "master",
 			"path": "ptypes/any",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/gonuts/commander",
+			"repository": "https://github.com/gonuts/commander",
+			"vcs": "git",
+			"revision": "f8ba4e959ca914268227c3ebbd7f6bf0bb35541a",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/gonuts/flag",
+			"repository": "https://github.com/gonuts/flag",
+			"vcs": "git",
+			"revision": "741a6cbd37a30dedc93f817e7de6aaf0ca38a493",
+			"branch": "master",
 			"notests": true
 		},
 		{
@@ -346,6 +370,14 @@
 			"repository": "https://github.com/satori/go.uuid",
 			"vcs": "git",
 			"revision": "36e9d2ebbde5e3f13ab2e25625fd453271d6522e",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/scjalliance/comshim",
+			"repository": "https://github.com/scjalliance/comshim",
+			"vcs": "git",
+			"revision": "4a61890180848288d194c4fad7efd41eb9b26c7b",
 			"branch": "master",
 			"notests": true
 		},
