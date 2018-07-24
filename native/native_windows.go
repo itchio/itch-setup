@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/scjalliance/comshim"
 	"github.com/skratchdot/open-golang/open"
 
 	"github.com/itchio/itch-setup/cl"
@@ -65,6 +66,9 @@ func NewCore(cli cl.CLI) (Core, error) {
 }
 
 func (nc *nativeCore) Install() error {
+	comshim.Add(1)
+	defer comshim.Done()
+
 	cli := nc.cli
 
 	if cli.PreferLaunch {
@@ -87,6 +91,9 @@ func (nc *nativeCore) Install() error {
 }
 
 func (nc *nativeCore) Upgrade() error {
+	comshim.Add(1)
+	defer comshim.Done()
+
 	cli := nc.cli
 
 	mv, err := nc.newMultiverse()
