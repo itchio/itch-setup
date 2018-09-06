@@ -1,6 +1,9 @@
 package nwin
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 
@@ -18,6 +21,12 @@ type ShortcutSettings struct {
 
 // CreateShortcut creates a windows shortcut with the given settings
 func CreateShortcut(settings ShortcutSettings) error {
+	dir := filepath.Dir(settings.ShortcutFilePath)
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return err
+	}
+
 	comshim.Add(1)
 	defer comshim.Done()
 
