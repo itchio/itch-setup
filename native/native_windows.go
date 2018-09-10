@@ -147,10 +147,11 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse) error {
 
 	shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
 
-	for _, shortcutPath := range nc.shortcutPaths() {
-		log.Printf("Creating shortcut (%s)...", shortcutPath)
+	for _, spec := range nc.shortcutSpecs() {
+		log.Printf("Creating shortcut (%s)...", spec.Path)
 		err = nwin.CreateShortcut(nwin.ShortcutSettings{
-			ShortcutFilePath: shortcutPath,
+			ShortcutFilePath: spec.Path,
+			OnlyIfExists:     spec.OnlyIfExists,
 			TargetPath:       setupLocalPath,
 			Arguments:        shortcutArguments,
 			Description:      "The best way to play your itch.io games",
@@ -210,9 +211,9 @@ func (nc *nativeCore) Uninstall() error {
 		log.Printf("(continuing anyway)")
 	}
 
-	for _, shortcutPath := range nc.shortcutPaths() {
-		log.Printf("remove (%s)", shortcutPath)
-		err = os.Remove(shortcutPath)
+	for _, spec := range nc.shortcutSpecs() {
+		log.Printf("remove (%s)", spec.Path)
+		err = os.Remove(spec.Path)
 		if err != nil {
 			warn(err)
 		}
@@ -723,19 +724,45 @@ func (nc *nativeCore) ErrorDialog(errShown error) {
 	os.Exit(1)
 }
 
-func (nc *nativeCore) shortcutPaths() []string {
-	return []string{
-		nc.desktopShortcutPath(),
-		nc.startMenuShortcutPath(),
+type shortcutSpec struct {
+	Path         string
+	OnlyIfExists bool
+}
+
+func (nc *nativeCore) shortcutSpecs() []shortcutSpec {
+	return []shortcutSpec{
+		nc.desktopShortcutSpecs(),
+		nc.startMenuShortcutSpecs(),
+		nc.pinnedShortcutSpec(),
 	}
 }
 
-func (nc *nativeCore) desktopShortcutPath() string {
-	return filepath.Join(nc.folders.Desktop, fmt.Sprintf("%s.lnk", nc.cli.AppName))
+func (nc *nativeCore) desktopShortcutSpecs() shortcutSpec {
+	return shortcutSpec{
+		Path: filepath.Join(nc.folders.Desktop, nc.shortcutName()),
+	}
 }
 
-func (nc *nativeCore) startMenuShortcutPath() string {
-	return filepath.Join(nc.folders.Programs, "Itch Corp", fmt.Sprintf("%s.lnk", nc.cli.AppName))
+func (nc *nativeCore) startMenuShortcutSpecs() shortcutSpec {
+	return shortcutSpec{
+		Path: filepath.Join(nc.folders.Programs, "Itch Corp", nc.shortcutName()),
+	}
+}
+
+func (nc *nativeCore) pinnedShortcutSpec() shortcutSpec {
+	return shortcutSpec{
+		// Yes, this is Windows 10 stuff.
+		// No, I don't know either.
+		Path: filepath.Join(nc.folders.RoamingAppData, "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar", nc.shortcutName()),
+
+		// This shortcut only exists if the app was pinned to the task bar,
+		// we don't want to create it ourselves.
+		OnlyIfExists: true,
+	}
+}
+
+func (nc *nativeCore) shortcutName() string {
+	return fmt.Sprintf("%s.lnk", nc.cli.AppName)
 }
 
 func (nc *nativeCore) exeName() string {
