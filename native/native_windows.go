@@ -758,12 +758,17 @@ func (nc *nativeCore) visualElementsManifestPath() string {
 }
 
 func (nc *nativeCore) writeVisualElementsManifest() error {
-	manifestContents := `<Application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	backgroundColor := "#FA5C5C" // itch.io pink
+	if nc.cli.AppName == "kitch" {
+		backgroundColor = "#5CB3FA" // kitch blue
+	}
+
+	manifestContents := fmt.Sprintf(`<Application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <VisualElements
-    BackgroundColor="#2E2B2C"
+    BackgroundColor="%s"
     ShowNameOnSquare150x150Logo="on"
     ForegroundText="light"/>
-</Application>`
+</Application>`, backgroundColor)
 
 	manifestPath := nc.visualElementsManifestPath()
 
