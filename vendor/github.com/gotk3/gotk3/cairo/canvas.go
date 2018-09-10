@@ -126,6 +126,11 @@ func (v *Context) GetGroupTarget() *Surface {
 	return s
 }
 
+// SetSource is a wrapper around cairo_set_source().
+func (v *Context) SetSource(p *Pattern) {
+	C.cairo_set_source(v.native(), p.native())
+}
+
 // SetSourceRGB is a wrapper around cairo_set_source_rgb().
 func (v *Context) SetSourceRGB(red, green, blue float64) {
 	C.cairo_set_source_rgb(v.native(), C.double(red), C.double(green),

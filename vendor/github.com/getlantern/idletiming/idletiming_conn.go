@@ -12,6 +12,7 @@ import (
 
 	"github.com/getlantern/golog"
 	"github.com/getlantern/mtime"
+	"github.com/getlantern/netx"
 )
 
 var (
@@ -21,6 +22,21 @@ var (
 	// closed because of idling.
 	ErrIdled = errors.New("Use of idled network connection")
 )
+
+// IsIdled indicates whether the given conn represents an idletiming conn that
+// has idled.
+func IsIdled(conn net.Conn) bool {
+	isIdled := false
+	netx.WalkWrapped(conn, func(wrapped net.Conn) bool {
+		switch t := conn.(type) {
+		case *IdleTimingConn:
+			isIdled = t.Idled()
+		}
+		// Keep looking until we find out we're idled
+		return !isIdled
+	})
+	return isIdled
+}
 
 // Conn creates a new net.Conn wrapping the given net.Conn that times out after
 // the specified period. Once a connection has timed out, any pending reads or
@@ -53,6 +69,7 @@ func Conn(conn net.Conn, idleTimeout time.Duration, onIdle func()) *IdleTimingCo
 				continue
 			case <-timer.C:
 				c.Close()
+				atomic.StoreInt64(&c.idled, 1)
 				if onIdle != nil {
 					onIdle()
 				}
@@ -69,20 +86,22 @@ func Conn(conn net.Conn, idleTimeout time.Duration, onIdle func()) *IdleTimingCo
 // IdleTimingConn is a net.Conn that wraps another net.Conn and that times out
 // if idle for more than idleTimeout.
 type IdleTimingConn struct {
-	// Keep it at the top to make sure 64-bit alignment, see
+	// Keep 64-bit words at the top to make sure 64-bit alignment, see
 	// https://golang.org/pkg/sync/atomic/#pkg-note-BUG
 	lastActivityTime uint64
-	readDeadline     guardedTime
-	writeDeadline    guardedTime
-
-	conn             net.Conn
-	idleTimeout      time.Duration
-	halfIdleTimeout  time.Duration
-	activeCh         chan bool
-	closedCh         chan bool
-	closeMutex       sync.RWMutex // prevents Close() from interfering with io operations
-	closed           bool
+	idled            int64
 	hasReadAfterIdle int32
+
+	readDeadline  guardedTime
+	writeDeadline guardedTime
+
+	conn            net.Conn
+	idleTimeout     time.Duration
+	halfIdleTimeout time.Duration
+	activeCh        chan bool
+	closedCh        chan bool
+	closeMutex      sync.RWMutex // prevents Close() from interfering with io operations
+	closed          bool
 }
 
 // TimesOutIn returns how much time is left before this connection will time
@@ -94,8 +113,12 @@ func (c *IdleTimingConn) TimesOutIn() time.Duration {
 // Read implements the method from io.Reader
 func (c *IdleTimingConn) Read(b []byte) (int, error) {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
+	n, err := c.doRead(b)
+	c.closeMutex.RUnlock()
+	return n, err
+}
 
+func (c *IdleTimingConn) doRead(b []byte) (int, error) {
 	if err := c.checkClosedFirstTime(&c.hasReadAfterIdle, io.EOF); err != nil {
 		return 0, err
 	}
@@ -139,11 +162,15 @@ func (c *IdleTimingConn) Read(b []byte) (int, error) {
 	}
 }
 
-// Write implements the method from io.Reader
+// Write implements the method from io.Writer
 func (c *IdleTimingConn) Write(b []byte) (int, error) {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
+	n, err := c.doWrite(b)
+	c.closeMutex.RUnlock()
+	return n, err
+}
 
+func (c *IdleTimingConn) doWrite(b []byte) (int, error) {
 	if err := c.checkClosed(); err != nil {
 		return 0, err
 	}
@@ -208,24 +235,32 @@ func (c *IdleTimingConn) Close() error {
 	return c.conn.Close()
 }
 
+func (c *IdleTimingConn) Idled() bool {
+	return atomic.LoadInt64(&c.idled) == 1
+}
+
 func (c *IdleTimingConn) LocalAddr() net.Addr {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
-
-	return c.conn.LocalAddr()
+	addr := c.conn.LocalAddr()
+	c.closeMutex.RUnlock()
+	return addr
 }
 
 func (c *IdleTimingConn) RemoteAddr() net.Addr {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
-
-	return c.conn.RemoteAddr()
+	addr := c.conn.RemoteAddr()
+	c.closeMutex.RUnlock()
+	return addr
 }
 
 func (c *IdleTimingConn) SetDeadline(t time.Time) error {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
+	err := c.doSetDeadline(t)
+	c.closeMutex.RUnlock()
+	return err
+}
 
+func (c *IdleTimingConn) doSetDeadline(t time.Time) error {
 	if err := c.checkClosed(); err != nil {
 		return err
 	}
@@ -241,8 +276,12 @@ func (c *IdleTimingConn) SetDeadline(t time.Time) error {
 
 func (c *IdleTimingConn) SetReadDeadline(t time.Time) error {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
+	err := c.doSetReadDeadline(t)
+	c.closeMutex.RUnlock()
+	return err
+}
 
+func (c *IdleTimingConn) doSetReadDeadline(t time.Time) error {
 	if err := c.checkClosed(); err != nil {
 		return err
 	}
@@ -253,8 +292,12 @@ func (c *IdleTimingConn) SetReadDeadline(t time.Time) error {
 
 func (c *IdleTimingConn) SetWriteDeadline(t time.Time) error {
 	c.closeMutex.RLock()
-	defer c.closeMutex.RUnlock()
+	err := c.doSetWriteDeadline(t)
+	c.closeMutex.RUnlock()
+	return err
+}
 
+func (c *IdleTimingConn) doSetWriteDeadline(t time.Time) error {
 	if err := c.checkClosed(); err != nil {
 		return err
 	}

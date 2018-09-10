@@ -235,7 +235,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 	{
 		log.Printf("But first, let's check (%s) is a valid build for (%s)", ls.appDir, ls.version)
 
-		signatureURL := fmt.Sprintf("%s/%s/signature/default", i.brothPackageURL(), ls.version)
+		signatureURL := i.buildBrothURL(nil, "%s/signature/default", ls.version)
 		log.Printf("☁ %s", signatureURL)
 
 		consumer := newConsumer()
@@ -287,7 +287,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 
 		consumer := newConsumer()
 
-		patchURL := fmt.Sprintf("%s/%s/patch/%s", i.brothPackageURL(), bp.Version, f.SubType)
+		patchURL := i.buildBrothURL(nil, "%s/patch/%s", bp.Version, f.SubType)
 		log.Printf("☁ %s", patchURL)
 
 		patchSource, err := filesource.Open(patchURL, option.WithConsumer(consumer))
@@ -365,7 +365,7 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 	log.Printf("Upgrading to (%s) using archive...", rs.version)
 	Emit(InstallingUpdate{Version: rs.version})
 
-	archiveURL := fmt.Sprintf("%s/%s/archive/default", i.brothPackageURL(), rs.version)
+	archiveURL := i.buildBrothURL(nil, "%s/archive/default", rs.version)
 	log.Printf("☁ %s", archiveURL)
 
 	consumer := newConsumer()

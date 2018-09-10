@@ -138,7 +138,6 @@ func init() {
 		{glib.Type(C.gtk_file_chooser_button_get_type()), marshalFileChooserButton},
 		{glib.Type(C.gtk_file_chooser_dialog_get_type()), marshalFileChooserDialog},
 		{glib.Type(C.gtk_file_chooser_widget_get_type()), marshalFileChooserWidget},
-		{glib.Type(C.gtk_font_button_get_type()), marshalFontButton},
 		{glib.Type(C.gtk_frame_get_type()), marshalFrame},
 		{glib.Type(C.gtk_aspect_frame_get_type()), marshalAspectFrame},
 		{glib.Type(C.gtk_grid_get_type()), marshalGrid},
@@ -168,7 +167,7 @@ func init() {
 		{glib.Type(C.gtk_scrollbar_get_type()), marshalScrollbar},
 		{glib.Type(C.gtk_scrolled_window_get_type()), marshalScrolledWindow},
 		{glib.Type(C.gtk_search_entry_get_type()), marshalSearchEntry},
-		{glib.Type(C.gtk_selection_data_get_type()), marshalSelectionData},
+		//{glib.Type(C.gtk_selection_data_get_type()), marshalSelectionData},
 		{glib.Type(C.gtk_separator_get_type()), marshalSeparator},
 		{glib.Type(C.gtk_separator_menu_item_get_type()), marshalSeparatorMenuItem},
 		{glib.Type(C.gtk_separator_tool_item_get_type()), marshalSeparatorToolItem},
@@ -2791,9 +2790,9 @@ func DialogNew() (*Dialog, error) {
 }
 
 // Run() is a wrapper around gtk_dialog_run().
-func (v *Dialog) Run() int {
+func (v *Dialog) Run() ResponseType {
 	c := C.gtk_dialog_run(v.native())
-	return int(c)
+	return ResponseType(c)
 }
 
 // Response() is a wrapper around gtk_dialog_response().
@@ -3828,12 +3827,29 @@ func wrapFileChooser(obj *glib.Object) *FileChooser {
 	return &FileChooser{obj}
 }
 
+// SetFilename is a wrapper around gtk_file_chooser_set_filename().
+func (v *FileChooser) SetFilename(filename string) bool {
+	cstr := C.CString(filename)
+	defer C.free(unsafe.Pointer(cstr))
+	c := C.gtk_file_chooser_set_filename(v.native(), cstr)
+	return gobool(c)
+}
+
 // GetFilename is a wrapper around gtk_file_chooser_get_filename().
 func (v *FileChooser) GetFilename() string {
 	c := C.gtk_file_chooser_get_filename(v.native())
 	s := goString(c)
 	defer C.g_free((C.gpointer)(c))
 	return s
+}
+
+// GetFilenames is a wrapper around gtk_file_chooser_get_filenames().
+func (v *FileChooser) GetFilenames() (*glib.SList, error) {
+	c := C.gtk_file_chooser_get_filenames(v.native())
+	if c == nil {
+		return nil, nilPtrErr
+	}
+	return glib.WrapSList(uintptr(unsafe.Pointer(c))), nil
 }
 
 // SetDoOverwriteConfirmation is a wrapper around gtk_file_chooser_set_do_overwrite_confirmation().
@@ -3929,6 +3945,28 @@ func (v *FileChooser) AddShortcutFolder(folder string) bool {
 	cstr := C.CString(folder)
 	defer C.free(unsafe.Pointer(cstr))
 	c := C.gtk_file_chooser_add_shortcut_folder(v.native(), cstr, nil)
+	return gobool(c)
+}
+
+// SetLocalOnly is a wrapper around gtk_file_chooser_set_local_only().
+func (v *FileChooser) SetLocalOnly(value bool) {
+	C.gtk_file_chooser_set_local_only(v.native(), gbool(value))
+}
+
+// GetLocalOnly is a wrapper around gtk_file_chooser_get_local_only().
+func (v *FileChooser) GetLocalOnly() bool {
+	c := C.gtk_file_chooser_get_local_only(v.native())
+	return gobool(c)
+}
+
+// SetSelectMultiple is a wrapper around gtk_file_chooser_set_select_multiple().
+func (v *FileChooser) SetSelectMultiple(value bool) {
+	C.gtk_file_chooser_set_select_multiple(v.native(), gbool(value))
+}
+
+// GetSelectMultiple is a wrapper around gtk_file_chooser_get_select_multiple().
+func (v *FileChooser) GetSelectMultiple() bool {
+	c := C.gtk_file_chooser_get_select_multiple(v.native())
 	return gobool(c)
 }
 
@@ -4153,71 +4191,6 @@ func (v *FileFilter) AddPattern(pattern string) {
 // AddPixbufFormats is a wrapper around gtk_file_filter_add_pixbuf_formats().
 func (v *FileFilter) AddPixbufFormats() {
 	C.gtk_file_filter_add_pixbuf_formats(v.native())
-}
-
-/*
- * GtkFontButton
- */
-
-// FontButton is a representation of GTK's GtkFontButton.
-type FontButton struct {
-	Button
-}
-
-// native returns a pointer to the underlying GtkFontButton.
-func (v *FontButton) native() *C.GtkFontButton {
-	if v == nil || v.GObject == nil {
-		return nil
-	}
-	p := unsafe.Pointer(v.GObject)
-	return C.toGtkFontButton(p)
-}
-
-func marshalFontButton(p uintptr) (interface{}, error) {
-	c := C.g_value_get_object((*C.GValue)(unsafe.Pointer(p)))
-	obj := glib.Take(unsafe.Pointer(c))
-	return wrapFontButton(obj), nil
-}
-
-func wrapFontButton(obj *glib.Object) *FontButton {
-	return &FontButton{Button{Bin{Container{Widget{
-		glib.InitiallyUnowned{obj}}}}}}
-}
-
-// FontButtonNew is a wrapper around gtk_font_button_new().
-func FontButtonNew() (*FontButton, error) {
-	c := C.gtk_font_button_new()
-	if c == nil {
-		return nil, nilPtrErr
-	}
-	obj := glib.Take(unsafe.Pointer(c))
-	return wrapFontButton(obj), nil
-}
-
-// FontButtonNewWithFont is a wrapper around gtk_font_button_new_with_font().
-func FontButtonNewWithFont(fontname string) (*FontButton, error) {
-	cstr := C.CString(fontname)
-	defer C.free(unsafe.Pointer(cstr))
-	c := C.gtk_font_button_new_with_font((*C.gchar)(cstr))
-	if c == nil {
-		return nil, nilPtrErr
-	}
-	obj := glib.Take(unsafe.Pointer(c))
-	return wrapFontButton(obj), nil
-}
-
-// GetFontName is a wrapper around gtk_font_button_get_font_name().
-func (v *FontButton) GetFontName() string {
-	c := C.gtk_font_button_get_font_name(v.native())
-	return goString(c)
-}
-
-// SetFontName is a wrapper around gtk_font_button_set_font_name().
-func (v *FontButton) SetFontName(fontname string) bool {
-	cstr := C.CString(fontname)
-	defer C.free(unsafe.Pointer(cstr))
-	c := C.gtk_font_button_set_font_name(v.native(), (*C.gchar)(cstr))
-	return gobool(c)
 }
 
 /*
@@ -4594,8 +4567,7 @@ func ImageNewFromResource(resourcePath string) (*Image, error) {
 
 // ImageNewFromPixbuf is a wrapper around gtk_image_new_from_pixbuf().
 func ImageNewFromPixbuf(pixbuf *gdk.Pixbuf) (*Image, error) {
-	ptr := (*C.GdkPixbuf)(unsafe.Pointer(pixbuf.Native()))
-	c := C.gtk_image_new_from_pixbuf(ptr)
+	c := C.gtk_image_new_from_pixbuf((*C.GdkPixbuf)(pixbuf.NativePrivate()))
 	if c == nil {
 		return nil, nilPtrErr
 	}
@@ -6797,6 +6769,17 @@ func (v *ScrolledWindow) SetVAdjustment(adjustment *Adjustment) {
 	C.gtk_scrolled_window_set_vadjustment(v.native(), adjustment.native())
 }
 
+// GetShadowType is a wrapper around gtk_scrolled_window_get_shadow_type().
+func (v *ScrolledWindow) GetShadowType() ShadowType {
+	c := C.gtk_scrolled_window_get_shadow_type(v.native())
+	return ShadowType(c)
+}
+
+// SetShadowType is a wrapper around gtk_scrolled_window_set_shadow_type().
+func (v *ScrolledWindow) SetShadowType(t ShadowType) {
+	C.gtk_scrolled_window_set_shadow_type(v.native(), C.GtkShadowType(t))
+}
+
 /*
  * GtkSearchEntry
  */
@@ -6870,6 +6853,23 @@ func (v *SelectionData) GetData() (data []byte) {
 	sliceHeader.Len = int(length)
 	sliceHeader.Cap = int(length)
 	return
+}
+
+//fixed GetData directly from ptr
+func GetData(pointer uintptr) (data []byte) {
+	c := (*C.GValue)(unsafe.Pointer(pointer))
+	p := (*C.GtkSelectionData)(unsafe.Pointer(c))
+	C.gtk_selection_data_get_text(p)
+
+	var byteData []byte
+	var length C.gint
+	cptr := C.gtk_selection_data_get_data_with_length(p, &length)
+	sliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&byteData))
+	sliceHeader.Data = uintptr(unsafe.Pointer(cptr))
+	sliceHeader.Len = int(length)
+	sliceHeader.Cap = int(length)
+
+	return byteData
 }
 
 func (v *SelectionData) free() {
@@ -7341,7 +7341,8 @@ func TargetEntryNew(target string, flags TargetFlags, info uint) (*TargetEntry, 
 		return nil, nilPtrErr
 	}
 	t := (*TargetEntry)(unsafe.Pointer(c))
-	runtime.SetFinalizer(t, (*TargetEntry).free)
+	// causes setFinilizer error
+	//	runtime.SetFinalizer(t, (*TargetEntry).free)
 	return t, nil
 }
 
@@ -8833,7 +8834,6 @@ var WrapMap = map[string]WrapFn{
 	"GtkFileChooserButton":   wrapFileChooserButton,
 	"GtkFileChooserDialog":   wrapFileChooserDialog,
 	"GtkFileChooserWidget":   wrapFileChooserWidget,
-	"GtkFontButton":          wrapFontButton,
 	"GtkGrid":                wrapGrid,
 	"GtkIconView":            wrapIconView,
 	"GtkImage":               wrapImage,

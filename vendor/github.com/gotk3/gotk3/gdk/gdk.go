@@ -1070,6 +1070,24 @@ func (v *EventMotion) MotionValRoot() (float64, float64) {
 	return float64(x), float64(y)
 }
 
+// Time returns the time of the event in milliseconds.
+func (v *EventMotion) Time() uint32 {
+	c := v.native().time
+	return uint32(c)
+}
+
+func (v *EventMotion) Type() EventType {
+	c := v.native()._type
+	return EventType(c)
+}
+
+// A bit-mask representing the state of the modifier keys (e.g. Control, Shift
+// and Alt) and the pointer buttons. See gdk.ModifierType constants.
+func (v *EventMotion) State() ModifierType {
+	c := v.native().state
+	return ModifierType(c)
+}
+
 /*
  * GdkEventScroll
  */
@@ -1224,6 +1242,14 @@ func (v *Pixbuf) native() *C.GdkPixbuf {
 // Native returns a pointer to the underlying GdkPixbuf.
 func (v *Pixbuf) Native() uintptr {
 	return uintptr(unsafe.Pointer(v.native()))
+}
+
+func (v *Pixbuf) NativePrivate() *C.GdkPixbuf {
+	if v == nil || v.GObject == nil {
+		return nil
+	}
+	p := unsafe.Pointer(v.GObject)
+	return C.toGdkPixbuf(p)
 }
 
 func marshalPixbuf(p uintptr) (interface{}, error) {
@@ -1588,6 +1614,35 @@ func (v *PixbufLoader) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
+func (v *PixbufLoader) WriteAndReturnPixbuf(data []byte) (*Pixbuf, error) {
+
+	if len(data) == 0 {
+		return nil, errors.New("no data")
+	}
+
+	var err *C.GError
+	c := C.gdk_pixbuf_loader_write(v.native(), (*C.guchar)(unsafe.Pointer(&data[0])), C.gsize(len(data)), &err)
+
+	if !gobool(c) {
+		defer C.g_error_free(err)
+		return nil, errors.New(C.GoString((*C.char)(err.message)))
+	}
+
+	v.Close()
+
+	c2 := C.gdk_pixbuf_loader_get_pixbuf(v.native())
+	if c2 == nil {
+		return nil, nilPtrErr
+	}
+
+	obj := &glib.Object{glib.ToGObject(unsafe.Pointer(c2))}
+	p := &Pixbuf{obj}
+	//obj.Ref() // Don't call Ref here, gdk_pixbuf_loader_get_pixbuf already did that for us.
+	runtime.SetFinalizer(p, func(_ interface{}) { obj.Unref() })
+
+	return p, nil
+}
+
 // Close is a wrapper around gdk_pixbuf_loader_close().  An error is
 // returned instead of a bool like the native C function to support the
 // io.Closer interface.
@@ -1626,8 +1681,11 @@ type RGBA struct {
 
 func marshalRGBA(p uintptr) (interface{}, error) {
 	c := C.g_value_get_boxed((*C.GValue)(unsafe.Pointer(p)))
-	c2 := (*C.GdkRGBA)(unsafe.Pointer(c))
-	return wrapRGBA(c2), nil
+	return WrapRGBA(unsafe.Pointer(c)), nil
+}
+
+func WrapRGBA(p unsafe.Pointer) *RGBA {
+	return wrapRGBA((*C.GdkRGBA)(p))
 }
 
 func wrapRGBA(obj *C.GdkRGBA) *RGBA {
@@ -1654,6 +1712,14 @@ func NewRGBA(values ...float64) *RGBA {
 
 func (c *RGBA) Floats() []float64 {
 	return []float64{float64(c.rgba.red), float64(c.rgba.green), float64(c.rgba.blue), float64(c.rgba.alpha)}
+}
+
+// SetColors sets all colors values in the RGBA.
+func (c *RGBA) SetColors(r, g, b, a float64) {
+	c.rgba.red = C.gdouble(r)
+	c.rgba.green = C.gdouble(g)
+	c.rgba.blue = C.gdouble(b)
+	c.rgba.alpha = C.gdouble(a)
 }
 
 func (v *RGBA) Native() uintptr {

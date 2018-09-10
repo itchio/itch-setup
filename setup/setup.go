@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/itchio/ox"
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/wharf/eos/option"
@@ -44,9 +46,10 @@ type Installer struct {
 	settings   InstallerSettings
 	sourceChan chan InstallSource
 
-	channelName string
-	consumer    *state.Consumer
-	client      *http.Client
+	channelName       string
+	consumer          *state.Consumer
+	client            *http.Client
+	downloadSessionID string
 }
 
 type InstallSource struct {
@@ -68,7 +71,8 @@ func NewInstaller(settings InstallerSettings) *Installer {
 				log.Printf("[%s] %s", lvl, msg)
 			},
 		},
-		client: timeout.NewDefaultClient(),
+		client:            timeout.NewDefaultClient(),
+		downloadSessionID: uuid.New().String(),
 	}
 
 	return i
@@ -76,6 +80,15 @@ func NewInstaller(settings InstallerSettings) *Installer {
 
 func (i *Installer) brothPackageURL() string {
 	return fmt.Sprintf("%s/%s/%s", brothBaseURL, i.settings.AppName, i.channelName)
+}
+
+func (i *Installer) buildBrothURL(values url.Values, format string, args ...interface{}) string {
+	if values == nil {
+		values = make(url.Values)
+	}
+	values.Set("downloadSessionId", i.downloadSessionID)
+	formattedPath := fmt.Sprintf(format, args...)
+	return fmt.Sprintf("%s/%s?%s", i.brothPackageURL(), formattedPath, values.Encode())
 }
 
 func (i *Installer) WarmUp() {
@@ -141,8 +154,8 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 
 	version := installSource.Version
 
-	signatureURL := fmt.Sprintf("%s/%s/signature/default", i.brothPackageURL(), version)
-	archiveURL := fmt.Sprintf("%s/%s/archive/default", i.brothPackageURL(), version)
+	signatureURL := i.buildBrothURL(nil, "%s/signature/default", version)
+	archiveURL := i.buildBrothURL(nil, "%s/archive/default", version)
 
 	sigSource, err := filesource.Open(signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {

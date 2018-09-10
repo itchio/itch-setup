@@ -70,6 +70,7 @@ func (c *Client) PostFormResponse(url string, data url.Values, dst interface{}) 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Add("Authorization", c.Key)
 	req.Header.Set("User-Agent", c.UserAgent)
+	req.Header.Set("Accept-Language", c.AcceptedLanguage)
 	req.Header.Set("Accept", "application/vnd.itch.v2")
 
 	var res *http.Response
@@ -126,6 +127,14 @@ func (c *Client) MakeValuesPath(values url.Values, format string, a ...interface
 	return fmt.Sprintf("%s?%s", path, values.Encode())
 }
 
+func asHTTPCodeError(res *http.Response) error {
+	if res.StatusCode/100 != 2 {
+		err := fmt.Errorf("Server error: HTTP %s for %s", res.Status, res.Request.URL.Path)
+		return err
+	}
+	return nil
+}
+
 // ParseAPIResponse unmarshals an HTTP response into one of out response
 // data structures
 func ParseAPIResponse(dst interface{}, res *http.Response) error {
@@ -135,10 +144,6 @@ func ParseAPIResponse(dst interface{}, res *http.Response) error {
 
 	bodyReader := res.Body
 	defer bodyReader.Close()
-
-	if res.StatusCode/100 != 2 {
-		return fmt.Errorf("Server returned %s for %s", res.Status, res.Request.URL.String())
-	}
 
 	body, err := ioutil.ReadAll(bodyReader)
 	if err != nil {
@@ -153,6 +158,10 @@ func ParseAPIResponse(dst interface{}, res *http.Response) error {
 
 	err = json.NewDecoder(bytes.NewReader(body)).Decode(&intermediate)
 	if err != nil {
+		if he := asHTTPCodeError(res); he != nil {
+			return he
+		}
+
 		msg := fmt.Sprintf("JSON decode error: %s\n\nBody: %s\n\n", err.Error(), string(body))
 		return errors.New(msg)
 	}
@@ -166,9 +175,13 @@ func ParseAPIResponse(dst interface{}, res *http.Response) error {
 				}
 			}
 			if len(messages) > 0 {
-				return &APIError{Messages: messages}
+				return &APIError{Messages: messages, StatusCode: res.StatusCode}
 			}
 		}
+	}
+
+	if he := asHTTPCodeError(res); he != nil {
+		return he
 	}
 
 	intermediate = camelifyMap(intermediate)
