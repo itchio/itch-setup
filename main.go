@@ -126,8 +126,12 @@ func main() {
 
 	err = localizer.LoadLocale(userLocale)
 	if err != nil {
-		userLocale = userLocale[:2]
-		err = localizer.LoadLocale(userLocale)
+		if len(userLocale) >= 2 {
+			userLocale = userLocale[:2]
+			err = localizer.LoadLocale(userLocale)
+		} else {
+			log.Println("Ignoring locale: ", userLocale)
+		}
 	}
 
 	if err == nil {
