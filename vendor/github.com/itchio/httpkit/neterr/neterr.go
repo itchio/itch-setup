@@ -1,6 +1,7 @@
 package neterr
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/url"
@@ -13,6 +14,10 @@ import (
 // any *net.OpError, any *url.Error, any URL that implements `Temporary()`
 // (and returns true)
 func IsNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	if err == io.ErrUnexpectedEOF {
 		return true
 	}
@@ -37,7 +42,7 @@ func IsNetworkError(err error) bool {
 		// net/http's http2 errors are unexported structs, I don't know
 		// of a better way to detect this :(
 		// see net/http/h2_bundle.go
-		msg := err.Error()
+		msg := fmt.Sprintf("%v", err)
 		if strings.HasPrefix(msg, "stream error: stream ID ") {
 			return true
 		}

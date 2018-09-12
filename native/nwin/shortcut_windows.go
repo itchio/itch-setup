@@ -1,6 +1,7 @@
 package nwin
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 
@@ -17,10 +18,19 @@ type ShortcutSettings struct {
 	Description      string
 	IconLocation     string
 	WorkingDirectory string
+	OnlyIfExists     bool
 }
 
 // CreateShortcut creates a windows shortcut with the given settings
 func CreateShortcut(settings ShortcutSettings) error {
+	if settings.OnlyIfExists {
+		_, err := os.Stat(settings.ShortcutFilePath)
+		if err != nil {
+			log.Printf("Not updating shortcut (%s): %v", settings.ShortcutFilePath, err)
+			return nil
+		}
+	}
+
 	dir := filepath.Dir(settings.ShortcutFilePath)
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
