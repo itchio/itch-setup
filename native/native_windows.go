@@ -112,7 +112,7 @@ func (nc *nativeCore) Upgrade() error {
 
 	if res.DidUpgrade {
 		err = nc.doPostInstall(mv, PostInstallParams{
-			FirstInstall: false,
+			ForUpgrade: true,
 		})
 		if err != nil {
 			return err
@@ -122,7 +122,7 @@ func (nc *nativeCore) Upgrade() error {
 }
 
 type PostInstallParams struct {
-	FirstInstall bool
+	ForUpgrade bool
 }
 
 func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParams) error {
@@ -155,7 +155,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 
 	for _, spec := range nc.shortcutSpecs() {
 		log.Printf("Creating shortcut (%s)...", spec.Path)
-		onlyIfExists := spec.OnlyIfExists || params.FirstInstall
+		onlyIfExists := spec.OnlyIfExists || params.ForUpgrade
 
 		err = nwin.CreateShortcut(nwin.ShortcutSettings{
 			ShortcutFilePath: spec.Path,
@@ -626,7 +626,7 @@ func (nc *nativeCore) showInstallGUI() error {
 				}
 
 				err = nc.doPostInstall(mv, PostInstallParams{
-					FirstInstall: true,
+					ForUpgrade: false,
 				})
 				if err != nil {
 					nc.ErrorDialog(err)
