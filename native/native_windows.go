@@ -523,9 +523,16 @@ func (nc *nativeCore) showInstallGUI() error {
 						AssignTo: &pb,
 					},
 					ui.VSpacer{Size: 10},
-					ui.Label{
-						Text:     cli.Localizer.T("setup.status.preparing"),
-						AssignTo: &progressLabel,
+					ui.Composite{
+						Layout: ui.HBox{},
+						Children: []ui.Widget{
+							ui.HSpacer{},
+							ui.Label{
+								Text:     cli.Localizer.T("setup.status.preparing"),
+								AssignTo: &progressLabel,
+							},
+							ui.HSpacer{},
+						},
 					},
 					ui.VSpacer{},
 				},
@@ -542,16 +549,15 @@ func (nc *nativeCore) showInstallGUI() error {
 			nc.mainWindow.SetSize(walk.Size{Width: windowSize.Width, Height: windowSize.Height})
 		},
 	}.Create()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// remove maximize button
 	style := win.GetWindowLong(nc.mainWindow.Handle(), win.GWL_STYLE)
 	style &^= win.WS_MAXIMIZEBOX
 	// style &^= win.WS_THICKFRAME
 	win.SetWindowLong(nc.mainWindow.Handle(), win.GWL_STYLE, style)
-
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	trayIcon, err = walk.NewNotifyIcon()
 	if err != nil {
