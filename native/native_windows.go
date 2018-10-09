@@ -111,7 +111,9 @@ func (nc *nativeCore) Upgrade() error {
 	}
 
 	if res.DidUpgrade {
-		err = nc.doPostInstall(mv)
+		err = nc.doPostInstall(mv, PostInstallParams{
+			FirstInstall: false,
+		})
 		if err != nil {
 			return err
 		}
@@ -119,7 +121,11 @@ func (nc *nativeCore) Upgrade() error {
 	return nil
 }
 
-func (nc *nativeCore) doPostInstall(mv setup.Multiverse) error {
+type PostInstallParams struct {
+	FirstInstall bool
+}
+
+func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParams) error {
 	installDir := nc.baseDir
 	cli := nc.cli
 
@@ -149,9 +155,11 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse) error {
 
 	for _, spec := range nc.shortcutSpecs() {
 		log.Printf("Creating shortcut (%s)...", spec.Path)
+		onlyIfExists := spec.OnlyIfExists || params.FirstInstall
+
 		err = nwin.CreateShortcut(nwin.ShortcutSettings{
 			ShortcutFilePath: spec.Path,
-			OnlyIfExists:     spec.OnlyIfExists,
+			OnlyIfExists:     onlyIfExists,
 			TargetPath:       setupLocalPath,
 			Arguments:        shortcutArguments,
 			Description:      "The best way to play your itch.io games",
@@ -611,7 +619,9 @@ func (nc *nativeCore) showInstallGUI() error {
 					nc.ErrorDialog(err)
 				}
 
-				err = nc.doPostInstall(mv)
+				err = nc.doPostInstall(mv, PostInstallParams{
+					FirstInstall: true,
+				})
 				if err != nil {
 					nc.ErrorDialog(err)
 				}
