@@ -98,13 +98,6 @@ func main() {
 	}
 	log.SetOutput(io.MultiWriter(os.Stderr, logger))
 
-	log.Printf("=========================================")
-	log.Printf("itch-setup starting up at %s with arguments:", time.Now())
-	for _, arg := range os.Args {
-		log.Printf("%q", arg)
-	}
-	log.Printf("=========================================")
-
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	app.HelpFlag.Short('h')
@@ -119,19 +112,26 @@ func main() {
 		versionString = fmt.Sprintf("%s, ref %s", versionString, commit)
 	}
 
+	log.Printf("=========================================")
+	log.Printf("itch-setup %q starting up at %q with arguments:", versionString, time.Now())
+	for _, arg := range os.Args {
+		log.Printf("%q", arg)
+	}
+	log.Printf("=========================================")
+
 	app.Version(versionString)
 	app.VersionFlag.Short('V')
 	app.Author("Amos Wenger <amos@itch.io>")
 
 	cli.VersionString = versionString
 
-	cliArgs := os.Args[1:]
-	for _, arg := range cliArgs {
-		// see https://github.com/itchio/itch-setup/issues/3
+	var cliArgs []string
+	for _, arg := range os.Args[1:] {
 		if strings.HasPrefix(arg, "-psn") {
-			log.Printf("We're being opened by Finder, ignoring all command-line arguments")
-			cliArgs = nil
-			break
+			// see https://github.com/itchio/itch-setup/issues/3
+			log.Printf("Filtering out argument %q (passed by macOS when opened with Finder)", arg)
+		} else {
+			cliArgs = append(cliArgs, arg)
 		}
 	}
 
