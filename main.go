@@ -52,7 +52,7 @@ func init() {
 
 func must(err error) {
 	if err != nil {
-		log.Fatalf("%+v", err)
+		log.Fatalf("Fatal error: %+v", err)
 	}
 }
 
