@@ -98,6 +98,13 @@ func main() {
 	}
 	log.SetOutput(io.MultiWriter(os.Stderr, logger))
 
+	log.Printf("=========================================")
+	log.Printf("itch-setup starting up at %s with arguments:", time.Now())
+	for _, arg := range os.Args {
+		log.Printf("%q", arg)
+	}
+	log.Printf("=========================================")
+
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	app.HelpFlag.Short('h')
