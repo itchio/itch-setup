@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
 	"github.com/pkg/errors"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -86,6 +88,16 @@ const DefaultLocale = "en-US"
 var localizer *localize.Localizer
 
 func main() {
+	logFileName := filepath.Join(os.TempDir(), "itch-setup-log.txt")
+	log.Printf("itch-setup will log to %s", logFileName)
+	logger := &lumberjack.Logger{
+		Filename:   logFileName,
+		MaxSize:    3, // megabytes
+		MaxBackups: 3,
+		MaxAge:     28, // days
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, logger))
+
 	app.UsageTemplate(kingpin.CompactUsageTemplate)
 
 	app.HelpFlag.Short('h')
