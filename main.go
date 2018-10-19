@@ -125,7 +125,17 @@ func main() {
 
 	cli.VersionString = versionString
 
-	_, err := app.Parse(os.Args[1:])
+	cliArgs := os.Args[1:]
+	for _, arg := range cliArgs {
+		// see https://github.com/itchio/itch-setup/issues/3
+		if strings.HasPrefix(arg, "-psn") {
+			log.Printf("We're being opened by Finder, ignoring all command-line arguments")
+			cliArgs = nil
+			break
+		}
+	}
+
+	_, err := app.Parse(cliArgs)
 	must(err)
 
 	detectAppName()
