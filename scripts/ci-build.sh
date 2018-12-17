@@ -67,6 +67,11 @@ if [ "$CI_OS" = "linux" ]; then
   export GO_TAGS="-tags gtk_3_14"
 fi
 
+if [ "$CI_OS" = "darwin" ]; then
+  export CGO_CFLAGS=-mmacosx-version-min=10.10
+  export CGO_LDFLAGS=-mmacosx-version-min=10.10
+fi
+
 export GOOS=$CI_OS
 export GOARCH=$CI_ARCH
 export CGO_ENABLED=1
