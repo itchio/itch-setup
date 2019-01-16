@@ -134,7 +134,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 		return errors.Errorf("internal error (in post-install with a nil currentBuild)")
 	}
 
-	setupLocalPath, err := nwin.CopySelf(installDir)
+	setupLocalPath, err := native.CopySelf(filepath.Join(installDir, "itch-setup.exe"))
 	if err != nil {
 		nc.ErrorDialog(err)
 	}

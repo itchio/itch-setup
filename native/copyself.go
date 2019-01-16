@@ -1,4 +1,4 @@
-package nwin
+package native
 
 import (
 	"io"
@@ -9,15 +9,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func CopySelf(installDir string) (string, error) {
-	log.Printf("Copying self to (%s)", installDir)
+func CopySelf(targetExecPath string) (string, error) {
+	log.Printf("Copying self to (%s)", targetExecPath)
 
 	execPath, err := os.Executable()
 	if err != nil {
 		return "", errors.WithMessage(err, "while getting self path")
 	}
-
-	targetExecPath := filepath.Join(installDir, "itch-setup.exe")
 
 	execPath = filepath.Clean(execPath)
 	targetExecPath = filepath.Clean(targetExecPath)
@@ -37,6 +35,11 @@ func CopySelf(installDir string) (string, error) {
 		return "", errors.WithMessage(err, "while creating copy of self in install folder")
 	}
 	defer dst.Close()
+
+	err = dst.Chmod(0755)
+	if err != nil {
+		return "", errors.WithMessage(err, "while making copy of self executable")
+	}
 
 	_, err = io.Copy(dst, src)
 	if err != nil {

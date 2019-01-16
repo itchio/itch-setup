@@ -12,19 +12,17 @@ import (
 
 	"io/ioutil"
 
+	"context"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/pkg/errors"
-)
-import (
-	"context"
-	"io"
-	"strings"
-	"sync"
-	"time"
 )
 
 var parentWin *gtk.Window
@@ -532,26 +530,9 @@ func (nc *nativeCore) installDesktopFiles() error {
 		return nil
 	}
 
-	src, err := os.Open(execPath)
-	if err != nil {
-		return errors.WithMessage(err, "while opening self")
-	}
-
-	targetExecPath := filepath.Join(nc.baseDir, "itch-setup")
-	dst, err := os.Create(targetExecPath)
+	targetExecPath, err := CopySelf(filepath.Join(nc.baseDir, "itch-setup"))
 	if err != nil {
 		return errors.WithMessage(err, "while creating copy of self in install folder")
-	}
-	defer dst.Close()
-
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		return errors.WithMessage(err, "while copying self to install folder")
-	}
-
-	err = dst.Chmod(0755)
-	if err != nil {
-		return errors.WithMessage(err, "while making self executable")
 	}
 
 	launchScript := `#!/bin/sh
