@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/pkg/errors"
 )
@@ -36,14 +37,16 @@ func CopySelf(targetExecPath string) (string, error) {
 	}
 	defer dst.Close()
 
-	err = dst.Chmod(0755)
-	if err != nil {
-		return "", errors.WithMessage(err, "while making copy of self executable")
-	}
-
 	_, err = io.Copy(dst, src)
 	if err != nil {
 		return "", errors.WithMessage(err, "while copying self to install folder")
+	}
+
+	if runtime.GOOS != "windows" {
+		err = dst.Chmod(0755)
+		if err != nil {
+			return "", errors.WithMessage(err, "while making copy of self executable")
+		}
 	}
 
 	return targetExecPath, nil
