@@ -86,6 +86,6 @@ build:darwin:amd64:
 deploy:
   stage: deploy
   tags:
-    - dropsy
+    - linux
   script:
     - scripts/ci-deploy.sh
