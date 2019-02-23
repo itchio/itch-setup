@@ -45,6 +45,5 @@ windows:
 
 darwin:
 	go get ${_GO_BUILD_FLAGS}
-	${UPX} ${UPX_LEVEL} ${GOBIN}/itch-setup
 	cp -f ${GOBIN}/itch-setup ${GOBIN}/kitch-setup
 
