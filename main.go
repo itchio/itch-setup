@@ -17,7 +17,7 @@ import (
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
 	"github.com/pkg/errors"
-	"gopkg.in/natefinch/lumberjack.v2"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )

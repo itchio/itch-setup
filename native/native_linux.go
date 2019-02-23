@@ -2,8 +2,6 @@ package native
 
 import (
 	"C"
-	"bytes"
-	"encoding/xml"
 	"fmt"
 	"log"
 	"os"
@@ -14,21 +12,18 @@ import (
 
 	"context"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/pkg/errors"
 )
-
-var parentWin *gtk.Window
+import "github.com/itchio/itch-setup/native/nlinux"
 
 type nativeCore struct {
 	cli     cl.CLI
+	nui     nlinux.NativeUI
 	baseDir string
 }
 
@@ -42,29 +37,29 @@ func NewCore(cli cl.CLI) (Core, error) {
 	// If you want it to point elsewhere, that's what symlinks are for!
 	nc.baseDir = filepath.Join(os.Getenv("HOME"), fmt.Sprintf(".%s", cli.AppName))
 
+	log.Printf("Initializing installer GUI...")
+	if cli.Silent {
+		log.Printf("Using text UI")
+		nc.nui = nlinux.NewTextUI(cli)
+	} else {
+		log.Printf("Using GTK UI")
+		nc.nui = nlinux.NewGtkUI(cli)
+	}
+	nc.nui.Init()
+
 	return nc, nil
-}
-
-var gtkOnce sync.Once
-
-func initGtkOnce() {
-	gtkOnce.Do(func() {
-		gtk.Init(nil)
-	})
 }
 
 func (nc *nativeCore) Install() error {
 	var err error
 	cli := nc.cli
 
-	initGtkOnce()
-
 	mv, err := setup.NewMultiverse(&setup.MultiverseParams{
 		AppName: cli.AppName,
 		BaseDir: nc.baseDir,
 	})
 	if err != nil {
-		nc.ErrorDialog(errors.WithMessage(err, "Internal error"))
+		return errors.WithMessage(err, "Internal error")
 	}
 
 	if cli.PreferLaunch {
@@ -76,122 +71,40 @@ func (nc *nativeCore) Install() error {
 		}
 	}
 
-	log.Printf("Initializing installer GUI...")
-
-	// Create a new toplevel window, set its title, and connect it to the
-	// "destroy" signal to exit the GTK main loop when it is destroyed.
-	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
-	if err != nil {
-		log.Fatal("Unable to create window:", err)
-	}
 	baseTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
-	win.SetTitle(baseTitle)
-	win.Connect("destroy", func() {
-		gtk.MainQuit()
-	})
 
-	box, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 18)
+	iw, err := nc.nui.CreateInstallWindow(baseTitle)
 	if err != nil {
-		log.Fatal("Unable to create box:", err)
+		return err
 	}
-	win.Add(box)
-
-	log.Printf("Loading image resources...")
-
-	tmpDir, err := ioutil.TempDir("", "itch-setup-images")
-	if err != nil {
-		log.Fatal("Couldn't grab temp dir:", err)
-	}
-
-	err = os.MkdirAll(tmpDir, 0755)
-	if err != nil {
-		log.Fatal("Couldn't make temp dir:", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	loadBundledImage := func(path string) string {
-		imageBytes, err := bindata.Asset(path)
-		if err != nil {
-			log.Fatal("Couldn't load image:", err)
-		}
-
-		imagePath := filepath.Join(tmpDir, filepath.Base(path))
-		err = ioutil.WriteFile(imagePath, imageBytes, 0644)
-		if err != nil {
-			log.Fatal("Couldn't write image to temp dir:", err)
-		}
-
-		return imagePath
-	}
-
-	imagePath := loadBundledImage(fmt.Sprintf("data/installer-%s.png", cli.AppName))
-
-	i, err := gtk.ImageNewFromFile(imagePath)
-	if err != nil {
-		log.Fatal("Unable to create image:", err)
-	}
-	box.Add(i)
-
-	iconPath := loadBundledImage(fmt.Sprintf("data/%s-icon.png", cli.AppName))
-	win.SetIconFromFile(iconPath)
-
-	log.Printf("Setting up progress bar...")
-
-	pb, err := gtk.ProgressBarNew()
-	if err != nil {
-		log.Fatal("Unable to create progress bar:", err)
-	}
-	pb.SetMarginStart(30)
-	pb.SetMarginEnd(30)
-	box.Add(pb)
-
-	l, err := gtk.LabelNew("Warming up...")
-	if err != nil {
-		log.Fatal("Unable to create label:", err)
-	}
-	box.Add(l)
-
-	vh, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
-	if err != nil {
-		log.Fatal("Unable to create box:", err)
-	}
-	box.Add(vh)
-
-	log.Printf("Positioning and showing window...")
-
-	win.SetResizable(false)
-	win.SetPosition(gtk.WIN_POS_CENTER)
-
-	// Recursively show all widgets contained in this window.
-	win.ShowAll()
-	parentWin = win
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
 		Localizer: cli.Localizer,
 		AppName:   cli.AppName,
 		OnProgress: func(progress float64) {
-			glib.IdleAdd(func() {
-				pb.SetFraction(progress)
-			})
+			iw.SetProgress(progress)
 		},
 		OnProgressLabel: func(label string) {
-			glib.IdleAdd(func() {
-				l.SetText(label)
-			})
+			iw.SetLabel(label)
 		},
 		OnError: func(err error) {
-			glib.IdleAdd(func() {
-				nc.ErrorDialog(errors.WithMessage(err, "Warm-up error"))
+			nc.nui.RunInMainThread(func() {
+				nc.nui.ShowErrorAndQuit(errors.Wrap(err, "Warm-up error"))
 			})
 		},
 		OnSource: func(source setup.InstallSource) {
-			win.SetTitle(fmt.Sprintf("%s - %s", baseTitle, source.Version))
+			iw.SetTitle(fmt.Sprintf("%s - %s", baseTitle, source.Version))
 		},
 		OnFinish: func(source setup.InstallSource) {
-			glib.IdleAdd(func() {
+			nc.nui.RunInMainThread(func() {
 				err := nc.installDesktopFiles()
 				if err != nil {
 					nc.ErrorDialog(err)
+				}
+
+				if nc.cli.Silent {
+					log.Printf("Was silent installation, just quitting with successful exit code")
+					os.Exit(0)
 				}
 
 				err = nc.tryLaunchCurrent(mv)
@@ -209,7 +122,7 @@ func (nc *nativeCore) Install() error {
 			return nil
 		}()
 		if kickErr != nil {
-			glib.IdleAdd(func() {
+			nc.nui.RunInMainThread(func() {
 				nc.ErrorDialog(errors.WithMessage(err, "Install error"))
 			})
 		}
@@ -217,9 +130,7 @@ func (nc *nativeCore) Install() error {
 
 	go kickoffInstall()
 
-	// Begin executing the GTK main loop.  This blocks until
-	// gtk.MainQuit() is run.
-	gtk.Main()
+	nc.nui.Main()
 
 	return nil
 }
@@ -422,33 +333,8 @@ func (nc *nativeCore) exeName() string {
 }
 
 func (nc *nativeCore) ErrorDialog(err error) {
-	cli := nc.cli
-	initGtkOnce()
-
-	msg := fmt.Sprintf("%+v", err)
-	log.Printf("Fatal error: %s", msg)
-
-	dialog := gtk.MessageDialogNewWithMarkup(parentWin, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "")
-	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, `<b>%s</b>`, cli.Localizer.T("setup.error_dialog.title"))
-	buf.WriteString("\n\n")
-	fmt.Fprintf(buf, `<i>%s-setup, %s</i>`, cli.AppName, cli.VersionString)
-	buf.WriteString("\n\n")
-	buf.WriteString(`<a href='https://github.com/itchio/itch/issues'>Open issue tracker</a>`)
-	buf.WriteString("\n\n")
-	xml.EscapeText(buf, []byte(msg))
-
-	dialog.SetMarkup(buf.String())
-	dialog.Connect("destroy", func() {
-		gtk.MainQuit()
-	})
-	dialog.Connect("response", func() {
-		gtk.MainQuit()
-	})
-	dialog.ShowAll()
-
-	gtk.Main()
-	os.Exit(1)
+	nc.nui.ShowErrorAndQuit(err)
+	os.Exit(1) // just to be extra sure
 }
 
 // Typically `~/.local/share`
