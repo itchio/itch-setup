@@ -86,7 +86,7 @@ func (nc *nativeCore) Install() error {
 		}
 	}
 
-	log.Println("Showing install GUI")
+	log.Printf("Showing install GUI")
 	return nc.showInstallGUI()
 }
 
@@ -142,7 +142,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 	// this creates $installDir/app.ico
 	err = nwin.CreateUninstallRegistryEntry(cli, installDir, currentBuild.Version)
 	if err != nil {
-		log.Printf("While creating registry entry: %s", err.Error())
+		log.Printf("While creating registry entry: %+v", err)
 	}
 
 	// this needs to be done before the shortcut is created
@@ -195,7 +195,7 @@ func (nc *nativeCore) Relaunch() error {
 }
 
 func (nc *nativeCore) Uninstall() error {
-	log.Println("Uninstall was requested...")
+	log.Printf("Uninstall was requested...")
 	mv, err := nc.newMultiverse()
 	if err != nil {
 		return err
@@ -211,11 +211,11 @@ func (nc *nativeCore) Uninstall() error {
 
 	err = nwin.KillAll(pathsToKill)
 	if err != nil {
-		log.Println("While killing processes", err.Error())
+		log.Printf("While killing processes: %+v", err)
 	}
 
 	warn := func(err error) {
-		log.Printf("warning: %v", err)
+		log.Printf("warning: %+v", err)
 		log.Printf("(continuing anyway)")
 	}
 
@@ -292,15 +292,15 @@ func (nc *nativeCore) Uninstall() error {
 		nc.ErrorDialog(err)
 	}
 
-	log.Println("Removing uninstaller entry...")
+	log.Printf("Removing uninstaller entry...")
 	err = nwin.RemoveUninstallerRegistryKey(cli)
 	if err != nil {
-		log.Println("While removing uninstaller entry", err.Error())
-		log.Println("(Note: these aren't critical)")
+		log.Printf("While removing uninstaller entry: %+v", err)
+		log.Printf("(Note: these aren't critical)")
 	}
 
 	renameSelfToTrash := func() error {
-		log.Println("Renaming self to temp directory...")
+		log.Printf("Renaming self to temp directory...")
 		trashPath := filepath.Join(os.TempDir(), ".itch-setup-trash")
 		err := os.MkdirAll(trashPath, 0755)
 		if err != nil {
@@ -336,6 +336,69 @@ func (nc *nativeCore) Uninstall() error {
 }
 
 type onSuccessFunc func()
+
+func (nc *nativeCore) killAllPrevious() {
+	log.Printf("Attempting to kill all old instances of %s", nc.cli.AppName)
+	var pathsToKill []string
+
+	log.Printf("Scanning (%s)", nc.baseDir)
+	appDirs, err := readdirnames(nc.baseDir)
+	if err != nil {
+		log.Printf("Skipping, could not list app dirs: %+v", err)
+		return
+	}
+
+	var exeName = nc.exeName()
+	log.Printf("Will look for a file named (%s)", exeName)
+
+	scanAppDir := func(appDir string) error {
+		absoluteAppDir := filepath.Join(nc.baseDir, appDir)
+		log.Printf("Scanning (%s)", absoluteAppDir)
+
+		if !strings.HasPrefix(appDir, "app-") {
+			return nil
+		}
+
+		appFiles, err := readdirnames(absoluteAppDir)
+		if err != nil {
+			return err
+		}
+
+		for _, appFile := range appFiles {
+			if appFile == exeName {
+				absoluteAppFile := filepath.Join(absoluteAppDir, appFile)
+				log.Printf("Adding (%s) to kill list", absoluteAppFile)
+				pathsToKill = append(pathsToKill, absoluteAppFile)
+			}
+		}
+		return nil
+	}
+
+	for _, appDir := range appDirs {
+		err := scanAppDir(appDir)
+		if err != nil {
+			log.Printf("Skipping dir (%s): %+v", appDir)
+			continue
+		}
+	}
+
+	log.Printf("%d paths in kill list", len(pathsToKill))
+
+	err = nwin.KillAll(pathsToKill)
+	if err != nil {
+		log.Printf("While killing old instances: %+v", err)
+	}
+}
+
+func readdirnames(name string) ([]string, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return f.Readdirnames(0) // all dirs, please
+}
 
 // returns true if it successfully launched
 func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessFunc) error {
@@ -631,6 +694,8 @@ func (nc *nativeCore) showInstallGUI() error {
 				if err != nil {
 					nc.ErrorDialog(err)
 				}
+
+				nc.killAllPrevious()
 
 				err = nc.tryLaunchCurrent(mv, func() {
 					trayIcon.ShowInfo(cli.AppName, fmt.Sprintf("The installation went well, %s is now starting up!", cli.AppName))
