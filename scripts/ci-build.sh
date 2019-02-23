@@ -81,7 +81,14 @@ go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS -o $TARGET $PKG
 
 file $TARGET
 
-upx -1 $TARGET
+# UPX is safe on Windows & Linux, but *will* segfault on some macOS
+# versions, so let's not even try.
+if [ "$CI_OS" = "linux" ]; then
+  upx -7 $TARGET
+fi
+if [ "$CI_OS" = "windows" ]; then
+  upx -7 $TARGET
+fi
 
 if [ "$CI_OS" = "windows" ]; then
   # sign *after* packing
