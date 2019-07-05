@@ -622,7 +622,7 @@ func (nc *nativeCore) showInstallGUI() error {
 	// style &^= win.WS_THICKFRAME
 	win.SetWindowLong(nc.mainWindow.Handle(), win.GWL_STYLE, style)
 
-	trayIcon, err = walk.NewNotifyIcon()
+	trayIcon, err = walk.NewNotifyIcon(nc.mainWindow)
 	if err != nil {
 		log.Fatal(err)
 	}
