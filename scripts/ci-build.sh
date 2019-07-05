@@ -14,8 +14,7 @@ fi
 go version
 
 export CURRENT_BUILD_PATH=$(pwd)
-export GOPATH=$CURRENT_BUILD_PATH
-export PATH="$PATH:$GOPATH/bin"
+export PATH="$PATH:$(go env GOPATH)/bin"
 
 if [ "$CI_OS" = "windows" ]; then
   if [ "$CI_ARCH" = "386" ]; then
@@ -48,20 +47,10 @@ if [ "$CI_OS" = "windows" ]; then
   TARGET=$TARGET.exe
 fi
 
-export PKG=github.com/itchio/itch-setup
-
-mkdir -p src/$PKG
-
 if [ "$CI_OS" = "windows" ]; then
   $WINDRES -o itch-setup.syso itch-setup.rc
   file itch-setup.syso
 fi
-
-# rsync will complain about vanishing files sometimes, who knows where they come from
-rsync -a --exclude 'src' . src/$PKG || echo "rsync complained (code $?)"
-
-# grab deps
-GOOS=$CI_OS GOARCH=$CI_ARCH CGO_ENABLED=1 go get -v -d -t $PKG
 
 if [ "$CI_OS" = "linux" ]; then
   export GO_TAGS="-tags gtk_3_14"
@@ -77,7 +66,7 @@ export GOARCH=$CI_ARCH
 export CGO_ENABLED=1
 
 # compile
-go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS -o $TARGET $PKG
+go build -v -x -ldflags "$CI_LDFLAGS" $GO_TAGS -o $TARGET
 
 file $TARGET
 
