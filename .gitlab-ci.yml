@@ -3,22 +3,6 @@ stages:
   - build
   - deploy
 
-build:linux:386:
-  stage: build
-  script:
-    - export CI_OS=linux
-    - export CI_ARCH=386
-    - export CI_TARGET=itch-setup
-    - scripts/ci-build.sh
-    - export CI_TARGET=kitch-setup
-    - scripts/ci-build.sh
-  tags:
-    - docker-itchsetup-32
-  artifacts:
-    expire_in: 1 week
-    paths:
-      - broth
-
 build:linux:amd64:
   stage: build
   script:
