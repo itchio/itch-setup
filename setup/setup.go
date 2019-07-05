@@ -13,17 +13,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/itchio/ox"
 	"github.com/itchio/savior/filesource"
-	"github.com/itchio/wharf/eos/option"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/united"
+	"github.com/itchio/headway/state"
+
+	"github.com/itchio/httpkit/eos/option"
 	"github.com/itchio/httpkit/timeout"
+
+
+	_ "github.com/itchio/wharf/decompressors/brotli"
 	"github.com/itchio/wharf/pwr"
+
 	"github.com/pkg/errors"
 
 	"github.com/itchio/itch-setup/localize"
-	"github.com/itchio/wharf/state"
-
-	_ "github.com/itchio/wharf/decompressors/brotli"
 )
 
 type ErrorHandler func(err error)
@@ -182,7 +185,7 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 		donePerSec := int64(float64(doneSize) / float64(secsSinceStart))
 
 		percentStr := fmt.Sprintf("%d%%", percent)
-		speedStr := fmt.Sprintf("%s/s", progress.FormatBytes(donePerSec))
+		speedStr := fmt.Sprintf("%s/s", united.FormatBytes(donePerSec))
 
 		progressLabel := fmt.Sprintf("%s - %s",
 			localizer.T("setup.status.progress", map[string]string{"percent": percentStr}),
@@ -237,9 +240,9 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 	if wc != nil {
 		if ah, ok := wc.(*pwr.ArchiveHealer); ok {
 			log.Printf("%s was healed @ %s (%s total)",
-				progress.FormatBytes(ah.TotalHealed()),
-				progress.FormatBPS(ah.TotalHealed(), duration),
-				progress.FormatDuration(duration),
+				united.FormatBytes(ah.TotalHealed()),
+				united.FormatBPS(ah.TotalHealed(), duration),
+				united.FormatDuration(duration),
 			)
 		}
 	}

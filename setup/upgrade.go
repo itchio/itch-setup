@@ -11,21 +11,24 @@ import (
 
 	"github.com/itchio/savior"
 
-	"github.com/itchio/httpkit/progress"
+	"github.com/itchio/headway/tracker"
+	"github.com/itchio/headway/united"
 
-	"github.com/itchio/wharf/eos"
-	"github.com/itchio/wharf/eos/option"
+	"github.com/itchio/httpkit/eos"
+	"github.com/itchio/httpkit/eos/option"
+	"github.com/itchio/httpkit/timeout"
+
+	"github.com/itchio/lake/pools/fspool"
+
 	"github.com/itchio/wharf/pwr"
-
-	"github.com/itchio/wharf/pools/fspool"
 	"github.com/itchio/wharf/pwr/bowl"
+	"github.com/itchio/wharf/pwr/patcher"
+	"github.com/itchio/wharf/taskgroup"
 
 	"github.com/itchio/go-itchio"
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/savior/zipextractor"
 
-	"github.com/itchio/wharf/pwr/patcher"
-	"github.com/itchio/wharf/taskgroup"
 	"github.com/pkg/errors"
 )
 
@@ -196,12 +199,12 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 		log.Printf("↑ No patch-based upgrade path found")
 	} else {
 		log.Printf("↑ Patching cost: %s (in %d patches)",
-			progress.FormatBytes(pp.totalSize),
+			united.FormatBytes(pp.totalSize),
 			len(pp.path.Patches),
 		)
 	}
 	log.Printf("↺ Archive  cost: %s",
-		progress.FormatBytes(ap.totalSize),
+		united.FormatBytes(ap.totalSize),
 	)
 
 	if pp != nil && pp.totalSize < ap.totalSize {
@@ -283,7 +286,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		if of != nil && of.Size < f.Size {
 			f = of
 		}
-		log.Printf("Using (%s) patch (%s)", f.SubType, progress.FormatBytes(f.Size))
+		log.Printf("Using (%s) patch (%s)", f.SubType, united.FormatBytes(f.Size))
 
 		consumer := newConsumer()
 
@@ -296,11 +299,11 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		}
 		defer patchSource.Close()
 
-		tracker := progress.NewTracker()
-		tracker.SetSilent(true)
-		tracker.SetTotalBytes(patchSource.Size())
-		tracker.Start()
-		defer tracker.Finish()
+		tracker := tracker.New(tracker.Opts{
+			ByteAmount: &tracker.ByteAmount{
+				Value: patchSource.Size(),
+			},
+		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -388,11 +391,9 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	tracker := progress.NewTracker()
-	tracker.SetSilent(true)
-	tracker.SetTotalBytes(archiveStats.Size())
-	tracker.Start()
-	defer tracker.Finish()
+	tracker := tracker.New(tracker.Opts{
+		ByteAmount: &tracker.ByteAmount{Value: archiveStats.Size()},
+	})
 
 	consumer.OnProgress = tracker.SetProgress
 	ex.SetConsumer(consumer)
@@ -405,7 +406,7 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 	defer mv.CleanStagingFolder()
 
 	outputDir := filepath.Join(stagingFolder, fmt.Sprintf("app-%s", rs.version))
-	log.Printf("Extracting %s to (%s)", progress.FormatBytes(archiveStats.Size()), outputDir)
+	log.Printf("Extracting %s to (%s)", united.FormatBytes(archiveStats.Size()), outputDir)
 
 	sink := &savior.FolderSink{
 		Consumer:  consumer,
@@ -426,8 +427,8 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 	duration := time.Since(startTime)
 
 	log.Printf("Overall extract speed: %s (%s total)",
-		progress.FormatBPS(res.Size(), duration),
-		progress.FormatDuration(duration),
+		united.FormatBPS(res.Size(), duration),
+		united.FormatDuration(duration),
 	)
 	closeSinkOnce.Do(func() {
 		sink.Close()
@@ -444,20 +445,30 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 	return nil
 }
 
-func startPrintingProgress(ctx context.Context, tracker *progress.Tracker) {
+func startPrintingProgress(ctx context.Context, tracker tracker.Tracker) {
 	go func() {
 		for {
 			select {
 			case <-time.After(1 * time.Second):
-				Emit(Progress{
+				p := Progress{
 					Progress: tracker.Progress(),
-					ETA:      tracker.ETA().Seconds(),
-					BPS:      tracker.BPS(),
-				})
-				log.Printf("%.2f%% done - %s / s, ETA %s",
+				}
+				stats := tracker.Stats()
+				if stats != nil {
+					if stats.BPS() != nil {
+						p.BPS = stats.BPS().Value
+					} else {
+						p.BPS = timeout.GetBPS()
+					}
+					if stats.TimeLeft() != nil {
+						p.ETA = stats.TimeLeft().Seconds()
+					}
+				}
+				Emit(p)
+				log.Printf("%.2f%% done - %s / s, ETA %v",
 					tracker.Progress()*100,
-					progress.FormatBytes(int64(tracker.BPS())),
-					tracker.ETA(),
+					united.FormatBytes(int64(p.BPS)),
+					p.ETA,
 				)
 			case <-ctx.Done():
 				return

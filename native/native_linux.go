@@ -14,9 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/itchio/ox/linox"
+
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
+
 	"github.com/pkg/errors"
 )
 import "github.com/itchio/itch-setup/native/nlinux"
@@ -313,7 +316,17 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
 	exePath := filepath.Join(b.Path, nc.exeName())
 
-	cmd := exec.Command(exePath, nc.cli.Args...)
+	var args []string
+	args = append(args, nc.cli.Args...)
+
+	if linox.SupportsUnprivilegedCloneNewUser() {
+		log.Printf("Kernel should support SUID sandboxing, leaving it enabled")
+	} else {
+		log.Printf("Kernel does *not* support unprivileged CLONE_USER, disabling SUID sandbox")
+		args = append(args, "--no-sandbox")
+	}
+
+	cmd := exec.Command(exePath, args...)
 
 	err := cmd.Start()
 	if err != nil {
@@ -372,7 +385,8 @@ func (nc *nativeCore) updateDesktopDatabase() error {
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
 		if err != nil {
-			return errors.WithMessage(err, "while updating desktop database")
+			// don't hard fail here, cf. https://github.com/itchio/itch/issues/2289
+			log.Printf("Warning: during update-desktop-database invocation: %s", err)
 		}
 	}
 	return nil
