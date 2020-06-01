@@ -1,6 +1,6 @@
 # itch-setup
 
-This it the install and self-update helper for [the itch.io app][app]
+This is the install and self-update helper for [the itch.io app][app]
 
 It applies a few tricks it learned from Squirrel.Mac and Squirrel.Windows, and
 uses some of the same technology behind [butler][], itch.io's command line

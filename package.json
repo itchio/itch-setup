@@ -1,0 +1,24 @@
+{
+  "name": "@itchio/itch-setup",
+  "version": "1.0.0",
+  "description": "This is the install and self-update helper for the itch.io app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itchio/itch-setup.git"
+  },
+  "keywords": [],
+  "author": "Amos Wenger <amoswenger@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/itchio/itch-setup/issues"
+  },
+  "homepage": "https://github.com/itchio/itch-setup#readme",
+  "devDependencies": {
+    "@itchio/bob": "^2.0.0",
+    "@types/node": "^14.0.6"
+  }
+}

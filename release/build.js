@@ -1,0 +1,231 @@
+//@ts-check
+"use strict";
+
+const {
+  $,
+  $$,
+  header,
+  detectOS,
+  setVerbose,
+  chalk,
+  debug,
+  setenv,
+} = require("@itchio/bob");
+
+const DEFAULT_ARCH = "x86_64";
+
+/**
+ * @typedef OsInfo
+ * @type {{
+ *   architectures: {
+ *     [key: string]: {
+ *       prependPath?: string,
+ *     }
+ *   }
+ * }}
+ */
+
+/**
+ * @type {{[name: string]: OsInfo}}
+ */
+const OS_INFOS = {
+  windows: {
+    architectures: {
+      i686: {
+        prependPath: "/mingw32/bin",
+      },
+      x86_64: {
+        prependPath: "/mingw64/bin",
+      },
+    },
+  },
+  linux: {
+    architectures: {
+      x86_64: {},
+    },
+  },
+  darwin: {
+    architectures: {
+      x86_64: {},
+    },
+  },
+};
+
+/**
+ * @param {string[]} args
+ */
+function main(args) {
+  header("Gathering configuration");
+
+  /**
+   * @type {{
+   *   os: "linux" | "windows" | "darwin",
+   *   arch: "i686" | "x86_64",
+   *   target: "itch-setup" | "kitch-setup" | "missing",
+   *   userSpecifiedOS?: boolean,
+   *   userSpecifiedArch?: boolean,
+   * }}
+   */
+  let opts = {
+    os: detectOS(),
+    arch: DEFAULT_ARCH,
+    target: "missing",
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    let arg = args[i];
+
+    let matches = /^--(.*)$/.exec(arg);
+    if (matches) {
+      let k = matches[1];
+      if (k == "verbose") {
+        setVerbose(true);
+        continue;
+      }
+
+      if (k === "os" || k === "arch" || k === "target") {
+        i++;
+        let v = args[i];
+
+        if (k === "os") {
+          if (v === "linux" || v === "windows" || v === "darwin") {
+            opts.os = v;
+            opts.userSpecifiedOS = true;
+          } else {
+            throw new Error(`Unsupported os ${chalk.yellow(v)}`);
+          }
+        } else if (k === "arch") {
+          if (v === "i686" || v === "x86_64") {
+            opts.arch = v;
+            opts.userSpecifiedArch = true;
+          } else {
+            throw new Error(`Unsupported arch ${chalk.yellow(v)}`);
+          }
+        } else if (k === "target") {
+          if (v === "itch-setup" || v === "kitch-setup") {
+            opts.target = v;
+          }
+        }
+      } else {
+        throw new Error(`Unknown option ${chalk.yellow(arg)}`);
+      }
+    }
+  }
+
+  if (opts.userSpecifiedOS) {
+    console.log(`Using user-specified OS ${chalk.yellow(opts.os)}`);
+  } else {
+    console.log(
+      `Using detected OS ${chalk.yellow(opts.os)} (use --os to override)`
+    );
+  }
+
+  if (opts.userSpecifiedArch) {
+    console.log(`Using user-specified arch ${chalk.yellow(opts.arch)}`);
+  } else {
+    console.log(
+      `Using detected arch ${chalk.yellow(opts.arch)} (use --arch to override)`
+    );
+  }
+
+  if (opts.target === "missing") {
+    throw new Error(
+      `Use ${chalk.yellow("--target")} to specify "itch-setup" or "kitch-setup"`
+    );
+  }
+
+  let osInfo = OS_INFOS[opts.os];
+  debug({ osInfo });
+  if (!osInfo) {
+    throw new Error(`Unsupported OS ${chalk.yellow(opts.os)}`);
+  }
+
+  let archInfo = osInfo.architectures[opts.arch];
+  debug({ archInfo });
+  if (!archInfo) {
+    throw new Error(`Unsupported arch '${opts.arch}' for os '${opts.os}'`);
+  }
+
+  if (archInfo.prependPath) {
+    if (opts.os === "windows") {
+      let prependPath = $$(`cygpath -w ${archInfo.prependPath}`).trim();
+      console.log(
+        `Prepending ${chalk.yellow(archInfo.prependPath)} (aka ${chalk.yellow(
+          prependPath
+        )}) to $PATH`
+      );
+      process.env.PATH = `${prependPath};${process.env.PATH}`;
+    } else {
+      console.log(`Prepending ${chalk.yellow(archInfo.prependPath)} to $PATH`);
+      process.env.PATH = `${archInfo.prependPath}:${process.env.PATH}`;
+    }
+  }
+
+  header("Showing tool versions");
+  $(`node --version`);
+  $(`go version`);
+
+  let version = "head";
+  if (process.env.CI_BUILD_TAG) {
+    version = process.env.CI_BUILD_TAG;
+  } else if (
+    process.env.CI_BUILD_REF_NAME &&
+    process.env.CI_BUILD_REF_NAME !== "master"
+  ) {
+    version = process.env.CI_BUILD_REF_NAME;
+  }
+  let buildRef = process.env.CI_BUILD_REF || "no-commit";
+
+  let builtAt = $$("date +%s");
+  let ldFlags = `-X main.version=${version} -X main.builtAt=${builtAt} -X main.commit=${buildRef} -X main.target=${opts.target} -w -s`;
+  if (opts.os === "windows") {
+    ldFlags += ` -H windowsgui`;
+  }
+
+  setenv(`CI_LDFLAGS`, ldFlags);
+
+  let target = opts.target;
+  if (opts.os === "windows") {
+    target += ".exe";
+  }
+
+  if (opts.os === "windows") {
+    $("windres -o itch-setup.syso itch-setup.rc");
+    $("file itch-setup.syso");
+  }
+
+  let goTags = "";
+  if (opts.os === "linux") {
+    goTags = `-tags gtk_3_14`;
+  }
+
+  if (opts.os === "darwin") {
+    setenv(`CGO_CFLAGS`, `-mmacosx-version-min=10.10`);
+    setenv(`CGO_LDFLAGS`, `-mmacosx-version-min=10.10`);
+  }
+
+  setenv(`GOOS`, opts.os);
+  setenv(`GOARCH`, archToGoArch(opts.arch));
+  setenv(`CGO_ENABLED`, "1");
+
+  header("Building native code");
+  $(`go build -ldflags "${ldFlags}" ${goTags} -o ${target}`);
+  $(`file ${target}`);
+
+  // TODO: port rest
+}
+
+/**
+ * @param {"i686" | "x86_64"} arch
+ * @returns {"386" | "amd64"}
+ */
+function archToGoArch(arch) {
+  switch (arch) {
+    case "i686":
+      return "386";
+    case "x86_64":
+      return "amd64";
+  }
+}
+
+main(process.argv.slice(2));

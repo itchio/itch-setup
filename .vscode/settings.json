@@ -1,4 +1,7 @@
 {
   "go.lintTool": "golint",
-  "go.buildOnSave": "off"
+  "go.buildOnSave": "off",
+  "[javascript]": {
+    "editor.formatOnSave": true
+  }
 }
