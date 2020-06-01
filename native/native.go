@@ -21,4 +21,7 @@ type Core interface {
 	// Shows an error dialog (with stack trace and repo link)
 	// and exits afterwards.
 	ErrorDialog(err error)
+
+	// Shows info in CLI and quit
+	Info()
 }

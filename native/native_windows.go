@@ -929,3 +929,11 @@ func (nc *nativeCore) ensureWritable(dir string, installDirLineEdit *walk.LineEd
 
 	return true
 }
+
+func (nc *nativeCore) Info() {
+	log.Printf("We are on Windows, our folders are:")
+	log.Printf("Desktop: %s", nc.folders.Desktop)
+	log.Printf("LocalAppData: %s", nc.folders.LocalAppData)
+	log.Printf("RoamingAppData: %s", nc.folders.RoamingAppData)
+	log.Printf("Programs: %s", nc.folders.Programs)
+}

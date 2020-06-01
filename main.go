@@ -40,6 +40,7 @@ func init() {
 
 	app.Flag("uninstall", "Uninstall the itch app").BoolVar(&cli.Uninstall)
 
+	app.Flag("info", "Just show info and quit").BoolVar(&cli.Info)
 	app.Flag("relaunch", "Relaunch a new version of the itch app").BoolVar(&cli.Relaunch)
 	app.Flag("relaunch-pid", "PID to wait for before relaunching").IntVar(&cli.RelaunchPID)
 
@@ -184,6 +185,9 @@ func main() {
 	if cli.Uninstall {
 		verbs = append(verbs, "uninstall")
 	}
+	if cli.Info {
+		verbs = append(verbs, "info")
+	}
 
 	if len(verbs) > 1 {
 		nc.ErrorDialog(errors.Errorf("Cannot specify more than one verb: got %s", strings.Join(verbs, ", ")))
@@ -218,6 +222,8 @@ func main() {
 		if err != nil {
 			nc.ErrorDialog(err)
 		}
+	case "info":
+		nc.Info()
 	}
 }
 

@@ -503,3 +503,7 @@ Comment=Install and play itch.io games easily`
 
 	return nil
 }
+
+func (nc *nativeCore) Info() {
+	log.Printf("nativeCore.Info() on Linux is a stub")
+}

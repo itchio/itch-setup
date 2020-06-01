@@ -13,6 +13,7 @@ type CLI struct {
 	PreferLaunch bool
 	Upgrade      bool
 	Uninstall    bool
+	Info         bool
 	Relaunch     bool
 	RelaunchPID  int
 

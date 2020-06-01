@@ -230,3 +230,7 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 		OnValidate: nc.validateBundle,
 	})
 }
+
+func (nc *nativeCore) Info() {
+	log.Printf("nativeCore.Info() on Darwin is a stub")
+}
