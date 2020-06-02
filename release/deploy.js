@@ -3,6 +3,7 @@
 
 const { $, cd } = require("@itchio/bob");
 const { readdirSync } = require("fs");
+const { resolve } = require("path");
 
 /**
  * @param {string[]} _args
@@ -31,7 +32,7 @@ async function main(_args) {
   }
 
   // upload to itch.io
-  let toolsDir = "./tools";
+  let toolsDir = resolve(process.cwd(), "tools");
   $(`mkdir -p ${toolsDir}`);
   await cd(toolsDir, async () => {
     let butlerUrl = `https://broth.itch.ovh/butler/linux-amd64-head/LATEST/.zip`;
