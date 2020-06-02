@@ -3,4 +3,5 @@
 *.swp
 .DS_Store
 /broth
+/artifacts
 /node_modules

@@ -147,6 +147,12 @@ func main() {
 		userLocale = "en-US"
 	}
 
+	envLocale := os.Getenv("ITCH_SETUP_LOCALE")
+	if envLocale != "" {
+		log.Println("ITCH_SETUP_LOCALE set, switching to ", envLocale)
+		userLocale = envLocale
+	}
+
 	log.Println("Locale: ", userLocale)
 
 	localizer, err = localize.NewLocalizer(bindata.Asset)

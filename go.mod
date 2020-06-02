@@ -17,6 +17,7 @@ require (
 	github.com/getlantern/idletiming v0.0.0-20190529182719-d2fbc83372a5
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f
 	github.com/getlantern/stack v0.0.0-20160516001742-02f928aad224
+	github.com/go-bindata/go-bindata v3.1.2+incompatible // indirect
 	github.com/go-errors/errors v0.0.0-20180813162953-d98b870cc4e0
 	github.com/go-ole/go-ole v1.2.4
 	github.com/golang/protobuf v1.3.1

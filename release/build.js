@@ -104,6 +104,8 @@ function main(args) {
         } else if (k === "target") {
           if (v === "itch-setup" || v === "kitch-setup") {
             opts.target = v;
+          } else {
+            throw new Error(`Unsupported target ${chalk.yellow(v)}`);
           }
         }
       } else {
@@ -128,12 +130,6 @@ function main(args) {
     );
   }
 
-  if (opts.target === "missing") {
-    throw new Error(
-      `Use ${chalk.yellow("--target")} to specify "itch-setup" or "kitch-setup"`
-    );
-  }
-
   let osInfo = OS_INFOS[opts.os];
   debug({ osInfo });
   if (!osInfo) {
@@ -145,6 +141,7 @@ function main(args) {
   if (!archInfo) {
     throw new Error(`Unsupported arch '${opts.arch}' for os '${opts.os}'`);
   }
+  let goArch = archToGoArch(opts.arch);
 
   if (archInfo.prependPath) {
     if (opts.os === "windows") {
@@ -212,7 +209,29 @@ function main(args) {
   $(`go build -ldflags "${ldFlags}" ${goTags} -o ${target}`);
   $(`file ${target}`);
 
-  // TODO: port rest
+  if (opts.os === "windows") {
+    let signArgs = [
+      `sign`, // verb
+      `//v`, // verbose
+      `//s MY`, // store
+      `//n "itch corp"`, // name
+      `//fd sha256`, // file digest algo (default is SHA-1)
+      `//tr http://timestamp.comodoca.com/?td=sha256`, // URL of RFC 3161 timestamp server
+      `//td sha256`, // timestamp digest algo
+      target,
+    ];
+    $(`tools/signtool.exe ${signArgs.join(" ")}`);
+  }
+
+  if (opts.os === "darwin") {
+    let signKey = "Developer ID Application: Amos Wenger (B2N6FSRTPV)";
+    $(`codesign --deep --force --verbose --sign "${signKey}" "${target}"`);
+    $(`codesign --verify -vvvv "${target}"`);
+  }
+
+  let binaries = `artifacts/${opts.target}/${opts.os}-${goArch}`;
+  $(`mkdir -p ${binaries}`);
+  $(`cp -rf ${target} ${binaries}/`);
 }
 
 /**
@@ -225,6 +244,8 @@ function archToGoArch(arch) {
       return "386";
     case "x86_64":
       return "amd64";
+    default:
+      throw new Error(`unsupported arch: ${chalk.yellow(arch)}`);
   }
 }
 
