@@ -52,7 +52,7 @@ async function main(_args) {
           "push",
           `--userversion "${userVersion}"`,
           `"${variant}"`,
-          `"${itchTarget}",`,
+          `"${itchTarget}"`,
         ];
         $(`${toolsDir}/butler ${butlerArgs.join(" ")}`);
       }

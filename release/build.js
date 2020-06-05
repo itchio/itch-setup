@@ -114,6 +114,10 @@ function main(args) {
     }
   }
 
+  if (opts.target === "missing") {
+    throw new Error(`Must specify ${chalk.yellow("--target")}`);
+  }
+
   if (opts.userSpecifiedOS) {
     console.log(`Using user-specified OS ${chalk.yellow(opts.os)}`);
   } else {
