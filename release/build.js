@@ -10,6 +10,7 @@ const {
   chalk,
   debug,
   setenv,
+  cd,
 } = require("@itchio/bob");
 
 const DEFAULT_ARCH = "x86_64";
@@ -54,7 +55,7 @@ const OS_INFOS = {
 /**
  * @param {string[]} args
  */
-function main(args) {
+async function main(args) {
   header("Gathering configuration");
 
   /**
@@ -165,6 +166,12 @@ function main(args) {
   header("Showing tool versions");
   $(`node --version`);
   $(`go version`);
+
+  if (opts.userSpecifiedArch) {
+    await cd("node_modules/@itchio/husk", async () => {
+      $(`npm run postinstall -- --verbose --arch ${opts.arch}`);
+    });
+  }
 
   let version = "head";
   if (process.env.CI_BUILD_TAG) {
