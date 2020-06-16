@@ -1,14 +1,12 @@
 package nwin
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
-
-	"github.com/scjalliance/comshim"
+	"github.com/itchio/husk/husk"
 )
 
 type ShortcutSettings struct {
@@ -23,6 +21,10 @@ type ShortcutSettings struct {
 
 // CreateShortcut creates a windows shortcut with the given settings
 func CreateShortcut(settings ShortcutSettings) error {
+	if !filepath.IsAbs(settings.ShortcutFilePath) {
+		return fmt.Errorf("Shortcut file path is not absolute: %q", settings.ShortcutFilePath)
+	}
+
 	if settings.OnlyIfExists {
 		_, err := os.Stat(settings.ShortcutFilePath)
 		if err != nil {
@@ -37,32 +39,39 @@ func CreateShortcut(settings ShortcutSettings) error {
 		return err
 	}
 
-	comshim.Add(1)
-	defer comshim.Done()
+	// TODO: arguments, description, workingdirectory, iconlocation,
 
-	oleShellObject, err := oleutil.CreateObject("WScript.Shell")
+	sl, err := husk.NewShellLink()
 	if err != nil {
 		return err
 	}
-	defer oleShellObject.Release()
 
-	wshell, err := oleShellObject.QueryInterface(ole.IID_IDispatch)
+	err = sl.SetPath(settings.TargetPath)
 	if err != nil {
 		return err
 	}
-	defer wshell.Release()
 
-	cs, err := oleutil.CallMethod(wshell, "CreateShortcut", settings.ShortcutFilePath)
+	err = sl.SetArguments(settings.Arguments)
 	if err != nil {
 		return err
 	}
-	idispatch := cs.ToIDispatch()
-	oleutil.PutProperty(idispatch, "TargetPath", settings.TargetPath)
-	oleutil.PutProperty(idispatch, "Arguments", settings.Arguments)
-	oleutil.PutProperty(idispatch, "Description", settings.Description)
-	oleutil.PutProperty(idispatch, "IconLocation", settings.IconLocation)
-	oleutil.PutProperty(idispatch, "WorkingDirectory", settings.WorkingDirectory)
-	_, err = oleutil.CallMethod(idispatch, "Save")
+
+	err = sl.SetDescription(settings.Description)
+	if err != nil {
+		return err
+	}
+
+	err = sl.SetWorkingDirectory(settings.WorkingDirectory)
+	if err != nil {
+		return err
+	}
+
+	err = sl.SetIconLocation(settings.IconLocation, 0)
+	if err != nil {
+		return err
+	}
+
+	err = sl.Save(settings.ShortcutFilePath)
 	if err != nil {
 		return err
 	}

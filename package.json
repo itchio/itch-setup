@@ -20,5 +20,8 @@
   "devDependencies": {
     "@itchio/bob": "^2.0.0",
     "@types/node": "^14.0.6"
+  },
+  "dependencies": {
+    "@itchio/husk": "^2.1.0"
   }
 }
