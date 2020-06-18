@@ -3,5 +3,8 @@
   "go.buildOnSave": "off",
   "[javascript]": {
     "editor.formatOnSave": true
+  },
+  "[objective-c]": {
+    "editor.formatOnSave": true
   }
 }

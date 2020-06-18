@@ -8,6 +8,7 @@ extern void StartItchSetup(void);
 int StartApp(char *cSetupTitle, char *cAppName, char *imageBytes, int imageLen) {
   [NSAutoreleasePool new];
   [NSApplication sharedApplication];
+
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
   // build menu
@@ -81,6 +82,7 @@ int StartApp(char *cSetupTitle, char *cAppName, char *imageBytes, int imageLen) 
   StartItchSetup();
 
   [NSApp run];
+
   return 0;
 }
 

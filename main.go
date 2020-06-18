@@ -89,6 +89,11 @@ const DefaultLocale = "en-US"
 var localizer *localize.Localizer
 
 func main() {
+	if runtime.GOOS == "darwin" {
+		// this makes Cocoa very happy.
+		runtime.LockOSThread()
+	}
+
 	logFileName := filepath.Join(os.TempDir(), "itch-setup-log.txt")
 	log.Printf("itch-setup will log to %s", logFileName)
 	logger := &lumberjack.Logger{

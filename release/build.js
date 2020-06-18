@@ -217,7 +217,10 @@ async function main(args) {
   setenv(`CGO_ENABLED`, "1");
 
   header("Building native code");
-  $(`go build -ldflags "${ldFlags}" ${goTags} -o ${target}`);
+  // -a is necessary to bypass the cache because Go *will* cache
+  // the result of compiling nmac, but it won't detect that `nmac.m`
+  // changed, so screw us I guess.
+  $(`go build -a -ldflags "${ldFlags}" ${goTags} -o ${target}`);
   $(`file ${target}`);
 
   if (opts.os === "windows") {
