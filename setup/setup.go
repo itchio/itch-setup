@@ -14,12 +14,11 @@ import (
 	"github.com/itchio/ox"
 	"github.com/itchio/savior/filesource"
 
-	"github.com/itchio/headway/united"
 	"github.com/itchio/headway/state"
+	"github.com/itchio/headway/united"
 
 	"github.com/itchio/httpkit/eos/option"
 	"github.com/itchio/httpkit/timeout"
-
 
 	_ "github.com/itchio/wharf/decompressors/brotli"
 	"github.com/itchio/wharf/pwr"
@@ -223,9 +222,8 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 	healPath := fmt.Sprintf("archive,%s", archiveURL)
 
 	vc := pwr.ValidatorContext{
-		Consumer:   consumer,
-		HealPath:   healPath,
-		NumWorkers: 2,
+		Consumer: consumer,
+		HealPath: healPath,
 	}
 
 	log.Printf("Healing (%s)...", appDir)

@@ -256,9 +256,8 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		}
 
 		vc := pwr.ValidatorContext{
-			Consumer:   consumer,
-			FailFast:   true,
-			NumWorkers: 2,
+			Consumer: consumer,
+			FailFast: true,
 		}
 		err = vc.Validate(ctx, ls.appDir, sigInfo)
 		if err != nil {
@@ -316,7 +315,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 
 		targetPool := fspool.New(p.GetTargetContainer(), targetDir)
 
-		bwl, err := bowl.NewFreshBowl(&bowl.FreshBowlParams{
+		bwl, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 			TargetContainer: p.GetTargetContainer(),
 			TargetPool:      targetPool,
 			SourceContainer: p.GetSourceContainer(),

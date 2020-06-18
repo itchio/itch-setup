@@ -591,12 +591,11 @@ func (nc *nativeCore) showInstallGUI() error {
 					ui.Composite{
 						Layout: ui.HBox{},
 						Children: []ui.Widget{
-							ui.HSpacer{},
 							ui.Label{
-								Text:     cli.Localizer.T("setup.status.preparing"),
-								AssignTo: &progressLabel,
+								Text:          cli.Localizer.T("setup.status.preparing"),
+								AssignTo:      &progressLabel,
+								TextAlignment: ui.AlignCenter,
 							},
-							ui.HSpacer{},
 						},
 					},
 					ui.VSpacer{},
