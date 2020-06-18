@@ -143,6 +143,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 	err = nwin.CreateUninstallRegistryEntry(cli, installDir, currentBuild.Version)
 	if err != nil {
 		log.Printf("While creating registry entry: %+v", err)
+		log.Printf("Ignoring uninstall registry entry creation error and continuing...")
 	}
 
 	// this needs to be done before the shortcut is created
@@ -167,7 +168,8 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 			WorkingDirectory: filepath.Join(installDir),
 		})
 		if err != nil {
-			nc.ErrorDialog(errors.WithMessage(err, "while creating shortcut"))
+			log.Printf("While creating shortcut: %+v", err)
+			log.Printf("Ignoring shortcut creation error and continuing...")
 		}
 	}
 
