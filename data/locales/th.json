@@ -1,1 +1,4 @@
-{}
+{
+    "grid.item.installing": "กำลังติดตั้ง...",
+    "grid.item.downloading": "กำลังโหลด..."
+}

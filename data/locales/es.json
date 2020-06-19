@@ -575,7 +575,7 @@
     "send_feedback.success.view_report": "Ver reporte",
     "send_feedback.success.view_report.delete": "(Puedes borrarlo desde esta página)",
     "send_feedback.success.thanks": "Gracias por tu comentario",
-    "send_feedback.success.promise": "Será revisado lo mas pronto posible, convertido en un reporte accionable, y ojalá arreglado en un próximo lanzamiento.",
+    "send_feedback.success.promise": "Será revisado lo más pronto posible, convertido en un reporte ejecutable y esperamos arreglarlo en un próximo lanzamiento.",
     "send_feedback.error.intro": "Lo sentimos, no pudimos enviar tu reporte.",
     "send_feedback.nav.previous": "Previo",
     "send_feedback.nav.next": "Siguiente",
