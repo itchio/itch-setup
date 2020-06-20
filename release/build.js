@@ -187,7 +187,7 @@ async function main(args) {
   let builtAt = $$("date +%s");
   let ldFlags = `-X main.version=${version} -X main.builtAt=${builtAt} -X main.commit=${buildRef} -X main.target=${opts.target} -w -s`;
   if (opts.os === "windows") {
-    ldFlags += ` -H windowsgui`;
+    ldFlags += ` -H windowsgui -extldflags=-static`;
   }
 
   setenv(`CI_LDFLAGS`, ldFlags);
