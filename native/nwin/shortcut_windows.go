@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/itchio/husk/husk"
 )
@@ -39,7 +40,8 @@ func CreateShortcut(settings ShortcutSettings) error {
 		return err
 	}
 
-	// TODO: arguments, description, workingdirectory, iconlocation,
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	sl, err := husk.NewShellLink()
 	if err != nil {

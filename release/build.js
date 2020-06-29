@@ -224,6 +224,9 @@ async function main(args) {
   $(`file ${target}`);
 
   if (opts.os === "windows") {
+    verifyCoIncrementMTAUsage(target);
+
+    console.log(`Signing Windows binary...`);
     let signArgs = [
       `sign`, // verb
       `//v`, // verbose
@@ -238,6 +241,7 @@ async function main(args) {
   }
 
   if (opts.os === "darwin") {
+    console.log(`Signing macOS binary...`);
     let signKey = "Developer ID Application: Amos Wenger (B2N6FSRTPV)";
     $(`codesign --deep --force --verbose --sign "${signKey}" "${target}"`);
     $(`codesign --verify -vvvv "${target}"`);
@@ -260,6 +264,39 @@ function archToGoArch(arch) {
       return "amd64";
     default:
       throw new Error(`unsupported arch: ${chalk.yellow(arch)}`);
+  }
+}
+
+/**
+ * @param {string} target
+ */
+function verifyCoIncrementMTAUsage(target) {
+  console.log(`Verifying that we don't rely on CoIncrementMTAUsage`);
+  let lines = $$(
+    `objdump --private-headers "${target}" | grep -E "[0-9]+  Co[A-Z]"`
+  ).split("\n");
+  let comMethods = [];
+  for (let line of lines) {
+    line = line.trim();
+    if (line == "") {
+      continue;
+    }
+    let matches = /[^ ]+$/.exec(line);
+    if (matches) {
+      let method = matches[0];
+      comMethods.push(method);
+    } else {
+      console.log(chalk.yellow(`Could not parse line: ${line}`));
+    }
+  }
+  console.log(`Found COM methods ${comMethods.join(", ")}`);
+  if (comMethods.indexOf("CoIncrementMTAUsage") !== -1) {
+    console.log(
+      chalk.magenta(
+        "Check failed: husk cannot depend on CoIncrementMTAUsage, as it breaks Windows 7 compatibility."
+      )
+    );
+    process.exit(1);
   }
 }
 
