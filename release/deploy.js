@@ -47,7 +47,7 @@ async function main(_args) {
       let variants = readdirSync(".");
       for (let variant of variants) {
         let channelName = `${variant}${channelSuffix}`;
-        let itchTarget = `fasterthanlime/${target}:${channelName}`;
+        let itchTarget = `itchio/${target}:${channelName}`;
         let butlerArgs = [
           "push",
           `--userversion "${userVersion}"`,
