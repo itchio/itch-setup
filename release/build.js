@@ -243,7 +243,7 @@ async function main(args) {
 
   if (opts.os === "darwin") {
     console.log(`Signing macOS binary...`);
-    let signKey = "Developer ID Application: itch corp. (AK2D34UPD2)";
+    let signKey = "Developer ID Application: itch corp. (AK2D34UDP2)";
     $(`codesign --deep --force --verbose --sign "${signKey}" "${target}"`);
     $(`codesign --verify -vvvv "${target}"`);
   }
