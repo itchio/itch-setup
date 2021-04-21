@@ -235,6 +235,7 @@ async function main(args) {
       `//fd sha256`, // file digest algo (default is SHA-1)
       `//tr http://timestamp.comodoca.com/?td=sha256`, // URL of RFC 3161 timestamp server
       `//td sha256`, // timestamp digest algo
+      '//a', // choose best cert
       target,
     ];
     $(`tools/signtool.exe ${signArgs.join(" ")}`);
