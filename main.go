@@ -147,10 +147,10 @@ func main() {
 		}
 	}
 
-	// detect EGS
+	// detect EGS, default to preferring launch instead of running setup
 	for _, arg := range os.Args[1:] {
 		if strings.HasPrefix(arg, "-epicapp=") {
-			cliArgs = nil
+			cliArgs = []string{"--prefer-launch"}
 			break
 		}
 	}
