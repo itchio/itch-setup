@@ -132,12 +132,26 @@ func main() {
 	cli.VersionString = versionString
 
 	var cliArgs []string
+
+	// running in environments where we can't control command line arguments will
+	// cause itch-setup to bail due to kingpin being strict about arugments. We
+	// try to detect the environments and strip the args before parsing :/
+
+	// detect macos app
 	for _, arg := range os.Args[1:] {
 		if strings.HasPrefix(arg, "-psn") {
 			// see https://github.com/itchio/itch-setup/issues/3
 			log.Printf("Filtering out argument %q (passed by macOS when opened with Finder)", arg)
 		} else {
 			cliArgs = append(cliArgs, arg)
+		}
+	}
+
+	// detect EGS
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-epicapp=") {
+			cliArgs = nil
+			break
 		}
 	}
 
