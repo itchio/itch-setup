@@ -10,7 +10,7 @@ build:linux:x86_64:
     - node release/build.js --os linux --arch x86_64 --target itch-setup
     - node release/build.js --os linux --arch x86_64 --target kitch-setup
   tags:
-    - docker-capsule-64
+    - linux
   artifacts:
     expire_in: 1 week
     paths:
