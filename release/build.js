@@ -204,7 +204,8 @@ async function main(args) {
 
   let goTags = "";
   if (opts.os === "linux") {
-    goTags = `-tags "pango_1_42 gtk_3_24 glib_2_58 gdk_pixbuf_2_38"`;
+    // NOTE: we are actually on gtk 3.24 but it doesn't work for Debian buster's specific version: https://github.com/gotk3/gotk3/issues/671#issuecomment-798590357
+    goTags = `-tags "pango_1_42 gtk_3_22 glib_2_58 gdk_pixbuf_2_38"`;
   }
 
   if (opts.os === "darwin") {
