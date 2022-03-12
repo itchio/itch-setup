@@ -204,7 +204,7 @@ async function main(args) {
 
   let goTags = "";
   if (opts.os === "linux") {
-    goTags = `-tags gtk_3_14`;
+    goTags = `-tags gtk_3_24`;
   }
 
   if (opts.os === "darwin") {
