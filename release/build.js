@@ -71,6 +71,7 @@ async function main(args) {
     os: detectOS(),
     arch: DEFAULT_ARCH,
     target: "missing",
+    skipSigning: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -81,6 +82,11 @@ async function main(args) {
       let k = matches[1];
       if (k == "verbose") {
         setVerbose(true);
+        continue;
+      }
+
+      if (k == "skip-signing") {
+        opts.skipSigning = true;
         continue;
       }
 
@@ -224,7 +230,7 @@ async function main(args) {
   $(`go build -a -ldflags "${ldFlags}" ${goTags} -o ${target}`);
   $(`file ${target}`);
 
-  if (opts.os === "windows") {
+  if (opts.os === "windows" && !opts.skipSigning) {
     verifyCoIncrementMTAUsage(target);
 
     console.log(`Signing Windows binary...`);
@@ -242,7 +248,7 @@ async function main(args) {
     $(`tools/signtool.exe ${signArgs.join(" ")}`);
   }
 
-  if (opts.os === "darwin") {
+  if (opts.os === "darwin" && !opts.skipSigning) {
     console.log(`Signing macOS binary...`);
     let signKey = "Developer ID Application: itch corp. (AK2D34UDP2)";
     $(`codesign --deep --force --verbose --sign "${signKey}" "${target}"`);

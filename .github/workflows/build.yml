@@ -25,4 +25,4 @@ jobs:
       run: npm install
 
     - name: Build
-      run: node release/build.js --target itch-setup
+      run: node release/build.js --target itch-setup --skip-signing
