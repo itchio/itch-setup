@@ -30,3 +30,9 @@ jobs:
 
     - name: Build
       run: node release/build.js --target itch-setup --skip-signing
+
+    - name: Store
+      uses: actions/upload-artifact@v2
+      with:
+        name: binaries
+        path: artifacts/itch-setup/
