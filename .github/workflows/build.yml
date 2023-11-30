@@ -14,12 +14,12 @@ jobs:
 
     steps:
     - name: Set up Go ${{ matrix.go-version }}
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v4
       with:
         go-version: ${{ matrix.go-version }}
 
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Linux dependencies
       if: matrix.os == 'ubuntu-latest'
@@ -32,7 +32,7 @@ jobs:
       run: node release/build.js --target itch-setup --skip-signing
 
     - name: Store
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: binaries
         path: artifacts/itch-setup/
