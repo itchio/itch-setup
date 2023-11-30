@@ -29,7 +29,7 @@ jobs:
       run: npm ci --no-audit
 
     - name: Build
-      run: node release/build.js --target itch-setup --skip-signing
+      run: node release/build.js --target itch-setup --arch x86_64 --skip-signing
 
     - name: Store
       uses: actions/upload-artifact@v3
