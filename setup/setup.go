@@ -58,7 +58,7 @@ type InstallSource struct {
 	Version string
 }
 
-const brothBaseURL = "https://broth.itch.ovh"
+const brothBaseURL = "https://broth.itch.zone"
 
 func NewInstaller(settings InstallerSettings) *Installer {
 	runtime := ox.CurrentRuntime()

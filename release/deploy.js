@@ -35,7 +35,7 @@ async function main(_args) {
   let toolsDir = resolve(process.cwd(), "tools");
   $(`mkdir -p ${toolsDir}`);
   await cd(toolsDir, async () => {
-    let butlerUrl = `https://broth.itch.ovh/butler/linux-amd64-head/LATEST/.zip`;
+    let butlerUrl = `https://broth.itch.zone/butler/linux-amd64-head/LATEST/.zip`;
     $(`curl -sLo butler.zip "${butlerUrl}"`);
     $(`unzip butler.zip`);
   });
