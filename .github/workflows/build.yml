@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Set up Go ${{ matrix.go-version }}
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go-version }}
 
@@ -32,7 +32,7 @@ jobs:
       run: node release/build.js --target itch-setup --arch x86_64 --skip-signing
 
     - name: Store
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: binaries
+        name: binaries-${{ matrix.os }}
         path: artifacts/itch-setup/
