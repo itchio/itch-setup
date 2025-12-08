@@ -3,10 +3,9 @@ module github.com/itchio/itch-setup
 go 1.16
 
 require (
+	github.com/Xuanwo/go-locale v1.1.3
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
-	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
-	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21 // indirect
 	github.com/dchest/safefile v0.0.0-20151022103144-855e8d98f185
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/google/uuid v1.6.0
@@ -23,10 +22,9 @@ require (
 	github.com/lxn/win v0.0.0-20191128105842-2da648fda5b4
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/mitchellh/mapstructure v1.3.2 // indirect
-	github.com/onsi/ginkgo v1.13.0 // indirect
 	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	golang.org/x/sys v0.0.0-20200615200032-f1bc736245b1
+	golang.org/x/sys v0.28.0
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6

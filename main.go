@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudfoundry-attic/jibber_jabber"
+	"github.com/Xuanwo/go-locale"
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/localize"
@@ -159,10 +159,12 @@ func main() {
 
 	detectAppName()
 
-	userLocale, err := jibber_jabber.DetectIETF()
+	userLocale := DefaultLocale
+	tag, err := locale.Detect()
 	if err != nil {
 		log.Println("Couldn't detect locale, falling back to default", DefaultLocale)
-		userLocale = "en-US"
+	} else {
+		userLocale = tag.String()
 	}
 
 	envLocale := os.Getenv("ITCH_SETUP_LOCALE")
