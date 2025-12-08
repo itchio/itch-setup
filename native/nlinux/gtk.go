@@ -11,8 +11,8 @@ import (
 
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
-	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/data"
 )
 
 // gtk UI implementation
@@ -128,7 +128,7 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 	defer os.RemoveAll(tmpDir)
 
 	loadBundledImage := func(path string) string {
-		imageBytes, err := bindata.Asset(path)
+		imageBytes, err := data.Asset(path)
 		if err != nil {
 			log.Fatal("Couldn't load image:", err)
 		}

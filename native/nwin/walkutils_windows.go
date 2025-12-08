@@ -7,8 +7,8 @@ import (
 	"os"
 	"unsafe"
 
-	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/data"
 	"github.com/lxn/walk"
 	"github.com/lxn/win"
 )
@@ -52,8 +52,7 @@ func CenterWindow(mw *walk.FormBase) {
 }
 
 func SetInstallerImage(cli cl.CLI, imageView *walk.ImageView) {
-	// thanks, go-bindata!
-	data, err := bindata.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
+	imageBytes, err := data.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
 	if err != nil {
 		log.Printf("Installer image not found :()")
 		return
@@ -66,7 +65,7 @@ func SetInstallerImage(cli cl.CLI, imageView *walk.ImageView) {
 	}
 	defer os.Remove(tf.Name())
 
-	_, err = tf.Write(data)
+	_, err = tf.Write(imageBytes)
 	if err != nil {
 		log.Printf("Could not write installer image to temp file")
 		return

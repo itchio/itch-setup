@@ -19,8 +19,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/data"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/itchio/ox/macox"
 )
@@ -71,8 +71,7 @@ func (nc *nativeCore) Install() error {
 	cli := nc.cli
 	setupTitle := cli.Localizer.T("setup.window.title", map[string]string{"app_name": cli.AppName})
 
-	// thanks, go-bindata!
-	imageData, err := bindata.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
+	imageData, err := data.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
 	if err != nil {
 		log.Printf("Installer image not found :()")
 		return nil

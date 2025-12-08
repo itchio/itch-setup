@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/Xuanwo/go-locale"
-	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/data"
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
@@ -175,7 +175,7 @@ func main() {
 
 	log.Println("Locale: ", userLocale)
 
-	localizer, err = localize.NewLocalizer(bindata.Asset)
+	localizer, err = localize.NewLocalizer(data.Asset)
 	if err != nil {
 		log.Fatal(err)
 	}

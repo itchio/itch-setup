@@ -13,8 +13,8 @@ import (
 
 	"github.com/itchio/ox/linox"
 
-	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/data"
 	"github.com/itchio/itch-setup/native/nlinux"
 	"github.com/itchio/itch-setup/setup"
 )
@@ -449,7 +449,7 @@ func (nc *nativeCore) installDesktopFiles() error {
 
 	iconPath := filepath.Join(nc.baseDir, "icon.png")
 
-	imageData, err := bindata.Asset(fmt.Sprintf("data/%s-icon.png", appName))
+	imageData, err := data.Asset(fmt.Sprintf("data/%s-icon.png", appName))
 	if err != nil {
 		return fmt.Errorf("while reading icon: %w", err)
 	}
