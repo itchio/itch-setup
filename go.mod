@@ -1,6 +1,6 @@
 module github.com/itchio/itch-setup
 
-go 1.13
+go 1.16
 
 require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
@@ -9,7 +9,7 @@ require (
 	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21 // indirect
 	github.com/dchest/safefile v0.0.0-20151022103144-855e8d98f185
 	github.com/go-ole/go-ole v1.2.4 // indirect
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.6.0
 	github.com/gotk3/gotk3 v0.6.1
 	github.com/itchio/go-itchio v0.0.0-20200402182019-61224e60358e
 	github.com/itchio/headway v0.0.0-20200301160421-e15721f23905
