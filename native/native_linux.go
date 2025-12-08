@@ -2,15 +2,12 @@ package native
 
 import (
 	"C"
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-
-	"io/ioutil"
-
-	"context"
 	"strings"
 	"time"
 
@@ -18,11 +15,9 @@ import (
 
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
+	"github.com/itchio/itch-setup/native/nlinux"
 	"github.com/itchio/itch-setup/setup"
-
-	"github.com/pkg/errors"
 )
-import "github.com/itchio/itch-setup/native/nlinux"
 
 type nativeCore struct {
 	cli     cl.CLI
@@ -62,7 +57,7 @@ func (nc *nativeCore) Install() error {
 		BaseDir: nc.baseDir,
 	})
 	if err != nil {
-		return errors.WithMessage(err, "Internal error")
+		return fmt.Errorf("Internal error: %w", err)
 	}
 
 	if cli.PreferLaunch {
@@ -92,7 +87,7 @@ func (nc *nativeCore) Install() error {
 		},
 		OnError: func(err error) {
 			nc.nui.RunInMainThread(func() {
-				nc.nui.ShowErrorAndQuit(errors.Wrap(err, "Warm-up error"))
+				nc.nui.ShowErrorAndQuit(fmt.Errorf("Warm-up error: %w", err))
 			})
 		},
 		OnSource: func(source setup.InstallSource) {
@@ -126,7 +121,7 @@ func (nc *nativeCore) Install() error {
 		}()
 		if kickErr != nil {
 			nc.nui.RunInMainThread(func() {
-				nc.ErrorDialog(errors.WithMessage(err, "Install error"))
+				nc.ErrorDialog(fmt.Errorf("Install error: %w", kickErr))
 			})
 		}
 	}
@@ -310,7 +305,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 
 	b := mv.GetCurrentVersion()
 	if b == nil {
-		return errors.Errorf("No valid version of %s found installed", nc.cli.AppName)
+		return fmt.Errorf("No valid version of %s found installed", nc.cli.AppName)
 	}
 
 	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
@@ -330,8 +325,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 
 	err := cmd.Start()
 	if err != nil {
-		err = errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", nc.cli.AppName))
-		nc.ErrorDialog(err)
+		nc.ErrorDialog(fmt.Errorf("Encountered a problem while launching %s: %w", nc.cli.AppName, err))
 	}
 
 	log.Printf("App launched, getting out of the way")
@@ -399,17 +393,17 @@ func (nc *nativeCore) writeFile(path string, contents []byte, perm os.FileMode) 
 	}
 
 	log.Printf("install (%s)", path)
-	return ioutil.WriteFile(path, contents, perm)
+	return os.WriteFile(path, contents, perm)
 }
 
 func (nc *nativeCore) interpolate(source string, vars map[string]string) (string, error) {
 	res := source
 	for k, v := range vars {
-		res = strings.Replace(res, "{{"+k+"}}", v, -1)
+		res = strings.ReplaceAll(res, "{{"+k+"}}", v)
 	}
 
 	if strings.Contains(res, "{{") || strings.Contains(res, "}}") {
-		return "", errors.Errorf("internal error: not fully interpolated:\n%s", res)
+		return "", fmt.Errorf("internal error: not fully interpolated:\n%s", res)
 	}
 
 	return res, nil
@@ -422,7 +416,7 @@ func (nc *nativeCore) installDesktopFiles() error {
 
 	execPath, err := os.Executable()
 	if err != nil {
-		return errors.WithMessage(err, "while getting self path")
+		return fmt.Errorf("while getting self path: %w", err)
 	}
 
 	if filepath.HasPrefix(execPath, "/usr") {
@@ -432,7 +426,7 @@ func (nc *nativeCore) installDesktopFiles() error {
 
 	targetExecPath, err := CopySelf(filepath.Join(nc.baseDir, "itch-setup"))
 	if err != nil {
-		return errors.WithMessage(err, "while creating copy of self in install folder")
+		return fmt.Errorf("while creating copy of self in install folder: %w", err)
 	}
 
 	launchScript := `#!/bin/sh
@@ -450,18 +444,18 @@ func (nc *nativeCore) installDesktopFiles() error {
 	launchDstPath := filepath.Join(nc.baseDir, appName)
 	err = nc.writeFile(launchDstPath, []byte(launchScript), 0755)
 	if err != nil {
-		return errors.WithMessage(err, "creating launch script")
+		return fmt.Errorf("creating launch script: %w", err)
 	}
 
 	iconPath := filepath.Join(nc.baseDir, "icon.png")
 
 	imageData, err := bindata.Asset(fmt.Sprintf("data/%s-icon.png", appName))
 	if err != nil {
-		return errors.WithMessage(err, "while reading icon")
+		return fmt.Errorf("while reading icon: %w", err)
 	}
 	err = nc.writeFile(iconPath, imageData, 0644)
 	if err != nil {
-		return errors.WithMessage(err, "while writing icon")
+		return fmt.Errorf("while writing icon: %w", err)
 	}
 
 	xdgAppDir := nc.xdgAppDir()
@@ -493,7 +487,7 @@ Comment=Install and play itch.io games easily`
 
 	err = nc.writeFile(desktopFilePath, []byte(desktopContents), 0644)
 	if err != nil {
-		return errors.WithMessage(err, "writing desktop file")
+		return fmt.Errorf("writing desktop file: %w", err)
 	}
 
 	err = nc.updateDesktopDatabase()

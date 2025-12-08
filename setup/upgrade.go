@@ -28,8 +28,6 @@ import (
 	"github.com/itchio/go-itchio"
 	"github.com/itchio/savior/filesource"
 	"github.com/itchio/savior/zipextractor"
-
-	"github.com/pkg/errors"
 )
 
 type localState struct {
@@ -81,7 +79,7 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 		func() error {
 			currentBuild := mv.GetCurrentVersion()
 			if currentBuild == nil {
-				return errors.Errorf("No version currently installed")
+				return fmt.Errorf("No version currently installed")
 			}
 
 			ls = &localState{
@@ -167,7 +165,7 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 			buildInfo := &BrothBuildInfo{}
 			err = i.brothGetResponse(buildInfo, "/%s/info", rs.version)
 			if err != nil {
-				return errors.WithMessage(err, "While looking for archive plan")
+				return fmt.Errorf("While looking for archive plan: %w", err)
 			}
 
 			found := false
@@ -184,8 +182,7 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 			}
 
 			if !found {
-				errMsg := fmt.Sprintf("Default archive not found for version %s", rs.version)
-				return errors.WithMessage(err, errMsg)
+				return fmt.Errorf("Default archive not found for version %s", rs.version)
 			}
 
 			return nil
@@ -278,7 +275,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 
 		f := bp.FindSubType(itchio.BuildFileSubTypeDefault)
 		if f == nil {
-			return errors.Errorf("Could not find default patch file for version %s, giving up", bp.Version)
+			return fmt.Errorf("Could not find default patch file for version %s, giving up", bp.Version)
 		}
 
 		of := bp.FindSubType(itchio.BuildFileSubTypeOptimized)

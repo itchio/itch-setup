@@ -23,8 +23,6 @@ import (
 	_ "github.com/itchio/wharf/decompressors/brotli"
 	"github.com/itchio/wharf/pwr"
 
-	"github.com/pkg/errors"
-
 	"github.com/itchio/itch-setup/localize"
 )
 
@@ -106,7 +104,7 @@ func (i *Installer) WarmUp() {
 func (i *Installer) warmUp() error {
 	version, err := i.getVersion()
 	if err != nil {
-		return errors.WithMessage(err, "while getting latest version")
+		return fmt.Errorf("while getting latest version: %w", err)
 	}
 
 	log.Printf("Will install version %s\n", version)
@@ -161,14 +159,14 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 
 	sigSource, err := filesource.Open(signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {
-		return errors.WithMessage(err, "while opening remote signature file")
+		return fmt.Errorf("while opening remote signature file: %w", err)
 	}
 	defer sigSource.Close()
 
 	log.Printf("Reading signature...")
 	sigInfo, err := pwr.ReadSignature(ctx, sigSource)
 	if err != nil {
-		return errors.WithMessage(err, "while parsing signature file")
+		return fmt.Errorf("while parsing signature file: %w", err)
 	}
 
 	container := sigInfo.Container
@@ -229,7 +227,7 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 	log.Printf("Healing (%s)...", appDir)
 	err = vc.Validate(ctx, appDir, sigInfo)
 	if err != nil {
-		return errors.WithMessage(err, "while installing")
+		return fmt.Errorf("while installing: %w", err)
 	}
 
 	duration := time.Since(startTime)

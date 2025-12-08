@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/scjalliance/comshim"
 	"github.com/skratchdot/open-golang/open"
 
@@ -38,7 +36,7 @@ func NewCore(cli cl.CLI) (Core, error) {
 
 	folders, err := nwin.GetFolders()
 	if err != nil {
-		return nil, errors.WithMessage(err, "During setup initialization")
+		return nil, fmt.Errorf("During setup initialization: %w", err)
 	}
 
 	nc.folders = folders
@@ -131,7 +129,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 
 	currentBuild := mv.GetCurrentVersion()
 	if currentBuild == nil {
-		return errors.Errorf("internal error (in post-install with a nil currentBuild)")
+		return fmt.Errorf("internal error (in post-install with a nil currentBuild)")
 	}
 
 	setupLocalPath, err := CopySelf(filepath.Join(installDir, "itch-setup.exe"))
@@ -423,8 +421,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessF
 
 	err := cmd.Start()
 	if err != nil {
-		prettyErr := errors.WithMessage(err, fmt.Sprintf("Encountered a problem while launching %s", nc.cli.AppName))
-		nc.ErrorDialog(prettyErr)
+		nc.ErrorDialog(fmt.Errorf("Encountered a problem while launching %s: %w", nc.cli.AppName, err))
 	}
 
 	if onSuccess != nil {
@@ -465,7 +462,7 @@ func (nc *nativeCore) showInstallGUI() error {
 			return nil
 		}()
 		if kickErr != nil {
-			nc.ErrorDialog(errors.WithMessage(kickErr, "Error during installation"))
+			nc.ErrorDialog(fmt.Errorf("Error during installation: %w", kickErr))
 		}
 	}
 
@@ -659,7 +656,7 @@ func (nc *nativeCore) showInstallGUI() error {
 		AppName:   cli.AppName,
 		OnError: func(err error) {
 			nc.mainWindow.Synchronize(func() {
-				nc.ErrorDialog(errors.WithMessage(err, "Error during warm-up"))
+				nc.ErrorDialog(fmt.Errorf("Error during warm-up: %w", err))
 			})
 		},
 		OnProgressLabel: func(label string) {
@@ -743,7 +740,7 @@ func (nc *nativeCore) ErrorDialog(errShown error) {
 		AssignTo: &dlg,
 		Children: []ui.Widget{
 			ui.TextEdit{
-				Text:          strings.Replace(buf.String(), "\n", "\r\n", -1),
+				Text:          strings.ReplaceAll(buf.String(), "\n", "\r\n"),
 				StretchFactor: 2,
 				ReadOnly:      true,
 				VScroll:       true,
@@ -877,7 +874,7 @@ func (nc *nativeCore) writeVisualElementsManifest() error {
 	manifestPath := nc.visualElementsManifestPath()
 
 	log.Printf("Writing visual elements manifest (%s)", manifestPath)
-	err := ioutil.WriteFile(manifestPath, []byte(manifestContents), 0644)
+	err := os.WriteFile(manifestPath, []byte(manifestContents), 0644)
 	if err != nil {
 		return err
 	}
@@ -897,7 +894,7 @@ func (nc *nativeCore) isWritableInstallDir(dir string) bool {
 
 	testFile := filepath.Join(dir, ".write-test")
 	contents := []byte("not program files please")
-	err = ioutil.WriteFile(testFile, contents, 0644)
+	err = os.WriteFile(testFile, contents, 0644)
 	if err != nil {
 		return false
 	}

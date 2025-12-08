@@ -23,7 +23,6 @@ import (
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/itchio/ox/macox"
-	"github.com/pkg/errors"
 )
 
 type nativeCore struct {
@@ -86,7 +85,7 @@ func (nc *nativeCore) Install() error {
 }
 
 func (nc *nativeCore) Uninstall() error {
-	return errors.Errorf("uninstall: stub!")
+	return fmt.Errorf("uninstall: stub!")
 }
 
 func (nc *nativeCore) Upgrade() error {
@@ -196,12 +195,12 @@ func StartItchSetup() {
 func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 	b := mv.GetCurrentVersion()
 	if b == nil {
-		return errors.Errorf("No valid version of %s found installed", nc.cli.AppName)
+		return fmt.Errorf("No valid version of %s found installed", nc.cli.AppName)
 	}
 
 	log.Printf("Launching (%s) from (%s)", b.Version, b.Path)
 	if C.LaunchBundle(C.CString(b.Path)) == 0 {
-		return errors.Errorf("Could not launch (%s)", b.Path)
+		return fmt.Errorf("Could not launch (%s)", b.Path)
 	}
 
 	log.Printf("Bundle launched successfully, getting out of the way")
@@ -216,7 +215,7 @@ func (nc *nativeCore) validateBundle(bundlePath string) error {
 
 	result := C.ValidateBundle(C.CString(bundlePath))
 	if result != nil {
-		return errors.Errorf("Bundle (%s) invalid: %s", bundlePath, C.GoString(result))
+		return fmt.Errorf("Bundle (%s) invalid: %s", bundlePath, C.GoString(result))
 	}
 	return nil
 }

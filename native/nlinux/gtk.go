@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,7 +13,6 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/itchio/itch-setup/bindata"
 	"github.com/itchio/itch-setup/cl"
-	"github.com/pkg/errors"
 )
 
 // gtk UI implementation
@@ -108,7 +106,7 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 	// "destroy" signal to exit the GTK main loop when it is destroyed.
 	w.win, err = gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("create GTK window: %w", err)
 	}
 	w.win.SetTitle(baseTitle)
 	w.win.Connect("destroy", func() {
@@ -123,14 +121,9 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 
 	log.Printf("Loading image resources...")
 
-	tmpDir, err := ioutil.TempDir("", "itch-setup-images")
+	tmpDir, err := os.MkdirTemp("", "itch-setup-images")
 	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = os.MkdirAll(tmpDir, 0755)
-	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("create temp dir for images: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -141,7 +134,7 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 		}
 
 		imagePath := filepath.Join(tmpDir, filepath.Base(path))
-		err = ioutil.WriteFile(imagePath, imageBytes, 0644)
+		err = os.WriteFile(imagePath, imageBytes, 0644)
 		if err != nil {
 			log.Fatal("Couldn't write image to temp dir:", err)
 		}
@@ -153,7 +146,7 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 
 	i, err := gtk.ImageNewFromFile(imagePath)
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("load installer image from %s: %w", imagePath, err)
 	}
 	box.Add(i)
 
@@ -164,7 +157,7 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 
 	w.pb, err = gtk.ProgressBarNew()
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("create progress bar: %w", err)
 	}
 	w.pb.SetMarginStart(30)
 	w.pb.SetMarginEnd(30)
@@ -178,7 +171,7 @@ func (w *gtkInstallWindow) CreateAndShow(baseTitle string) error {
 
 	vh, err := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 10)
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("create VBox: %w", err)
 	}
 	box.Add(vh)
 

@@ -16,7 +16,6 @@ import (
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
-	"github.com/pkg/errors"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -215,7 +214,7 @@ func main() {
 	}
 
 	if len(verbs) > 1 {
-		nc.ErrorDialog(errors.Errorf("Cannot specify more than one verb: got %s", strings.Join(verbs, ", ")))
+		nc.ErrorDialog(fmt.Errorf("Cannot specify more than one verb: got %s", strings.Join(verbs, ", ")))
 	}
 
 	if len(verbs) == 0 {
@@ -231,16 +230,16 @@ func main() {
 	case "upgrade":
 		err = nc.Upgrade()
 		if err != nil {
-			jsonlBail(errors.WithMessage(err, "Fatal upgrade error"))
+			jsonlBail(fmt.Errorf("Fatal upgrade error: %w", err))
 		}
 	case "relaunch":
 		if cli.RelaunchPID <= 0 {
-			jsonlBail(errors.Errorf("--relaunch needs a valid --relaunch-pid (got %d)", cli.RelaunchPID))
+			jsonlBail(fmt.Errorf("--relaunch needs a valid --relaunch-pid (got %d)", cli.RelaunchPID))
 		}
 
 		err = nc.Relaunch()
 		if err != nil {
-			jsonlBail(errors.WithMessage(err, "Fatal relaunch error"))
+			jsonlBail(fmt.Errorf("Fatal relaunch error: %w", err))
 		}
 	case "uninstall":
 		err = nc.Uninstall()

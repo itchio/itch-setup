@@ -3,12 +3,11 @@ package setup
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
 	itchio "github.com/itchio/go-itchio"
-	"github.com/pkg/errors"
 )
 
 type BrothBuildInfo struct {
@@ -51,22 +50,22 @@ func (i *Installer) brothGetBytes(format string, args ...interface{}) ([]byte, e
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, errors.Errorf("Could not build GET request to %s", url)
+		return nil, fmt.Errorf("Could not build GET request to %s: %w", url, err)
 	}
 
 	res, err := i.client.Do(req)
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("While performing GET request to %s", url))
+		return nil, fmt.Errorf("While performing GET request to %s: %w", url, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		return nil, errors.Errorf("Got HTTP %d for %s", res.StatusCode, url)
+		return nil, fmt.Errorf("Got HTTP %d for %s", res.StatusCode, url)
 	}
 
-	bs, err := ioutil.ReadAll(res.Body)
+	bs, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("While reading GET request to %s", url))
+		return nil, fmt.Errorf("While reading GET request to %s: %w", url, err)
 	}
 
 	return bs, nil
@@ -89,7 +88,7 @@ func (i *Installer) brothGetResponse(r interface{}, format string, args ...inter
 
 	err = json.Unmarshal(bs, r)
 	if err != nil {
-		return errors.WithMessage(err, "unmarshalling broth response")
+		return fmt.Errorf("unmarshalling broth response: %w", err)
 	}
 
 	return nil

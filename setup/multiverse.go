@@ -2,14 +2,13 @@ package setup
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/dchest/safefile"
-	"github.com/pkg/errors"
 )
 
 type ValidateHandler func(dir string) error
@@ -82,11 +81,11 @@ type MultiverseParams struct {
 
 func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 	if params.AppName == "" {
-		return nil, errors.Errorf("MultiverseParams.AppName cannot be empty")
+		return nil, fmt.Errorf("MultiverseParams.AppName cannot be empty")
 	}
 
 	if params.BaseDir == "" {
-		return nil, errors.Errorf("MultiverseParams.BaseDir cannot be empty")
+		return nil, fmt.Errorf("MultiverseParams.BaseDir cannot be empty")
 	}
 
 	mv := &multiverse{
@@ -97,7 +96,7 @@ func NewMultiverse(params *MultiverseParams) (Multiverse, error) {
 
 	err := mv.readState()
 	if err != nil {
-		if os.IsNotExist(errors.Cause(err)) {
+		if errors.Is(err, os.ErrNotExist) {
 			log.Printf("No multiverse information yet")
 		} else {
 			log.Printf("Ignoring: %v", err)
@@ -151,7 +150,7 @@ func (mv *multiverse) QueueReady(build *BuildFolder) error {
 	}
 
 	if !filepath.IsAbs(build.Path) {
-		return errors.Errorf("Internal error: Ready BuildFolder must have absolute path, but got (%s)", build.Path)
+		return fmt.Errorf("Internal error: Ready BuildFolder must have absolute path, but got (%s)", build.Path)
 	}
 
 	readyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(build.Version))
@@ -159,18 +158,18 @@ func (mv *multiverse) QueueReady(build *BuildFolder) error {
 
 	err := os.RemoveAll(readyPath)
 	if err != nil {
-		return errors.WithMessage(err, "making sure ready version's folder does not exist")
+		return fmt.Errorf("making sure ready version's folder does not exist: %w", err)
 	}
 
 	err = os.Rename(build.Path, readyPath)
 	if err != nil {
-		return errors.WithMessage(err, "moving ready version to its proper place")
+		return fmt.Errorf("moving ready version to its proper place: %w", err)
 	}
 
 	s.Ready = build.Version
 	err = mv.saveState()
 	if err != nil {
-		return errors.WithMessage(err, "updating multiverse state with new ready")
+		return fmt.Errorf("updating multiverse state with new ready: %w", err)
 	}
 
 	return nil
@@ -190,7 +189,7 @@ func (mv *multiverse) ReadyPendingIs(version string) bool {
 func (mv *multiverse) MakeReadyCurrent() error {
 	s := mv.state
 	if s.Ready == "" {
-		return errors.Errorf("No ready to make current")
+		return fmt.Errorf("No ready to make current")
 	}
 
 	log.Printf("Attempting to make (%s) the current version over (%s)", s.Ready, s.Current)
@@ -269,7 +268,7 @@ func (mv *multiverse) validateDir(dir string) error {
 	log.Printf("Validating (%s) ...", dir)
 	err := mv.params.OnValidate(dir)
 	if err != nil {
-		return errors.WithMessage(err, "while validating new version")
+		return fmt.Errorf("while validating new version: %w", err)
 	}
 	return nil
 }
@@ -297,15 +296,15 @@ func (mv *multiverse) statePath() string {
 }
 
 func (mv *multiverse) readState() error {
-	bs, err := ioutil.ReadFile(mv.statePath())
+	bs, err := os.ReadFile(mv.statePath())
 	if err != nil {
-		return errors.WithMessage(err, "reading multiverse state file")
+		return fmt.Errorf("reading multiverse state file: %w", err)
 	}
 
 	state := &multiverseState{}
 	err = json.Unmarshal(bs, state)
 	if err != nil {
-		return errors.WithMessage(err, "unmarshalling multiverse state file")
+		return fmt.Errorf("unmarshalling multiverse state file: %w", err)
 	}
 
 	mv.state = state
@@ -316,28 +315,28 @@ func (mv *multiverse) readState() error {
 func (mv *multiverse) saveState() error {
 	bs, err := json.Marshal(mv.state)
 	if err != nil {
-		return errors.WithMessage(err, "marshalling multiverse state file")
+		return fmt.Errorf("marshalling multiverse state file: %w", err)
 	}
 
 	err = os.MkdirAll(filepath.Dir(mv.statePath()), 0755)
 	if err != nil {
-		return errors.WithMessage(err, "creating folder for multiverse state file")
+		return fmt.Errorf("creating folder for multiverse state file: %w", err)
 	}
 
 	f, err := safefile.Create(mv.statePath(), 0644)
 	if err != nil {
-		return errors.WithMessage(err, "creating multiverse state file")
+		return fmt.Errorf("creating multiverse state file: %w", err)
 	}
 	defer f.Close()
 
 	_, err = f.Write(bs)
 	if err != nil {
-		return errors.WithMessage(err, "writing multiverse state file")
+		return fmt.Errorf("writing multiverse state file: %w", err)
 	}
 
 	err = f.Commit()
 	if err != nil {
-		return errors.WithMessage(err, "committing multiverse state file")
+		return fmt.Errorf("committing multiverse state file: %w", err)
 	}
 
 	return nil
