@@ -131,12 +131,12 @@
     "action.name.play": "Jogar",
     "collection.empty": "Não há jogos nesta coleção",
     "collections.empty": "Atualmente, não tens coleções",
-    "collections.empty_sub": "Navegue por alguns jogos e adicione-os a uma nova coleção!",
+    "collections.empty_sub": "Explora alguns jogos e adiciona-os á tua coleção!",
     "docs.learn_more": "Saber mais",
     "docs.how_to_help": "Como posso ajudar?",
     "download.reason.revert": "para mudar para outra versão",
     "download.ongoing.revert": "Mudando {{title}} para outra versão…",
-    "download.ongoing.heal": "Reparando {{title}…",
+    "download.ongoing.heal": "Reparando {{title}}…",
     "download.outcome.installed": "instalado",
     "download.outcome.updated": "actualizado para a versão mais recente",
     "download.outcome.reinstalled": "reinstalado",
@@ -263,8 +263,8 @@
     "sandbox.setup.title": "Configuração do modo sandbox",
     "sandbox.setup.proceed": "Continuar",
     "sandbox.setup.windows.message": "Para iniciar jogos no modo sandbox do itch.io, é necessária uma configuração única como Administrador.",
-    "collection.item_count": "{{itemCount}}Itens",
-    "collection.summary": "Uma collecão de {{itemCount}} itens",
+    "collection.item_count": "{{itemCount}} itens",
+    "collection.summary": "Uma coleção de {{itemCount}} itens",
     "download.reason.install": "para instalar",
     "download.started": "Iniciado",
     "duration.hour": "uma hora",
@@ -591,5 +591,6 @@
     "plan_install.select_install_location": "Na localização",
     "plan_install.disk_space_required": "Espaço necessário em disco",
     "plan_install.disk_space_available": "Espaço disponível em disco",
-    "empty_state.nothing_to_see_here": "Nada para ver aqui"
+    "empty_state.nothing_to_see_here": "Nada para ver aqui",
+    "filter_by.games.classification.physical_game": "Jogos Físicos"
 }

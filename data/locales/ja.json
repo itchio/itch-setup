@@ -67,7 +67,7 @@
     "preferences.install_location.empty": "なし",
     "preferences.install_location.free_space": "空き容量",
     "preferences.install_location.is_default": "新しく入手した作品は変更がない限りこちらにインストールされます。",
-    "preferences.install_location.item_count": "作品数：#",
+    "preferences.install_location.item_count": "作品数",
     "preferences.install_location.make_default": "ここをインストール先のデフォルトにする",
     "preferences.install_location.path": "インストール先",
     "preferences.install_location.used_space": "使用している容量",

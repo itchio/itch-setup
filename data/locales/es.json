@@ -105,7 +105,7 @@
     "prompt.uninstall.message": "¿Está seguro que desea desinstalar {{title}}?",
     "prompt.uninstall.reinstall": "Reinstalar",
     "prompt.uninstall.uninstall": "Desinstalar ahora",
-    "prompt.url_install.credit": "Una {{classification}} de {{username}}",
+    "prompt.url_install.credit": "Una {{classification}} por {{username}}",
     "prompt.url_install.message": "¿Quieres instalar {{title}}?",
     "prompt.url_install.title": "Necesita instalación",
     "sidebar.broken": "Fuera de servicio",
@@ -255,8 +255,8 @@
     "usage_stats.never_opened": "Nunca visto",
     "usage_stats.never_played": "Nunca jugado",
     "usage_stats.never_used": "Nunca usado",
-    "action.name.play": "Juega ahora",
-    "action.name.manual": "Manual de usuario",
+    "action.name.play": "Jugar ahora",
+    "action.name.manual": "Manual del usuario",
     "action.name.editor": "Editor",
     "prompt.launch.message": "¿Cual deseas abrir?",
     "grid.hidden_count": "+ {{count}} artículos ocultos por filtros",
@@ -367,7 +367,7 @@
     "prereq.status.installing": "Instalando... (esto podría tardar unos minutos)",
     "prereq.status.done": "¡Hecho!",
     "notification.download_healed": "¡{{title}} verificado y reparado!",
-    "collection.summary": "Una colección de  {{itemCount}} objetos",
+    "collection.summary": "Una colección de {{itemCount}} elementos",
     "download.outcome.updated": "actualizado a la última versión",
     "download.outcome.reinstalled": "reinstalado",
     "download.outcome.healed": "verificado y arreglado",
@@ -591,5 +591,6 @@
     "empty_state.nothing_to_see_here": "Nada que ver aquí",
     "prompt.sla.title": "Acuerdo de licencia de software",
     "prompt.sla.accept": "Aceptar condiciones",
-    "prompt.sla.message": "Para usar este programa debe aceptar las condiciones del acuerdo de licencia de software:"
+    "prompt.sla.message": "Para usar este programa debe aceptar las condiciones del acuerdo de licencia de software:",
+    "filter_by.games.classification.physical_game": "Juegos Físicos"
 }
