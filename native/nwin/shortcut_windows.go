@@ -5,9 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 
-	"github.com/itchio/husk/husk"
+	"github.com/jxeng/shortcut"
 )
 
 type ShortcutSettings struct {
@@ -23,7 +22,7 @@ type ShortcutSettings struct {
 // CreateShortcut creates a windows shortcut with the given settings
 func CreateShortcut(settings ShortcutSettings) error {
 	if !filepath.IsAbs(settings.ShortcutFilePath) {
-		return fmt.Errorf("Shortcut file path is not absolute: %q", settings.ShortcutFilePath)
+		return fmt.Errorf("shortcut file path is not absolute: %q", settings.ShortcutFilePath)
 	}
 
 	if settings.OnlyIfExists {
@@ -40,43 +39,14 @@ func CreateShortcut(settings ShortcutSettings) error {
 		return err
 	}
 
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	sl, err := husk.NewShellLink()
-	if err != nil {
-		return err
+	sc := shortcut.Shortcut{
+		ShortcutPath:     settings.ShortcutFilePath,
+		Target:           settings.TargetPath,
+		Arguments:        settings.Arguments,
+		Description:      settings.Description,
+		IconLocation:     settings.IconLocation,
+		WorkingDirectory: settings.WorkingDirectory,
 	}
 
-	err = sl.SetPath(settings.TargetPath)
-	if err != nil {
-		return err
-	}
-
-	err = sl.SetArguments(settings.Arguments)
-	if err != nil {
-		return err
-	}
-
-	err = sl.SetDescription(settings.Description)
-	if err != nil {
-		return err
-	}
-
-	err = sl.SetWorkingDirectory(settings.WorkingDirectory)
-	if err != nil {
-		return err
-	}
-
-	err = sl.SetIconLocation(settings.IconLocation, 0)
-	if err != nil {
-		return err
-	}
-
-	err = sl.Save(settings.ShortcutFilePath)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return sc.Create()
 }
