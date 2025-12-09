@@ -48,5 +48,5 @@ func CreateShortcut(settings ShortcutSettings) error {
 		WorkingDirectory: settings.WorkingDirectory,
 	}
 
-	return sc.Create()
+	return shortcut.Create(sc)
 }
