@@ -181,15 +181,15 @@ async function main(args) {
   }
 
   let version = "head";
-  if (process.env.CI_COMMIT_TAG) {
-    version = process.env.CI_COMMIT_TAG;
+  if (process.env.GITHUB_REF_TYPE === "tag") {
+    version = process.env.GITHUB_REF_NAME;
   } else if (
-    process.env.CI_COMMIT_REF_NAME &&
-    process.env.CI_COMMIT_REF_NAME !== "master"
+    process.env.GITHUB_REF_NAME &&
+    process.env.GITHUB_REF_NAME !== "master"
   ) {
-    version = process.env.CI_COMMIT_REF_NAME
+    version = process.env.GITHUB_REF_NAME;
   }
-  let buildRef = process.env.CI_COMMIT_SHA || "no-commit";
+  let buildRef = process.env.GITHUB_SHA || "no-commit";
 
   let builtAt = $$("date +%s");
   let ldFlags = `-X main.version=${version} -X main.builtAt=${builtAt} -X main.commit=${buildRef} -X main.target=${opts.target} -w -s`;

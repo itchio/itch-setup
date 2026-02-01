@@ -1,6 +1,26 @@
 name: build
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_linux_amd64:
+        description: 'Deploy Linux amd64'
+        type: boolean
+        default: true
+      deploy_windows_amd64:
+        description: 'Deploy Windows amd64'
+        type: boolean
+        default: true
+      deploy_darwin_amd64:
+        description: 'Deploy macOS Intel'
+        type: boolean
+        default: true
+      deploy_darwin_arm64:
+        description: 'Deploy macOS ARM64'
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -39,11 +59,217 @@ jobs:
     - name: Setup
       run: npm ci --no-audit
 
-    - name: Build
+    - name: Build itch-setup
       run: node release/build.js --target itch-setup --arch ${{ matrix.arch }} --skip-signing
+
+    - name: Build kitch-setup
+      run: node release/build.js --target kitch-setup --arch ${{ matrix.arch }} --skip-signing
 
     - name: Store
       uses: actions/upload-artifact@v4
       with:
         name: binaries-${{ matrix.name }}
-        path: artifacts/itch-setup/
+        path: artifacts/
+
+  sign-windows:
+    name: Sign Windows
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_windows_amd64
+    needs: build
+    runs-on: windows-latest
+    environment: signing-windows
+    permissions:
+      id-token: write
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-windows
+        path: artifacts/
+
+    - name: Sign with Azure Trusted Signing
+      uses: azure/trusted-signing-action@v0
+      with:
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        endpoint: https://eus.codesigning.azure.net/
+        trusted-signing-account-name: itchio
+        certificate-profile-name: itchio
+        files-folder: artifacts/
+        files-folder-filter: exe
+        files-folder-recurse: true
+
+    - name: Upload signed artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-windows-signed
+        path: artifacts/
+
+  sign-darwin:
+    name: Sign macOS (${{ matrix.name }})
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-intel
+            runner: macos-15-intel
+            arch: amd64
+            deploy_input: deploy_darwin_amd64
+          - name: macos-arm64
+            runner: macos-latest
+            arch: arm64
+            deploy_input: deploy_darwin_arm64
+    runs-on: ${{ matrix.runner }}
+    environment: signing-macos
+    steps:
+    - name: Check if deployment enabled
+      id: check
+      run: |
+        if [[ "${{ matrix.deploy_input }}" == "deploy_darwin_amd64" ]]; then
+          echo "enabled=${{ inputs.deploy_darwin_amd64 }}" >> $GITHUB_OUTPUT
+        else
+          echo "enabled=${{ inputs.deploy_darwin_arm64 }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Download artifacts
+      if: steps.check.outputs.enabled == 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-${{ matrix.name }}
+        path: artifacts/
+
+    - name: Import signing certificate
+      if: steps.check.outputs.enabled == 'true'
+      env:
+        APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      run: |
+        # Create temporary keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+        KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+        # Import certificate
+        CERT_PATH=$RUNNER_TEMP/certificate.p12
+        echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+        security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        rm "$CERT_PATH"
+
+        # Set keychain search list
+        security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+        # Allow codesign to access the keychain
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+    - name: Sign binaries
+      if: steps.check.outputs.enabled == 'true'
+      run: |
+        SIGN_KEY="Developer ID Application: itch corp. (AK2D34UDP2)"
+
+        for target in itch-setup kitch-setup; do
+          BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
+          if [ -f "$BINARY" ]; then
+            echo "Signing $BINARY..."
+            codesign --deep --force --verbose --sign "$SIGN_KEY" "$BINARY"
+            codesign --verify -vvvv "$BINARY"
+          fi
+        done
+
+    - name: Notarize binaries
+      if: steps.check.outputs.enabled == 'true'
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        for target in itch-setup kitch-setup; do
+          BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
+          if [ -f "$BINARY" ]; then
+            echo "Notarizing $BINARY..."
+
+            # Create a zip for notarization
+            ZIP_PATH="${BINARY}.zip"
+            ditto -c -k --keepParent "$BINARY" "$ZIP_PATH"
+
+            # Submit for notarization
+            xcrun notarytool submit "$ZIP_PATH" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+
+            # Clean up zip
+            rm "$ZIP_PATH"
+          fi
+        done
+
+    - name: Upload signed artifacts
+      if: steps.check.outputs.enabled == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.name }}-signed
+        path: artifacts/
+
+  deploy:
+    name: Deploy
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      needs.build.result == 'success' &&
+      (needs.sign-windows.result == 'success' || needs.sign-windows.result == 'skipped') &&
+      (needs.sign-darwin.result == 'success' || needs.sign-darwin.result == 'skipped')
+    needs: [build, sign-windows, sign-darwin]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Linux artifacts (no signing needed)
+    - name: Download Linux artifacts
+      if: inputs.deploy_linux_amd64
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-linux
+        path: artifacts/
+
+    # Signed Windows artifacts
+    - name: Download signed Windows artifacts
+      if: inputs.deploy_windows_amd64
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-windows-signed
+        path: artifacts/
+
+    # Signed macOS artifacts
+    - name: Download signed macOS Intel artifacts
+      if: inputs.deploy_darwin_amd64
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-macos-intel-signed
+        path: artifacts/
+
+    - name: Download signed macOS ARM64 artifacts
+      if: inputs.deploy_darwin_arm64
+      uses: actions/download-artifact@v4
+      with:
+        name: binaries-macos-arm64-signed
+        path: artifacts/
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: npm ci --no-audit
+
+    - name: Deploy to itch.io
+      env:
+        BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      run: node release/deploy.js
