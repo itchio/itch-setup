@@ -87,13 +87,13 @@ jobs:
         path: artifacts/
 
     - name: Sign with Azure Trusted Signing
-      uses: azure/trusted-signing-action@v0
+      uses: azure/artifact-signing-action@v1
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
         azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-        endpoint: https://eus.codesigning.azure.net/
-        trusted-signing-account-name: itchio
+        endpoint: https://wus2.codesigning.azure.net
+        signing-account-name: itchio
         certificate-profile-name: itchio
         files-folder: artifacts/
         files-folder-filter: exe
