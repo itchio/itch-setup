@@ -66,18 +66,13 @@ func detectAppName() {
 		execPath, err := os.Executable()
 		must(err)
 
-		ext := ""
-		if runtime.GOOS == "windows" {
-			ext = ".exe"
-		}
-		kitchBinary := fmt.Sprintf("kitch-setup%s", ext)
-
-		if filepath.Base(execPath) == kitchBinary {
+		baseName := strings.ToLower(filepath.Base(execPath))
+		if strings.Contains(baseName, "kitch") {
 			cli.AppName = "kitch"
 		} else {
 			cli.AppName = "itch"
 		}
-		log.Printf("App name detected: %s", cli.AppName)
+		log.Printf("App name detected from executable path: %s", cli.AppName)
 	}
 
 	app.Name = fmt.Sprintf("%s-setup", cli.AppName)
