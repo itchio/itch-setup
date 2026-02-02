@@ -63,15 +63,14 @@ async function main(args) {
    * @type {{
    *   os: "linux" | "windows" | "darwin",
    *   arch: "i686" | "x86_64" | "arm64",
-   *   target: "itch-setup" | "kitch-setup" | "missing",
    *   userSpecifiedOS?: boolean,
    *   userSpecifiedArch?: boolean,
+   *   skipSigning?: boolean,
    * }}
    */
   let opts = {
     os: detectOS(),
     arch: DEFAULT_ARCH,
-    target: "missing",
     skipSigning: false,
   };
 
@@ -91,7 +90,7 @@ async function main(args) {
         continue;
       }
 
-      if (k === "os" || k === "arch" || k === "target") {
+      if (k === "os" || k === "arch") {
         i++;
         let v = args[i];
 
@@ -109,21 +108,11 @@ async function main(args) {
           } else {
             throw new Error(`Unsupported arch ${chalk.yellow(v)}`);
           }
-        } else if (k === "target") {
-          if (v === "itch-setup" || v === "kitch-setup") {
-            opts.target = v;
-          } else {
-            throw new Error(`Unsupported target ${chalk.yellow(v)}`);
-          }
         }
       } else {
         throw new Error(`Unknown option ${chalk.yellow(arg)}`);
       }
     }
-  }
-
-  if (opts.target === "missing") {
-    throw new Error(`Must specify ${chalk.yellow("--target")}`);
   }
 
   if (opts.userSpecifiedOS) {
@@ -192,14 +181,14 @@ async function main(args) {
   let buildRef = process.env.GITHUB_SHA || "no-commit";
 
   let builtAt = $$("date +%s");
-  let ldFlags = `-X main.version=${version} -X main.builtAt=${builtAt} -X main.commit=${buildRef} -X main.target=${opts.target} -w -s`;
+  let ldFlags = `-X main.version=${version} -X main.builtAt=${builtAt} -X main.commit=${buildRef} -w -s`;
   if (opts.os === "windows") {
     ldFlags += ` -H windowsgui -extldflags=-static`;
   }
 
   setenv(`CI_LDFLAGS`, ldFlags);
 
-  let target = opts.target;
+  let target = "itch-setup";
   if (opts.os === "windows") {
     target += ".exe";
   }
@@ -258,7 +247,7 @@ async function main(args) {
     $(`codesign --verify -vvvv "${target}"`);
   }
 
-  let binaries = `artifacts/${opts.target}/${opts.os}-${goArch}`;
+  let binaries = `artifacts/itch-setup/${opts.os}-${goArch}`;
   $(`mkdir -p ${binaries}`);
   $(`cp -rf ${target} ${binaries}/`);
 }

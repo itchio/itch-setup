@@ -2,7 +2,6 @@
 # Matches the build process from release/build.js
 
 # Configuration
-TARGET ?= itch-setup
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
@@ -13,13 +12,13 @@ BUILT_AT ?= $(shell date +%s)
 
 # Output binary name
 ifeq ($(GOOS),windows)
-	BINARY = $(TARGET).exe
+	BINARY = itch-setup.exe
 else
-	BINARY = $(TARGET)
+	BINARY = itch-setup
 endif
 
 # Base ldflags
-LDFLAGS = -X main.version=$(VERSION) -X main.builtAt=$(BUILT_AT) -X main.commit=$(COMMIT) -X main.target=$(TARGET) -w -s
+LDFLAGS = -X main.version=$(VERSION) -X main.builtAt=$(BUILT_AT) -X main.commit=$(COMMIT) -w -s
 
 # Windows-specific ldflags
 ifeq ($(GOOS),windows)
@@ -53,4 +52,4 @@ endif
 	@echo "Built $(BINARY)"
 
 clean:
-	rm -f itch-setup kitch-setup itch-setup.exe kitch-setup.exe itch-setup.syso
+	rm -f itch-setup itch-setup.exe itch-setup.syso

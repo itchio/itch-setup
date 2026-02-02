@@ -59,11 +59,8 @@ jobs:
     - name: Setup
       run: npm ci --no-audit
 
-    - name: Build itch-setup
-      run: node release/build.js --target itch-setup --arch ${{ matrix.arch }} --skip-signing
-
-    - name: Build kitch-setup
-      run: node release/build.js --target kitch-setup --arch ${{ matrix.arch }} --skip-signing
+    - name: Build
+      run: node release/build.js --arch ${{ matrix.arch }} --skip-signing
 
     - name: Store
       uses: actions/upload-artifact@v4
@@ -143,13 +140,11 @@ jobs:
     - name: Restore execute permissions
       if: steps.check.outputs.enabled == 'true'
       run: |
-        for target in itch-setup kitch-setup; do
-          BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
-          if [ -f "$BINARY" ]; then
-            echo "Restoring +x on $BINARY"
-            chmod +x "$BINARY"
-          fi
-        done
+        BINARY="artifacts/itch-setup/darwin-${{ matrix.arch }}/itch-setup"
+        if [ -f "$BINARY" ]; then
+          echo "Restoring +x on $BINARY"
+          chmod +x "$BINARY"
+        fi
 
     - name: Import signing certificate
       if: steps.check.outputs.enabled == 'true'
@@ -177,66 +172,61 @@ jobs:
         # Allow codesign to access the keychain
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-    - name: Sign binaries
+    - name: Sign binary
       if: steps.check.outputs.enabled == 'true'
       run: |
         SIGN_KEY="Developer ID Application: itch corp. (AK2D34UDP2)"
+        BINARY="artifacts/itch-setup/darwin-${{ matrix.arch }}/itch-setup"
+        if [ -f "$BINARY" ]; then
+          echo "Signing $BINARY..."
+          codesign --deep --force --verbose --options runtime --sign "$SIGN_KEY" "$BINARY"
+          codesign --verify -vvvv "$BINARY"
+        fi
 
-        for target in itch-setup kitch-setup; do
-          BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
-          if [ -f "$BINARY" ]; then
-            echo "Signing $BINARY..."
-            codesign --deep --force --verbose --options runtime --sign "$SIGN_KEY" "$BINARY"
-            codesign --verify -vvvv "$BINARY"
-          fi
-        done
-
-    - name: Notarize binaries
+    - name: Notarize binary
       if: steps.check.outputs.enabled == 'true'
       env:
         APPLE_ID: ${{ secrets.APPLE_ID }}
         APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        for target in itch-setup kitch-setup; do
-          BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
-          if [ -f "$BINARY" ]; then
-            echo "Notarizing $BINARY..."
+        BINARY="artifacts/itch-setup/darwin-${{ matrix.arch }}/itch-setup"
+        if [ -f "$BINARY" ]; then
+          echo "Notarizing $BINARY..."
 
-            # Create a zip for notarization
-            ZIP_PATH="${BINARY}.zip"
-            ditto -c -k --keepParent "$BINARY" "$ZIP_PATH"
+          # Create a zip for notarization
+          ZIP_PATH="${BINARY}.zip"
+          ditto -c -k --keepParent "$BINARY" "$ZIP_PATH"
 
-            # Submit for notarization and capture output
-            NOTARY_OUTPUT=$(xcrun notarytool submit "$ZIP_PATH" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait 2>&1)
+          # Submit for notarization and capture output
+          NOTARY_OUTPUT=$(xcrun notarytool submit "$ZIP_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait 2>&1)
 
-            echo "$NOTARY_OUTPUT"
+          echo "$NOTARY_OUTPUT"
 
-            # Check if notarization was successful
-            if echo "$NOTARY_OUTPUT" | grep -q "status: Accepted"; then
-              echo "Notarization successful for $target"
-            else
-              echo "Notarization failed for $target"
-              # Get the submission ID and fetch the log
-              SUBMISSION_ID=$(echo "$NOTARY_OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
-              if [ -n "$SUBMISSION_ID" ]; then
-                echo "Fetching notarization log..."
-                xcrun notarytool log "$SUBMISSION_ID" \
-                  --apple-id "$APPLE_ID" \
-                  --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-                  --team-id "$APPLE_TEAM_ID" || true
-              fi
-              exit 1
+          # Check if notarization was successful
+          if echo "$NOTARY_OUTPUT" | grep -q "status: Accepted"; then
+            echo "Notarization successful for itch-setup"
+          else
+            echo "Notarization failed for itch-setup"
+            # Get the submission ID and fetch the log
+            SUBMISSION_ID=$(echo "$NOTARY_OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
+            if [ -n "$SUBMISSION_ID" ]; then
+              echo "Fetching notarization log..."
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" || true
             fi
-
-            # Clean up zip
-            rm "$ZIP_PATH"
+            exit 1
           fi
-        done
+
+          # Clean up zip
+          rm "$ZIP_PATH"
+        fi
 
     - name: Upload signed artifacts
       if: steps.check.outputs.enabled == 'true'
