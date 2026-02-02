@@ -65,13 +65,11 @@ async function main(args) {
    *   arch: "i686" | "x86_64" | "arm64",
    *   userSpecifiedOS?: boolean,
    *   userSpecifiedArch?: boolean,
-   *   skipSigning?: boolean,
    * }}
    */
   let opts = {
     os: detectOS(),
     arch: DEFAULT_ARCH,
-    skipSigning: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -82,11 +80,6 @@ async function main(args) {
       let k = matches[1];
       if (k == "verbose") {
         setVerbose(true);
-        continue;
-      }
-
-      if (k == "skip-signing") {
-        opts.skipSigning = true;
         continue;
       }
 
@@ -222,29 +215,8 @@ async function main(args) {
   $(`go build -a -ldflags "${ldFlags}" ${goTags} -o ${target}`);
   $(`file ${target}`);
 
-  if (opts.os === "windows" && !opts.skipSigning) {
+  if (opts.os === "windows") {
     verifyCoIncrementMTAUsage(target);
-
-    console.log(`Signing Windows binary...`);
-    let signArgs = [
-      `sign`, // verb
-      `//v`, // verbose
-      `//s MY`, // store
-      `//n "itch corp"`, // name
-      `//fd sha256`, // file digest algo (default is SHA-1)
-      `//tr http://timestamp.comodoca.com/?td=sha256`, // URL of RFC 3161 timestamp server
-      `//td sha256`, // timestamp digest algo
-      '//a', // choose best cert
-      target,
-    ];
-    $(`tools/signtool.exe ${signArgs.join(" ")}`);
-  }
-
-  if (opts.os === "darwin" && !opts.skipSigning) {
-    console.log(`Signing macOS binary...`);
-    let signKey = "Developer ID Application: itch corp. (AK2D34UDP2)";
-    $(`codesign --deep --force --verbose --sign "${signKey}" "${target}"`);
-    $(`codesign --verify -vvvv "${target}"`);
   }
 
   let binaries = `artifacts/itch-setup/${opts.os}-${goArch}`;

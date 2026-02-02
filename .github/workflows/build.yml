@@ -60,7 +60,7 @@ jobs:
       run: npm ci --no-audit
 
     - name: Build
-      run: node release/build.js --arch ${{ matrix.arch }} --skip-signing
+      run: node release/build.js --arch ${{ matrix.arch }}
 
     - name: Store
       uses: actions/upload-artifact@v4
