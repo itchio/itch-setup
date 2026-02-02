@@ -140,6 +140,17 @@ jobs:
         name: binaries-${{ matrix.name }}
         path: artifacts/
 
+    - name: Restore execute permissions
+      if: steps.check.outputs.enabled == 'true'
+      run: |
+        for target in itch-setup kitch-setup; do
+          BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
+          if [ -f "$BINARY" ]; then
+            echo "Restoring +x on $BINARY"
+            chmod +x "$BINARY"
+          fi
+        done
+
     - name: Import signing certificate
       if: steps.check.outputs.enabled == 'true'
       env:
@@ -175,7 +186,7 @@ jobs:
           BINARY="artifacts/${target}/darwin-${{ matrix.arch }}/${target}"
           if [ -f "$BINARY" ]; then
             echo "Signing $BINARY..."
-            codesign --deep --force --verbose --sign "$SIGN_KEY" "$BINARY"
+            codesign --deep --force --verbose --options runtime --sign "$SIGN_KEY" "$BINARY"
             codesign --verify -vvvv "$BINARY"
           fi
         done
@@ -196,12 +207,31 @@ jobs:
             ZIP_PATH="${BINARY}.zip"
             ditto -c -k --keepParent "$BINARY" "$ZIP_PATH"
 
-            # Submit for notarization
-            xcrun notarytool submit "$ZIP_PATH" \
+            # Submit for notarization and capture output
+            NOTARY_OUTPUT=$(xcrun notarytool submit "$ZIP_PATH" \
               --apple-id "$APPLE_ID" \
               --password "$APPLE_APP_SPECIFIC_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
-              --wait
+              --wait 2>&1)
+
+            echo "$NOTARY_OUTPUT"
+
+            # Check if notarization was successful
+            if echo "$NOTARY_OUTPUT" | grep -q "status: Accepted"; then
+              echo "Notarization successful for $target"
+            else
+              echo "Notarization failed for $target"
+              # Get the submission ID and fetch the log
+              SUBMISSION_ID=$(echo "$NOTARY_OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
+              if [ -n "$SUBMISSION_ID" ]; then
+                echo "Fetching notarization log..."
+                xcrun notarytool log "$SUBMISSION_ID" \
+                  --apple-id "$APPLE_ID" \
+                  --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+                  --team-id "$APPLE_TEAM_ID" || true
+              fi
+              exit 1
+            fi
 
             # Clean up zip
             rm "$ZIP_PATH"
