@@ -1,6 +1,5 @@
 *.syso
 /itch-setup
-/kitch-setup
 *.exe
 *.swp
 .DS_Store

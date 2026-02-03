@@ -42,22 +42,18 @@ async function main(_args) {
 
   $(`${toolsDir}/butler -V`);
 
-  // Deploy the single itch-setup binary to both itch-setup and kitch-setup channels
-  // The binary auto-detects its target based on executable name at runtime
   await cd(`artifacts/itch-setup`, async () => {
     let variants = readdirSync(".");
     for (let variant of variants) {
       let channelName = `${variant}${channelSuffix}`;
-      for (let target of ["itch-setup", "kitch-setup"]) {
-        let itchTarget = `itchio/${target}:${channelName}`;
-        let butlerArgs = [
-          "push",
-          `--userversion "${userVersion}"`,
-          `"${variant}"`,
-          `"${itchTarget}"`,
-        ];
-        $(`${toolsDir}/butler ${butlerArgs.join(" ")}`);
-      }
+      let itchTarget = `itchio/itch-setup:${channelName}`;
+      let butlerArgs = [
+        "push",
+        `--userversion "${userVersion}"`,
+        `"${variant}"`,
+        `"${itchTarget}"`,
+      ];
+      $(`${toolsDir}/butler ${butlerArgs.join(" ")}`);
     }
   });
 }
