@@ -101,7 +101,32 @@ func (i *Installer) WarmUp() {
 	}()
 }
 
+func (i *Installer) resolveChannel() error {
+	exists, err := i.checkChannelExists()
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	// Channel doesn't exist - check if we can fall back to amd64
+	rt := ox.CurrentRuntime()
+	if (rt.OS() == "darwin" || rt.OS() == "windows") && rt.Arch() == "arm64" {
+		fallbackChannel := fmt.Sprintf("%s-amd64", rt.OS())
+		log.Printf("Channel %s not found, falling back to %s", i.channelName, fallbackChannel)
+		i.channelName = fallbackChannel
+		return nil
+	}
+
+	return fmt.Errorf("channel %s not found", i.channelName)
+}
+
 func (i *Installer) warmUp() error {
+	if err := i.resolveChannel(); err != nil {
+		return fmt.Errorf("while resolving channel: %w", err)
+	}
+
 	version, err := i.getVersion()
 	if err != nil {
 		return fmt.Errorf("while getting latest version: %w", err)

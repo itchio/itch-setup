@@ -93,3 +93,25 @@ func (i *Installer) brothGetResponse(r interface{}, format string, args ...inter
 
 	return nil
 }
+
+// checkChannelExists returns true if the channel exists, false if 404, or error for other failures
+func (i *Installer) checkChannelExists() (bool, error) {
+	url := fmt.Sprintf("%s/%s/%s/LATEST", brothBaseURL, i.settings.AppName, i.channelName)
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return false, err
+	}
+	res, err := i.client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	res.Body.Close()
+
+	if res.StatusCode == 404 {
+		return false, nil
+	}
+	if res.StatusCode != 200 {
+		return false, fmt.Errorf("unexpected status %d for %s", res.StatusCode, url)
+	}
+	return true, nil
+}
