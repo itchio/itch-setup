@@ -280,6 +280,14 @@ func (nc *nativeCore) Relaunch() error {
 	defer cancel()
 	setup.WaitForProcessToExit(ctx, pid)
 
+	// Update launcher copy from broth-managed version
+	launcherPath := filepath.Join(nc.baseDir, "itch-setup")
+	_, err := CopySelf(launcherPath)
+	if err != nil {
+		log.Printf("While updating launcher: %+v", err)
+		log.Printf("Continuing with relaunch anyway...")
+	}
+
 	mv, err := nc.newMultiverse()
 	if err != nil {
 		return err
