@@ -44,6 +44,7 @@ itch-setup is responsible for installing, updating, and launching the itch.io de
 | `--uninstall` | Remove the installation |
 | `--appname <name>` | Specify which app to manage: `itch` or `kitch` |
 | `--silent` | Run installation without showing the GUI |
+| `--no-fallback` | Disable automatic arm64 to amd64 architecture fallback |
 | `--info` | Display installation information and exit |
 
 ### Installation Flow
@@ -95,6 +96,15 @@ When an update is downloaded, it's stored as "ready". On the next relaunch (via 
 https://broth.itch.zone/itch/linux-amd64/LATEST
 https://broth.itch.zone/itch/linux-amd64/<version>/archive/default
 ```
+
+### Architecture Fallback
+
+On macOS and Windows, if you're running on an arm64 system (Apple Silicon or ARM Windows) and no native arm64 build is available on Broth, itch-setup will automatically fall back to the amd64 version. This works because:
+
+- macOS with Apple Silicon can run x86_64 apps via Rosetta 2
+- Windows on ARM can run x64 apps via emulation
+
+This allows itch-setup to install the app even when a native ARM build hasn't been released yet. Use the `--no-fallback` flag to disable this behavior and require a native arm64 build.
 
 ### License
 
