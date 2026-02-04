@@ -12,7 +12,7 @@ require (
 	github.com/itchio/httpkit v0.0.0-20251231162950-9fb57e6ac916
 	github.com/itchio/husk v1.0.0
 	github.com/itchio/lake v0.0.0-20200305150023-cc4284ec2b2a
-	github.com/itchio/ox v0.0.0-20200826161350-12c6ca18d236
+	github.com/itchio/ox v0.0.0-20260204011704-8e7bc5639671
 	github.com/itchio/savior v0.0.0-20260128212141-556ab9757054
 	github.com/itchio/wharf v0.0.0-20260121214545-5e5efc838cdb
 	github.com/lxn/walk v0.0.0-20191128110447-55ccb3a9f5c1
