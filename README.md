@@ -88,6 +88,31 @@ itch-setup uses a "multiverse" system to manage versions, tracked in `state.json
 
 When an update is downloaded, it's stored as "ready". On the next relaunch (via `--relaunch`), the ready version becomes current.
 
+### Uninstall
+
+Run `itch-setup --uninstall` to remove the installation. The uninstaller will:
+
+1. **Kill running processes** - Gracefully close any running instances of the app
+2. **Remove installation files** - Delete all versioned app directories (`app-<version>/`), icons, state files, and shortcuts
+3. **Clean app-managed data** - Remove logs, crash reports, and prerequisites from the user data directory
+
+**What gets preserved:**
+
+User data is intentionally kept to allow easy reinstallation:
+- User profiles and accounts (`users/`)
+- Preferences (`preferences.json`, `config.json`)
+- Game library database (`db/`)
+
+**Platform-specific details:**
+
+| Platform | Removes | User Data Location |
+|----------|---------|-------------------|
+| Windows | `%LOCALAPPDATA%\itch\`, Start Menu & Desktop shortcuts, registry uninstaller entry | `%APPDATA%\itch\` |
+| macOS | `~/Applications/itch.app`, `~/Library/Application Support/itch-setup/` | `~/Library/Application Support/itch/` |
+| Linux | `~/.itch/`, `~/.local/share/applications/io.itch.itch.desktop` | `~/.config/itch/` |
+
+On Windows, the `itch-setup.exe` binary cannot delete itself while running, so it moves itself to a temporary trash directory (`%TEMP%\.itch-setup-trash\`).
+
 ### Broth
 
 [Broth](https://broth.itch.zone) is itch.io's package distribution service. itch-setup fetches packages from Broth at URLs like:
