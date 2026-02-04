@@ -215,12 +215,13 @@ func (nc *nativeCore) Uninstall() error {
 	// it may fail if the dir is not empty, which is fine
 	os.Remove(nc.baseDir)
 
+	// Clean app components from user data directory
+	setup.CleanUserDataDir(nc.userDataPath(), warn)
+
 	log.Printf("%s is uninstalled.", nc.cli.AppName)
 	log.Printf("")
-	log.Printf("You might want to remove `~/.config/%s` as well: ", nc.cli.AppName)
-	log.Printf("it contains your profile data and default install location.")
-	log.Printf("")
-	log.Printf("Have a nice day!")
+	log.Printf("Note: User data preserved in ~/.config/%s", nc.cli.AppName)
+	log.Printf("(contains: users/, preferences.json, config.json, db/)")
 	log.Printf("")
 
 	return err
@@ -292,6 +293,14 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 		AppName: nc.cli.AppName,
 		BaseDir: nc.baseDir,
 	})
+}
+
+func (nc *nativeCore) userDataPath() string {
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	return filepath.Join(configDir, nc.cli.AppName)
 }
 
 //

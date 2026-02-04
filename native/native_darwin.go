@@ -16,7 +16,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -84,8 +86,107 @@ func (nc *nativeCore) Install() error {
 	return nil
 }
 
+func (nc *nativeCore) killRunningApp() {
+	appName := nc.cli.AppName
+
+	// Try graceful quit via AppleScript
+	log.Printf("Attempting graceful quit of %s via AppleScript...", appName)
+	cmd := exec.Command("osascript", "-e",
+		fmt.Sprintf(`tell application "%s" to quit`, appName))
+	cmd.Run()
+
+	time.Sleep(2 * time.Second)
+
+	// Force kill if still running
+	log.Printf("Force killing any remaining %s.app processes...", appName)
+	cmd = exec.Command("pkill", "-f", fmt.Sprintf("%s.app", appName))
+	cmd.Run()
+}
+
 func (nc *nativeCore) Uninstall() error {
-	return fmt.Errorf("uninstall: stub!")
+	warn := func(err error) {
+		log.Printf("warning: %v", err)
+		log.Printf("(continuing anyway)")
+	}
+
+	// Kill any running instances of the app
+	nc.killRunningApp()
+
+	// Remove app bundle from ~/Applications/
+	appBundlePath := filepath.Join(nc.homeApplicationsPath, fmt.Sprintf("%s.app", nc.cli.AppName))
+	_, statErr := os.Lstat(appBundlePath)
+	if statErr == nil {
+		log.Printf("remove (%s)", appBundlePath)
+		err := os.RemoveAll(appBundlePath)
+		if err != nil {
+			warn(err)
+		}
+	}
+
+	// Clean the base directory (~/Library/Application Support/{appname}-setup/)
+	cleanBaseDir := func() error {
+		dir, err := os.Open(nc.roamingSetupPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// good!
+				return nil
+			}
+			return err
+		}
+		defer dir.Close()
+
+		names, err := dir.Readdirnames(-1)
+		if err != nil {
+			return err
+		}
+
+		deleteMap := map[string]bool{
+			// installed version state
+			"state.json": true,
+			// staging directory
+			"staging": true,
+		}
+
+		for _, name := range names {
+			fullPath := filepath.Join(nc.roamingSetupPath, name)
+
+			if deleteMap[name] {
+				log.Printf("delete (%s)", fullPath)
+				err := os.RemoveAll(fullPath)
+				if err != nil {
+					warn(err)
+				}
+			} else if strings.HasPrefix(name, "app-") {
+				log.Printf("delete (%s)/", fullPath)
+				err := os.RemoveAll(fullPath)
+				if err != nil {
+					warn(err)
+				}
+			} else {
+				log.Printf("keep (%s)", fullPath)
+			}
+		}
+		return nil
+	}
+
+	err := cleanBaseDir()
+	if err != nil {
+		warn(err)
+	}
+
+	// Try to remove base directory (fails gracefully if not empty)
+	os.Remove(nc.roamingSetupPath)
+
+	// Clean app components from user data directory
+	setup.CleanUserDataDir(nc.userDataPath(), warn)
+
+	log.Printf("%s is uninstalled.", nc.cli.AppName)
+	log.Printf("")
+	log.Printf("Note: User data preserved in ~/Library/Application Support/%s", nc.cli.AppName)
+	log.Printf("(contains: users/, preferences.json, config.json, db/)")
+	log.Printf("")
+
+	return nil
 }
 
 func (nc *nativeCore) Upgrade() error {
@@ -233,6 +334,11 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 
 		OnValidate: nc.validateBundle,
 	})
+}
+
+func (nc *nativeCore) userDataPath() string {
+	appSupportPath, _ := macox.GetApplicationSupportPath()
+	return filepath.Join(appSupportPath, nc.cli.AppName)
 }
 
 func (nc *nativeCore) Info() {

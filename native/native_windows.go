@@ -333,6 +333,15 @@ func (nc *nativeCore) Uninstall() error {
 		}
 	}
 
+	// Clean app components from user data directory
+	setup.CleanUserDataDir(nc.userDataPath(), warn)
+
+	log.Printf("%s is uninstalled.", nc.cli.AppName)
+	log.Printf("")
+	log.Printf("Note: User data preserved in %%AppData%%\\%s", nc.cli.AppName)
+	log.Printf("(contains: users/, preferences.json, config.json, db/)")
+	log.Printf("")
+
 	return nil
 }
 
@@ -855,6 +864,10 @@ func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
 		AppName: nc.cli.AppName,
 		BaseDir: nc.baseDir,
 	})
+}
+
+func (nc *nativeCore) userDataPath() string {
+	return filepath.Join(nc.folders.RoamingAppData, nc.cli.AppName)
 }
 
 func (nc *nativeCore) visualElementsManifestName() string {

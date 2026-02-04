@@ -72,6 +72,10 @@ func detectAppName() {
 		log.Printf("App name detected from executable path: %s", cli.AppName)
 	}
 
+	if cli.AppName != "itch" && cli.AppName != "kitch" {
+		log.Fatalf("Invalid app name: %s (must be 'itch' or 'kitch')", cli.AppName)
+	}
+
 	app.Name = fmt.Sprintf("%s-setup", cli.AppName)
 }
 
