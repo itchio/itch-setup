@@ -77,8 +77,9 @@ func (nc *nativeCore) Install() error {
 	}
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
-		Localizer: cli.Localizer,
-		AppName:   cli.AppName,
+		Localizer:  cli.Localizer,
+		AppName:    cli.AppName,
+		NoFallback: cli.NoFallback,
 		OnProgress: func(progress float64) {
 			iw.SetProgress(progress)
 		},
@@ -234,8 +235,9 @@ func (nc *nativeCore) Upgrade() error {
 	}
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
-		Localizer: cli.Localizer,
-		AppName:   cli.AppName,
+		Localizer:  cli.Localizer,
+		AppName:    cli.AppName,
+		NoFallback: cli.NoFallback,
 	})
 	res, err := installer.Upgrade(mv)
 	if err != nil {

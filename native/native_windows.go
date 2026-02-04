@@ -100,8 +100,9 @@ func (nc *nativeCore) Upgrade() error {
 	}
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
-		Localizer: cli.Localizer,
-		AppName:   cli.AppName,
+		Localizer:  cli.Localizer,
+		AppName:    cli.AppName,
+		NoFallback: cli.NoFallback,
 	})
 	res, err := installer.Upgrade(mv)
 	if err != nil {
@@ -652,8 +653,9 @@ func (nc *nativeCore) showInstallGUI() error {
 	nwin.SetInstallerImage(cli, imageView)
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
-		Localizer: cli.Localizer,
-		AppName:   cli.AppName,
+		Localizer:  cli.Localizer,
+		AppName:    cli.AppName,
+		NoFallback: cli.NoFallback,
 		OnError: func(err error) {
 			nc.mainWindow.Synchronize(func() {
 				nc.ErrorDialog(fmt.Errorf("Error during warm-up: %w", err))

@@ -2,12 +2,44 @@
 
 NSTextField *label;
 NSProgressIndicator *progressIndicator;
+BOOL isInstalling = NO;
 
 extern void StartItchSetup(void);
+
+@interface AppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation AppDelegate
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
+  return YES;
+}
+
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+  if (!isInstalling) {
+    return NSTerminateNow;
+  }
+
+  NSAlert *alert = [[NSAlert alloc] init];
+  [alert setMessageText:@"Installation in progress"];
+  [alert setInformativeText:@"Quitting now may leave the installation incomplete. Are you sure you want to quit?"];
+  [alert addButtonWithTitle:@"Cancel"];
+  [alert addButtonWithTitle:@"Quit Anyway"];
+  [alert setAlertStyle:NSAlertStyleWarning];
+
+  NSModalResponse response = [alert runModal];
+  if (response == NSAlertSecondButtonReturn) {
+    return NSTerminateNow;
+  }
+  return NSTerminateCancel;
+}
+@end
 
 int StartApp(char *cSetupTitle, char *cAppName, char *imageBytes, int imageLen) {
   [NSAutoreleasePool new];
   [NSApplication sharedApplication];
+
+  AppDelegate *delegate = [[AppDelegate alloc] init];
+  [NSApp setDelegate:delegate];
 
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
@@ -135,6 +167,10 @@ int LaunchBundle(char *cBundlePath) {
   NSLog(@"Success? %@", success ? @"yes" : @"no");
 
   return success ? 1 : 0;
+}
+
+void SetInstalling(int installing) {
+  isInstalling = installing ? YES : NO;
 }
 
 void Quit() {

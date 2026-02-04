@@ -35,6 +35,7 @@ type SourceHandler func(source InstallSource)
 type InstallerSettings struct {
 	AppName         string
 	Localizer       *localize.Localizer
+	NoFallback      bool
 	OnError         ErrorHandler
 	OnProgressLabel ProgressLabelHandler
 	OnProgress      ProgressHandler
@@ -112,7 +113,7 @@ func (i *Installer) resolveChannel() error {
 
 	// Channel doesn't exist - check if we can fall back to amd64
 	rt := ox.CurrentRuntime()
-	if (rt.OS() == "darwin" || rt.OS() == "windows") && rt.Arch() == "arm64" {
+	if !i.settings.NoFallback && (rt.OS() == "darwin" || rt.OS() == "windows") && rt.Arch() == "arm64" {
 		fallbackChannel := fmt.Sprintf("%s-amd64", rt.OS())
 		log.Printf("Channel %s not found, falling back to %s", i.channelName, fallbackChannel)
 		i.channelName = fallbackChannel

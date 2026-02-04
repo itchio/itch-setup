@@ -45,6 +45,7 @@ func init() {
 	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
 
 	app.Flag("silent", "Run installation silently").BoolVar(&cli.Silent)
+	app.Flag("no-fallback", "Disable arm64 to amd64 channel fallback").BoolVar(&cli.NoFallback)
 
 	app.Arg("args", "Arguments to pass down to itch (only supported on Linux & Windows)").StringsVar(&cli.Args)
 }

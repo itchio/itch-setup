@@ -4,6 +4,7 @@ package native
 int StartApp(char *setupTitle, char *appName, char *imageBytes, int imageLen);
 void SetLabel(char *cString);
 void SetProgress(int value);
+void SetInstalling(int installing);
 char *ValidateBundle(char *bundlePath);
 int LaunchBundle(char *bundlePath);
 void Quit();
@@ -96,8 +97,9 @@ func (nc *nativeCore) Upgrade() error {
 	}
 
 	installer := setup.NewInstaller(setup.InstallerSettings{
-		Localizer: cli.Localizer,
-		AppName:   cli.AppName,
+		Localizer:  cli.Localizer,
+		AppName:    cli.AppName,
+		NoFallback: cli.NoFallback,
 	})
 	res, err := installer.Upgrade(mv)
 	if err != nil {
@@ -165,13 +167,16 @@ func StartItchSetup() {
 	}
 
 	installer = setup.NewInstaller(setup.InstallerSettings{
-		Localizer: cli.Localizer,
-		AppName:   cli.AppName,
+		Localizer:  cli.Localizer,
+		AppName:    cli.AppName,
+		NoFallback: cli.NoFallback,
 		OnError: func(err error) {
+			C.SetInstalling(0)
 			log.Printf("Error: %+v", err)
 			C.SetLabel(C.CString(fmt.Sprintf("%+v", err)))
 		},
 		OnFinish: func(source setup.InstallSource) {
+			C.SetInstalling(0)
 			err := nc.tryLaunchCurrent(mv)
 			if err != nil {
 				nc.ErrorDialog(err)
@@ -188,6 +193,7 @@ func StartItchSetup() {
 	})
 	installer.WarmUp()
 
+	C.SetInstalling(1)
 	installer.Install(mv)
 }
 
