@@ -282,7 +282,7 @@ func (nc *nativeCore) Relaunch() error {
 
 	// Update launcher copy from broth-managed version
 	launcherPath := filepath.Join(nc.baseDir, "itch-setup")
-	_, err := CopySelf(launcherPath)
+	_, err = CopySelf(launcherPath)
 	if err != nil {
 		log.Printf("While updating launcher: %+v", err)
 		log.Printf("Continuing with relaunch anyway...")
