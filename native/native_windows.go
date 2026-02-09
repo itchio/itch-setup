@@ -139,11 +139,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 	}
 
 	// this creates $installDir/app.ico
-	err = nwin.CreateUninstallRegistryEntry(cli, installDir, currentBuild.Version)
-	if err != nil {
-		log.Printf("While creating registry entry: %+v", err)
-		log.Printf("Ignoring uninstall registry entry creation error and continuing...")
-	}
+	nc.syncUninstallRegistryEntry(currentBuild.Version)
 
 	// this needs to be done before the shortcut is created
 	err = nc.writeVisualElementsManifest()
@@ -173,6 +169,14 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 	}
 
 	return nil
+}
+
+func (nc *nativeCore) syncUninstallRegistryEntry(version string) {
+	err := nwin.CreateUninstallRegistryEntry(nc.cli, nc.baseDir, version)
+	if err != nil {
+		log.Printf("While creating registry entry: %+v", err)
+		log.Printf("Ignoring uninstall registry entry creation error and continuing...")
+	}
 }
 
 func (nc *nativeCore) Relaunch() error {
@@ -420,17 +424,25 @@ func readdirnames(name string) ([]string, error) {
 
 // returns true if it successfully launched
 func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessFunc) error {
+	didPromoteReady := false
 	if mv.HasReadyPending() {
 		log.Printf("Has ready pending, trying to make it current...")
 		err := mv.MakeReadyCurrent()
 		if err != nil {
 			log.Printf("Could not make ready current: %+v", err)
+		} else {
+			didPromoteReady = true
 		}
 	}
 
 	build := mv.GetCurrentVersion()
 	if build == nil {
 		return nil
+	}
+
+	if didPromoteReady {
+		log.Printf("Ready build is now current, syncing uninstall registry metadata to (%s)", build.Version)
+		nc.syncUninstallRegistryEntry(build.Version)
 	}
 
 	log.Printf("Launching (%s) from (%s)", build.Version, build.Path)
