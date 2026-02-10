@@ -75,13 +75,13 @@ HRESULT CreateShortcutWithAppId(
         hr = IShellLinkW_QueryInterface(psl, &IID_IPropertyStore_local, (void **)&pps);
         if (SUCCEEDED(hr)) {
             PROPVARIANT pv;
-            hr = InitPropVariantFromString(appUserModelId, &pv);
+            PropVariantInit(&pv);
+            pv.vt = VT_LPWSTR;
+            pv.pwszVal = (LPWSTR) appUserModelId;
+
+            hr = IPropertyStore_SetValue(pps, &PKEY_AppUserModel_ID_local, &pv);
             if (SUCCEEDED(hr)) {
-                hr = IPropertyStore_SetValue(pps, &PKEY_AppUserModel_ID_local, &pv);
-                PropVariantClear(&pv);
-                if (SUCCEEDED(hr)) {
-                    IPropertyStore_Commit(pps);
-                }
+                IPropertyStore_Commit(pps);
             }
             IPropertyStore_Release(pps);
             if (FAILED(hr)) goto cleanup_sl;
