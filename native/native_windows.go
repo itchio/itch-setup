@@ -161,6 +161,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 			Description:      "The best way to play your itch.io games",
 			IconLocation:     filepath.Join(installDir, "app.ico"),
 			WorkingDirectory: filepath.Join(installDir),
+			AppUserModelId:   "io.itch.itch",
 		})
 		if err != nil {
 			log.Printf("While creating shortcut: %+v", err)

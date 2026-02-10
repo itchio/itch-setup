@@ -10,7 +10,6 @@ require (
 	github.com/itchio/go-itchio v0.0.0-20251229221754-554b6b9748f0
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
 	github.com/itchio/httpkit v0.0.0-20251231162950-9fb57e6ac916
-	github.com/itchio/husk v1.0.0
 	github.com/itchio/lake v0.0.0-20200305150023-cc4284ec2b2a
 	github.com/itchio/ox v0.0.0-20260204011704-8e7bc5639671
 	github.com/itchio/savior v0.0.0-20260128212141-556ab9757054
@@ -72,5 +71,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 )
-
-replace github.com/itchio/husk => ./node_modules/@itchio/husk/artifacts

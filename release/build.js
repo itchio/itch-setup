@@ -156,12 +156,6 @@ async function main(args) {
   $(`node --version`);
   $(`go version`);
 
-  if (opts.userSpecifiedArch) {
-    await cd("node_modules/@itchio/husk", async () => {
-      $(`npm run postinstall -- --verbose --arch ${opts.arch}`);
-    });
-  }
-
   let version = "head";
   if (process.env.GITHUB_REF_TYPE === "tag") {
     version = process.env.GITHUB_REF_NAME;
@@ -215,10 +209,6 @@ async function main(args) {
   $(`go build -a -ldflags "${ldFlags}" ${goTags} -o ${target}`);
   $(`file ${target}`);
 
-  if (opts.os === "windows") {
-    verifyCoIncrementMTAUsage(target);
-  }
-
   let binaries = `artifacts/itch-setup/${opts.os}-${goArch}`;
   $(`mkdir -p ${binaries}`);
   $(`cp -rf ${target} ${binaries}/`);
@@ -238,39 +228,6 @@ function archToGoArch(arch) {
       return "arm64";
     default:
       throw new Error(`unsupported arch: ${chalk.yellow(arch)}`);
-  }
-}
-
-/**
- * @param {string} target
- */
-function verifyCoIncrementMTAUsage(target) {
-  console.log(`Verifying that we don't rely on CoIncrementMTAUsage`);
-  let lines = $$(
-    `objdump --private-headers "${target}" | grep -E "[0-9]+  Co[A-Z]"`
-  ).split("\n");
-  let comMethods = [];
-  for (let line of lines) {
-    line = line.trim();
-    if (line == "") {
-      continue;
-    }
-    let matches = /[^ ]+$/.exec(line);
-    if (matches) {
-      let method = matches[0];
-      comMethods.push(method);
-    } else {
-      console.log(chalk.yellow(`Could not parse line: ${line}`));
-    }
-  }
-  console.log(`Found COM methods ${comMethods.join(", ")}`);
-  if (comMethods.indexOf("CoIncrementMTAUsage") !== -1) {
-    console.log(
-      chalk.magenta(
-        "Check failed: husk cannot depend on CoIncrementMTAUsage, as it breaks Windows 7 compatibility."
-      )
-    );
-    process.exit(1);
   }
 }
 
