@@ -1,7 +1,6 @@
 package native
 
 import (
-	"C"
 	"context"
 	"fmt"
 	"log"

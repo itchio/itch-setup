@@ -1,3 +1,6 @@
+//go:build !nogtk
+// +build !nogtk
+
 package nlinux
 
 import (

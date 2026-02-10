@@ -96,7 +96,7 @@ func (i *Installer) brothGetResponse(r interface{}, format string, args ...inter
 
 // checkChannelExists returns true if the channel exists, false if 404, or error for other failures
 func (i *Installer) checkChannelExists() (bool, error) {
-	url := fmt.Sprintf("%s/%s/%s/LATEST", brothBaseURL, i.settings.AppName, i.channelName)
+	url := fmt.Sprintf("%s/%s/%s/LATEST", getBrothBaseURL(), i.settings.AppName, i.channelName)
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
 		return false, err

@@ -57,7 +57,12 @@ type InstallSource struct {
 	Version string
 }
 
-const brothBaseURL = "https://broth.itch.zone"
+func getBrothBaseURL() string {
+	if url := os.Getenv("ITCH_BROTH_URL"); url != "" {
+		return url
+	}
+	return "https://broth.itch.zone"
+}
 
 func NewInstaller(settings InstallerSettings) *Installer {
 	runtime := ox.CurrentRuntime()
@@ -80,7 +85,7 @@ func NewInstaller(settings InstallerSettings) *Installer {
 }
 
 func (i *Installer) brothPackageURL() string {
-	return fmt.Sprintf("%s/%s/%s", brothBaseURL, i.settings.AppName, i.channelName)
+	return fmt.Sprintf("%s/%s/%s", getBrothBaseURL(), i.settings.AppName, i.channelName)
 }
 
 func (i *Installer) buildBrothURL(values url.Values, format string, args ...interface{}) string {
