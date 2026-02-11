@@ -7,6 +7,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/dchest/safefile"
 )
@@ -208,9 +211,24 @@ func (mv *multiverse) MakeReadyCurrent() error {
 			// current build path exists
 			currentBuildSave = currentBuild.Path + ".old"
 			log.Printf("Renaming (%s) to (%s)", currentBuild.Path, currentBuildSave)
-			err := os.Rename(currentBuild.Path, currentBuildSave)
-			if err != nil {
-				return err
+
+			retries := 5
+			var renameErr error
+			for i := 0; i < retries; i++ {
+				renameErr = os.Rename(currentBuild.Path, currentBuildSave)
+				if renameErr == nil {
+					break
+				}
+				log.Printf("Rename failed (attempt %d/%d): %+v", i+1, retries, renameErr)
+				if i < retries-1 && isRetryableRenameError(renameErr) {
+					log.Printf("Retrying in 2 seconds...")
+					time.Sleep(2 * time.Second)
+				} else {
+					break
+				}
+			}
+			if renameErr != nil {
+				return renameErr
 			}
 		} else {
 			currentBuild = nil
@@ -271,6 +289,17 @@ func (mv *multiverse) validateDir(dir string) error {
 		return fmt.Errorf("while validating new version: %w", err)
 	}
 	return nil
+}
+
+func isRetryableRenameError(err error) bool {
+	if err == nil || runtime.GOOS != "windows" {
+		return false
+	}
+
+	const windowsErrorSharingViolation syscall.Errno = 32
+	const windowsErrorLockViolation syscall.Errno = 33
+
+	return errors.Is(err, windowsErrorSharingViolation) || errors.Is(err, windowsErrorLockViolation)
 }
 
 func (mv *multiverse) makePathForCurrent(version string) string {
