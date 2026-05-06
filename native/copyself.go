@@ -29,6 +29,7 @@ func CopySelf(targetExecPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("while opening self: %w", err)
 	}
+	defer src.Close()
 
 	dst, err := os.Create(targetExecPath)
 	if err != nil {

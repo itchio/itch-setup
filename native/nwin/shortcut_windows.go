@@ -49,17 +49,22 @@ func CreateShortcut(settings ShortcutSettings) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	shortcutPath := windows.StringToUTF16Ptr(settings.ShortcutFilePath)
-	targetPath := windows.StringToUTF16Ptr(settings.TargetPath)
-	arguments := windows.StringToUTF16Ptr(settings.Arguments)
-	description := windows.StringToUTF16Ptr(settings.Description)
-	iconLocation := windows.StringToUTF16Ptr(settings.IconLocation)
-	workingDirectory := windows.StringToUTF16Ptr(settings.WorkingDirectory)
-
-	var appUserModelId *uint16
-	if settings.AppUserModelId != "" {
-		appUserModelId = windows.StringToUTF16Ptr(settings.AppUserModelId)
+	// Empty optional fields are passed as NULL so the C side skips them
+	// rather than setting an empty value on the shell link.
+	utf16OrNil := func(s string) *uint16 {
+		if s == "" {
+			return nil
+		}
+		return windows.StringToUTF16Ptr(s)
 	}
+
+	shortcutPath := windows.StringToUTF16Ptr(settings.ShortcutFilePath)
+	targetPath := utf16OrNil(settings.TargetPath)
+	arguments := utf16OrNil(settings.Arguments)
+	description := utf16OrNil(settings.Description)
+	iconLocation := utf16OrNil(settings.IconLocation)
+	workingDirectory := utf16OrNil(settings.WorkingDirectory)
+	appUserModelId := utf16OrNil(settings.AppUserModelId)
 
 	hr := C.CreateShortcutWithAppId(
 		(*C.wchar_t)(unsafe.Pointer(shortcutPath)),

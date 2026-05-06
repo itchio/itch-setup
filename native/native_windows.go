@@ -136,6 +136,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 	setupLocalPath, err := CopySelf(filepath.Join(installDir, "itch-setup.exe"))
 	if err != nil {
 		nc.ErrorDialog(err)
+		return err
 	}
 
 	// this creates $installDir/app.ico
