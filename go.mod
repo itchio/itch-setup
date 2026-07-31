@@ -1,25 +1,25 @@
 module github.com/itchio/itch-setup
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/Xuanwo/go-locale v1.1.3
 	github.com/dchest/safefile v0.0.0-20151022103144-855e8d98f185
 	github.com/google/uuid v1.6.0
 	github.com/gotk3/gotk3 v0.6.1
-	github.com/itchio/go-itchio v0.0.0-20251229221754-554b6b9748f0
+	github.com/itchio/go-itchio v0.0.0-20260722142243-6e0c1ede75c4
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
-	github.com/itchio/httpkit v0.0.0-20251231162950-9fb57e6ac916
-	github.com/itchio/lake v0.0.0-20200305150023-cc4284ec2b2a
-	github.com/itchio/ox v0.0.0-20260204011704-8e7bc5639671
+	github.com/itchio/httpkit v0.0.0-20260213231528-25109ada88c9
+	github.com/itchio/lake v0.0.0-20260609175358-7830e8bc546a
+	github.com/itchio/ox v0.0.0-20260212201121-1e6be0bfd382
 	github.com/itchio/savior v0.0.0-20260128212141-556ab9757054
-	github.com/itchio/wharf v0.0.0-20260121214545-5e5efc838cdb
+	github.com/itchio/wharf v0.0.0-20260509025649-e95738701284
 	github.com/lxn/walk v0.0.0-20191128110447-55ccb3a9f5c1
 	github.com/lxn/win v0.0.0-20191128105842-2da648fda5b4
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	golang.org/x/sys v0.40.0
+	golang.org/x/sys v0.41.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
@@ -48,15 +48,14 @@ require (
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
-	github.com/itchio/arkive v0.0.0-20260123020546-e17bae820608 // indirect
+	github.com/itchio/arkive v0.0.0-20260428180635-32e8e9c72151 // indirect
 	github.com/itchio/dskompress v0.0.0-20190702113811-5e6f499be697 // indirect
 	github.com/itchio/kompress v0.0.0-20200301155538-5c2eecce9e51 // indirect
-	github.com/itchio/screw v0.0.0-20200301160148-75fc2d65fb38 // indirect
+	github.com/itchio/randsource v0.0.0-20260216215536-1b48147d46e5 // indirect
+	github.com/itchio/screw v0.0.0-20260221011136-e674b460b040 // indirect
 	github.com/jgallagher/gosaca v0.0.0-20130226042358-754749770f08 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
-	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.3.2 // indirect
-	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
