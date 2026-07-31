@@ -54,7 +54,7 @@ func (u *textUI) RunInMainThread(f func()) {
 }
 
 func (iw *textInstallWindow) SetTitle(title string) {
-	log.Printf(title)
+	log.Print(title)
 }
 func (iw *textInstallWindow) SetLabel(label string) {
 	iw.label = label
