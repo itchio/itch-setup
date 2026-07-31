@@ -45,10 +45,10 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v7
       with:
         go-version-file: 'go.mod'
 
@@ -63,7 +63,7 @@ jobs:
       run: node release/build.js --arch ${{ matrix.arch }}
 
     - name: Store
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: binaries-${{ matrix.name }}
         path: artifacts/
@@ -78,13 +78,13 @@ jobs:
       id-token: write
     steps:
     - name: Download artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: binaries-windows
         path: artifacts/
 
     - name: Sign with Azure Trusted Signing
-      uses: azure/artifact-signing-action@v1
+      uses: azure/artifact-signing-action@v2
       with:
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -97,7 +97,7 @@ jobs:
         files-folder-recurse: true
 
     - name: Upload signed artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: binaries-windows-signed
         path: artifacts/
@@ -132,7 +132,7 @@ jobs:
 
     - name: Download artifacts
       if: steps.check.outputs.enabled == 'true'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: binaries-${{ matrix.name }}
         path: artifacts/
@@ -230,7 +230,7 @@ jobs:
 
     - name: Upload signed artifacts
       if: steps.check.outputs.enabled == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: binaries-${{ matrix.name }}-signed
         path: artifacts/
@@ -248,12 +248,12 @@ jobs:
     environment: production
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     # Linux artifacts (no signing needed)
     - name: Download Linux artifacts
       if: inputs.deploy_linux_amd64
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: binaries-linux
         path: artifacts/
@@ -261,7 +261,7 @@ jobs:
     # Signed Windows artifacts
     - name: Download signed Windows artifacts
       if: inputs.deploy_windows_amd64
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: binaries-windows-signed
         path: artifacts/
@@ -269,20 +269,20 @@ jobs:
     # Signed macOS artifacts
     - name: Download signed macOS Intel artifacts
       if: inputs.deploy_darwin_amd64
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: binaries-macos-intel-signed
         path: artifacts/
 
     - name: Download signed macOS ARM64 artifacts
       if: inputs.deploy_darwin_arm64
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: binaries-macos-arm64-signed
         path: artifacts/
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: '20'
 
