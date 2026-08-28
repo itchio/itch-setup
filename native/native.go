@@ -29,4 +29,11 @@ type Core interface {
 	// butler, waiting for it to exit; hands the launch to the app when
 	// butler can't serve it.
 	RunGame(gameID int64) error
+
+	// Refreshes the stable launcher copy of itch-setup (and desktop
+	// integration) from this binary. Run by the app after updating its
+	// broth-managed itch-setup: app-update events are otherwise the
+	// only thing that propagates a new itch-setup to the paths shims
+	// and shortcuts point at.
+	SyncLauncher() error
 }

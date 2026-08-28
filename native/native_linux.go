@@ -280,14 +280,6 @@ func (nc *nativeCore) Relaunch() error {
 	defer cancel()
 	setup.WaitForProcessToExit(ctx, pid)
 
-	// Update launcher copy from broth-managed version
-	launcherPath := filepath.Join(nc.baseDir, "itch-setup")
-	_, err = CopySelf(launcherPath)
-	if err != nil {
-		log.Printf("While updating launcher: %+v", err)
-		log.Printf("Continuing with relaunch anyway...")
-	}
-
 	mv, err := nc.newMultiverse()
 	if err != nil {
 		return err
@@ -365,6 +357,18 @@ func (nc *nativeCore) RunGame(gameID int64) error {
 		ProfileID:   nc.cli.ProfileID,
 		LaunchApp:   nc.launchAppDetached,
 	}, gameID)
+}
+
+func (nc *nativeCore) SyncLauncher() error {
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+	if mv.GetCurrentVersion() == nil {
+		log.Printf("No installed %s, nothing to sync", nc.cli.AppName)
+		return nil
+	}
+	return nc.installDesktopFiles()
 }
 
 // launchAppDetached starts the installed app without waiting for it and
@@ -449,6 +453,8 @@ func (nc *nativeCore) updateDesktopDatabase() error {
 	return nil
 }
 
+// temp + rename: the launch shim among these is exec'd on every boot,
+// and a truncate-write interrupted mid-way would break launching
 func (nc *nativeCore) writeFile(path string, contents []byte, perm os.FileMode) error {
 	err := os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil {
@@ -456,7 +462,18 @@ func (nc *nativeCore) writeFile(path string, contents []byte, perm os.FileMode) 
 	}
 
 	log.Printf("install (%s)", path)
-	return os.WriteFile(path, contents, perm)
+	tmp := path + ".tmp"
+	err = os.WriteFile(tmp, contents, perm)
+	if err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	err = os.Rename(tmp, path)
+	if err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (nc *nativeCore) interpolate(source string, vars map[string]string) (string, error) {

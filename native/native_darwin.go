@@ -351,3 +351,9 @@ func (nc *nativeCore) Info() {
 func (nc *nativeCore) RunGame(gameID int64) error {
 	return fmt.Errorf("--run-game is not supported on macOS")
 }
+
+// macOS has no launcher copy: the app bundle path is stable.
+func (nc *nativeCore) SyncLauncher() error {
+	log.Printf("nativeCore.SyncLauncher() on Darwin is a no-op")
+	return nil
+}

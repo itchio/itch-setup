@@ -194,14 +194,6 @@ func (nc *nativeCore) Relaunch() error {
 	defer cancel()
 	setup.WaitForProcessToExit(ctx, cli.RelaunchPID)
 
-	// Update launcher copy from broth-managed version
-	launcherPath := filepath.Join(nc.baseDir, "itch-setup.exe")
-	_, err = CopySelf(launcherPath)
-	if err != nil {
-		log.Printf("While updating launcher: %+v", err)
-		log.Printf("Continuing with relaunch anyway...")
-	}
-
 	err = nc.tryLaunchCurrent(mv, nil)
 	if err != nil {
 		nc.ErrorDialog(err)
@@ -889,6 +881,21 @@ func (nc *nativeCore) RunGame(gameID int64) error {
 		ProfileID:   nc.cli.ProfileID,
 		LaunchApp:   nc.launchAppDetached,
 	}, gameID)
+}
+
+func (nc *nativeCore) SyncLauncher() error {
+	comshim.Add(1)
+	defer comshim.Done()
+
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+	if mv.GetCurrentVersion() == nil {
+		log.Printf("No installed %s, nothing to sync", nc.cli.AppName)
+		return nil
+	}
+	return nc.doPostInstall(mv, PostInstallParams{ForUpgrade: true})
 }
 
 // launchAppDetached starts the installed app without waiting for it and

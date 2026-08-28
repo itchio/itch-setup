@@ -46,6 +46,7 @@ func init() {
 
 	app.Flag("run-game", "Launch an installed itch.io game by its game ID (headlessly through butler when possible)").Int64Var(&cli.RunGameID)
 	app.Flag("profile-id", "itch.io user ID to attribute play sessions to (used with --run-game)").Int64Var(&cli.ProfileID)
+	app.Flag("sync-launcher", "Refresh the launcher copy of itch-setup and desktop integration from this binary").BoolVar(&cli.SyncLauncher)
 
 	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
 
@@ -196,9 +197,9 @@ func main() {
 	}
 	cli.Localizer = localizer
 
-	if cli.RunGameID != 0 {
-		// invoked headlessly (e.g. from a Steam shortcut); the text UI
-		// avoids initializing GTK on Linux
+	if cli.RunGameID != 0 || cli.SyncLauncher {
+		// invoked headlessly (a shortcut, or the app's update flow); the
+		// text UI avoids initializing GTK on Linux
 		cli.Silent = true
 	}
 
@@ -223,6 +224,9 @@ func main() {
 	}
 	if cli.RunGameID != 0 {
 		verbs = append(verbs, "run-game")
+	}
+	if cli.SyncLauncher {
+		verbs = append(verbs, "sync-launcher")
 	}
 
 	if len(verbs) > 1 {
@@ -283,6 +287,11 @@ func main() {
 			if err != nil {
 				nc.ErrorDialog(err)
 			}
+		}
+	case "sync-launcher":
+		err = nc.SyncLauncher()
+		if err != nil {
+			jsonlBail(fmt.Errorf("Fatal sync-launcher error: %w", err))
 		}
 	}
 }
