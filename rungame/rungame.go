@@ -7,7 +7,9 @@ package rungame
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,7 +20,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
+	"time"
 	"unicode"
 )
 
@@ -74,7 +78,7 @@ func Run(params Params, gameID int64) error {
 		return err
 	}
 
-	if res.exitCode == profileGoneExitCode && params.ProfileID != 0 {
+	if res.exitCode == profileGoneExitCode && res.profileGone && !res.stopped && params.ProfileID != 0 {
 		// the baked profile logged out since the shortcut was created;
 		// keep the launch headless, only session attribution is lost
 		log.Printf("Profile (%d) no longer exists, retrying without it", params.ProfileID)
@@ -84,11 +88,21 @@ func Run(params Params, gameID int64) error {
 		}
 	}
 
+	if res.stopped {
+		log.Printf("butler stopped by our forwarded signal, exiting")
+		return nil
+	}
+
 	switch res.exitCode {
 	case 0:
 		log.Printf("Game exited")
 		return nil
 	case needsAppExitCode:
+		if res.needsApp == nil {
+			// the code alone could mean anything from another butler
+			// version; only the payload makes it a handoff
+			return fmt.Errorf("butler launch failed with exit code %d (no needs-app payload)", res.exitCode)
+		}
 		log.Printf("butler needs the app: %s", res.needsApp.reason)
 		return launchApp(params, gameID, res.needsApp.uploadID)
 	default:
@@ -98,7 +112,16 @@ func Run(params Params, gameID int64) error {
 
 type butlerResult struct {
 	exitCode int
+
+	// non-nil only when a launch/needs-app payload was seen
 	needsApp *needsAppInfo
+
+	// a launch/profile-not-found payload was seen
+	profileGone bool
+
+	// butler exited nonzero after we forwarded it a stop signal; a
+	// cancellation, not a failure
+	stopped bool
 }
 
 func runButler(butlerExe string, args []string) (butlerResult, error) {
@@ -117,20 +140,31 @@ func runButler(butlerExe string, args []string) (butlerResult, error) {
 	if err := cmd.Start(); err != nil {
 		return butlerResult{}, fmt.Errorf("starting butler: %w", err)
 	}
+	tieProcessLifetime(cmd.Process.Pid)
 
 	// a launcher stopping us (or Ctrl+C) should stop butler, which stops
 	// the game and records the play session on its way out
+	var forwarded atomic.Bool
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigs)
+	defer func() {
+		// Stop guarantees no further sends, making close safe
+		signal.Stop(sigs)
+		close(sigs)
+	}()
 	go func() {
 		for sig := range sigs {
 			log.Printf("Got %s, forwarding to butler", sig)
-			_ = cmd.Process.Signal(sig)
+			// a signal that wasn't delivered (Windows, or butler already
+			// gone) can't explain butler's exit
+			if cmd.Process.Signal(sig) == nil {
+				forwarded.Store(true)
+			}
 		}
 	}()
 
-	res := butlerResult{needsApp: scanButlerOutput(stdout)}
+	var res butlerResult
+	res.needsApp, res.profileGone = scanButlerOutput(stdout)
 
 	err = cmd.Wait()
 	if err != nil {
@@ -139,17 +173,44 @@ func runButler(butlerExe string, args []string) (butlerResult, error) {
 			return butlerResult{}, fmt.Errorf("waiting on butler: %w", err)
 		}
 		res.exitCode = exitError.ExitCode()
+		res.stopped = forwarded.Load()
 	}
 	return res, nil
 }
 
-func launchApp(params Params, gameID int64, uploadID int64) error {
-	url := fmt.Sprintf("itch://install?game_id=%d&launch", gameID)
+// ErrAppNotInstalled means there is no valid app version to hand the
+// launch to; wrapped by LaunchApp implementations so callers can fall
+// back to the installer.
+var ErrAppNotInstalled = errors.New("app is not installed")
+
+// AppNotInstalledError carries the handoff URL alongside
+// ErrAppNotInstalled so the installer fallback can preserve it (butler
+// may have picked a specific upload).
+type AppNotInstalledError struct {
+	URL string
+	err error
+}
+
+func (e *AppNotInstalledError) Error() string { return e.err.Error() }
+func (e *AppNotInstalledError) Unwrap() error { return e.err }
+
+// InstallAndLaunchURL is the itch:// URL that makes the app install the
+// game if needed and launch it.
+func InstallAndLaunchURL(gameID int64, uploadID int64) string {
 	if uploadID != 0 {
-		url = fmt.Sprintf("itch://install?game_id=%d&upload_id=%d&launch", gameID, uploadID)
+		return fmt.Sprintf("itch://install?game_id=%d&upload_id=%d&launch", gameID, uploadID)
 	}
+	return fmt.Sprintf("itch://install?game_id=%d&launch", gameID)
+}
+
+func launchApp(params Params, gameID int64, uploadID int64) error {
+	url := InstallAndLaunchURL(gameID, uploadID)
 	log.Printf("Handing launch to the app: %s", url)
-	return params.LaunchApp([]string{url})
+	err := params.LaunchApp([]string{url})
+	if errors.Is(err, ErrAppNotInstalled) {
+		return &AppNotInstalledError{URL: url, err: err}
+	}
+	return err
 }
 
 type needsAppInfo struct {
@@ -158,10 +219,9 @@ type needsAppInfo struct {
 }
 
 // scanButlerOutput mirrors butler's JSON log lines into our log and
-// captures the launch/needs-app payload if one is emitted. Reads until
-// EOF, which arrives when butler exits.
-func scanButlerOutput(r io.Reader) *needsAppInfo {
-	info := &needsAppInfo{}
+// captures the launch/needs-app and launch/profile-not-found payloads
+// if emitted. Reads until EOF, which arrives when butler exits.
+func scanButlerOutput(r io.Reader) (needsApp *needsAppInfo, profileGone bool) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
@@ -174,10 +234,14 @@ func scanButlerOutput(r io.Reader) *needsAppInfo {
 		case "log":
 			log.Printf("butler: %v", obj["message"])
 		case "launch/needs-app":
+			info := &needsAppInfo{}
 			info.reason, _ = obj["reason"].(string)
 			if v, ok := obj["uploadId"].(float64); ok {
 				info.uploadID = int64(v)
 			}
+			needsApp = info
+		case "launch/profile-not-found":
+			profileGone = true
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -186,7 +250,7 @@ func scanButlerOutput(r io.Reader) *needsAppInfo {
 		log.Printf("reading butler output: %v", err)
 		_, _ = io.Copy(io.Discard, r)
 	}
-	return info
+	return needsApp, profileGone
 }
 
 // findButler resolves the app's current broth-managed butler, the same
@@ -221,8 +285,12 @@ func findButler(userDataDir string) (string, error) {
 
 // supportsLaunch probes for the launch command instead of comparing
 // versions: `launch --help` exits 0 exactly when the command exists.
+// Bounded so a butler that can't even run --help (held by AV, truncated)
+// degrades to the app handoff instead of hanging the shortcut forever.
 func supportsLaunch(butlerExe string) bool {
-	cmd := exec.Command(butlerExe, "launch", "--help")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, butlerExe, "launch", "--help")
 	cmd.SysProcAttr = sysProcAttr()
 	return cmd.Run() == nil
 }
@@ -288,19 +356,42 @@ func parseAllowEnv(rawText string) []string {
 	return result
 }
 
-// EnvWithoutOverlayPreload strips launcher preloads (like Steam's
-// overlay) from the environment. Games want the preload; the app's
-// Chromium startup deadlocks under it.
+// EnvWithoutOverlayPreload strips Steam's overlay renderer from the
+// preload list, keeping everything else (MangoHud, compat shims). Games
+// want the overlay; the app's Chromium startup deadlocks under it.
 func EnvWithoutOverlayPreload() []string {
 	var env []string
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "LD_PRELOAD=") ||
-			strings.HasPrefix(kv, "DYLD_INSERT_LIBRARIES=") {
-			continue
+		for _, name := range []string{"LD_PRELOAD=", "DYLD_INSERT_LIBRARIES="} {
+			if strings.HasPrefix(kv, name) {
+				if kept := withoutOverlayEntries(strings.TrimPrefix(kv, name)); kept != "" {
+					kv = name + kept
+				} else {
+					kv = ""
+				}
+				break
+			}
 		}
-		env = append(env, kv)
+		if kv != "" {
+			env = append(env, kv)
+		}
 	}
 	return env
+}
+
+// preload lists separate entries with colons or spaces; rejoining with
+// colons is always valid
+func withoutOverlayEntries(list string) string {
+	var kept []string
+	for _, entry := range strings.FieldsFunc(list, func(r rune) bool {
+		return r == ':' || r == ' '
+	}) {
+		if strings.Contains(filepath.Base(entry), "gameoverlayrenderer") {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return strings.Join(kept, ":")
 }
 
 type logWriter struct {

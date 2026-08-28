@@ -909,12 +909,16 @@ func (nc *nativeCore) launchAppDetached(appArgs []string) error {
 
 	build := mv.GetCurrentVersion()
 	if build == nil {
-		return fmt.Errorf("No valid version of %s found installed", nc.cli.AppName)
+		return fmt.Errorf("No valid version of %s found installed: %w", nc.cli.AppName, rungame.ErrAppNotInstalled)
 	}
 
 	exePath := filepath.Join(build.Path, nc.exeName())
+	if _, err := os.Stat(exePath); err != nil {
+		// the multiverse state can outlive the actual files
+		return fmt.Errorf("missing app executable (%s): %w", exePath, rungame.ErrAppNotInstalled)
+	}
 	log.Printf("Launching (%s) from (%s)", build.Version, exePath)
-	cmd := exec.Command(exePath, appArgs...)
+	cmd := exec.Command(exePath, append(appArgs, nc.cli.Args...)...)
 	cmd.Env = rungame.EnvWithoutOverlayPreload()
 	return cmd.Start()
 }

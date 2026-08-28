@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/itchio/itch-setup/data"
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
+	"github.com/itchio/itch-setup/rungame"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -261,7 +263,26 @@ func main() {
 	case "run-game":
 		err = nc.RunGame(cli.RunGameID)
 		if err != nil {
-			jsonlBail(fmt.Errorf("Fatal run-game error: %w", err))
+			var notInstalled *rungame.AppNotInstalledError
+			if !errors.As(err, &notInstalled) {
+				jsonlBail(fmt.Errorf("Fatal run-game error: %w", err))
+			}
+
+			// stale shortcut, the app is gone: fall back to the installer
+			// GUI, forwarding the launch URL so the game still starts once
+			// the app is installed
+			log.Printf("%+v", err)
+			log.Printf("Falling back to installing the app")
+			cli.Silent = false
+			cli.Args = append([]string{notInstalled.URL}, cli.Args...)
+			nc, err = native.NewCore(cli)
+			if err != nil {
+				panic(err)
+			}
+			err = nc.Install()
+			if err != nil {
+				nc.ErrorDialog(err)
+			}
 		}
 	}
 }

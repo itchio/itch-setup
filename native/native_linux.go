@@ -383,15 +383,19 @@ func (nc *nativeCore) launchAppDetached(appArgs []string) error {
 
 	b := mv.GetCurrentVersion()
 	if b == nil {
-		return fmt.Errorf("No valid version of %s found installed", nc.cli.AppName)
+		return fmt.Errorf("No valid version of %s found installed: %w", nc.cli.AppName, rungame.ErrAppNotInstalled)
 	}
 
-	args := appArgs
+	args := append(appArgs, nc.cli.Args...)
 	if !linox.SupportsUnprivilegedCloneNewUser() {
 		args = append(args, "--no-sandbox")
 	}
 
 	exePath := filepath.Join(b.Path, nc.exeName())
+	if _, err := os.Stat(exePath); err != nil {
+		// the multiverse state can outlive the actual files
+		return fmt.Errorf("missing app executable (%s): %w", exePath, rungame.ErrAppNotInstalled)
+	}
 	log.Printf("Launching (%s) from (%s)", b.Version, exePath)
 	cmd := exec.Command(exePath, args...)
 	cmd.Env = rungame.EnvWithoutOverlayPreload()
