@@ -344,3 +344,10 @@ func (nc *nativeCore) userDataPath() string {
 func (nc *nativeCore) Info() {
 	log.Printf("nativeCore.Info() on Darwin is a stub")
 }
+
+// LaunchBundle can't forward arguments to the app bundle, so the
+// needs-app handoff is impossible here; macOS shortcuts keep launching
+// the app directly for now.
+func (nc *nativeCore) RunGame(gameID int64) error {
+	return fmt.Errorf("--run-game is not supported on macOS")
+}

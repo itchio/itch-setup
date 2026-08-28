@@ -16,6 +16,8 @@ type CLI struct {
 	Info         bool
 	Relaunch     bool
 	RelaunchPID  int
+	RunGameID    int64
+	ProfileID    int64
 
 	Silent     bool
 	NoFallback bool

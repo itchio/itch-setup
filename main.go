@@ -42,6 +42,9 @@ func init() {
 	app.Flag("relaunch", "Relaunch a new version of the itch app").BoolVar(&cli.Relaunch)
 	app.Flag("relaunch-pid", "PID to wait for before relaunching").IntVar(&cli.RelaunchPID)
 
+	app.Flag("run-game", "Launch an installed itch.io game by its game ID (headlessly through butler when possible)").Int64Var(&cli.RunGameID)
+	app.Flag("profile-id", "itch.io user ID to attribute play sessions to (used with --run-game)").Int64Var(&cli.ProfileID)
+
 	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
 
 	app.Flag("silent", "Run installation silently").BoolVar(&cli.Silent)
@@ -191,6 +194,12 @@ func main() {
 	}
 	cli.Localizer = localizer
 
+	if cli.RunGameID != 0 {
+		// invoked headlessly (e.g. from a Steam shortcut); the text UI
+		// avoids initializing GTK on Linux
+		cli.Silent = true
+	}
+
 	nc, err := native.NewCore(cli)
 	if err != nil {
 		panic(err)
@@ -209,6 +218,9 @@ func main() {
 	}
 	if cli.Info {
 		verbs = append(verbs, "info")
+	}
+	if cli.RunGameID != 0 {
+		verbs = append(verbs, "run-game")
 	}
 
 	if len(verbs) > 1 {
@@ -246,6 +258,11 @@ func main() {
 		}
 	case "info":
 		nc.Info()
+	case "run-game":
+		err = nc.RunGame(cli.RunGameID)
+		if err != nil {
+			jsonlBail(fmt.Errorf("Fatal run-game error: %w", err))
+		}
 	}
 }
 

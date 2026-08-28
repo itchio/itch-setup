@@ -15,6 +15,7 @@ import (
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/data"
 	"github.com/itchio/itch-setup/native/nlinux"
+	"github.com/itchio/itch-setup/rungame"
 	"github.com/itchio/itch-setup/setup"
 )
 
@@ -355,6 +356,46 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse) error {
 
 func (nc *nativeCore) exeName() string {
 	return nc.cli.AppName
+}
+
+func (nc *nativeCore) RunGame(gameID int64) error {
+	return rungame.Run(rungame.Params{
+		AppName:     nc.cli.AppName,
+		UserDataDir: nc.userDataPath(),
+		ProfileID:   nc.cli.ProfileID,
+		LaunchApp:   nc.launchAppDetached,
+	}, gameID)
+}
+
+// launchAppDetached starts the installed app without waiting for it and
+// without exiting the process, unlike tryLaunchCurrent.
+func (nc *nativeCore) launchAppDetached(appArgs []string) error {
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+
+	if mv.HasReadyPending() {
+		if err := mv.MakeReadyCurrent(); err != nil {
+			log.Printf("Could not make ready current: %+v", err)
+		}
+	}
+
+	b := mv.GetCurrentVersion()
+	if b == nil {
+		return fmt.Errorf("No valid version of %s found installed", nc.cli.AppName)
+	}
+
+	args := appArgs
+	if !linox.SupportsUnprivilegedCloneNewUser() {
+		args = append(args, "--no-sandbox")
+	}
+
+	exePath := filepath.Join(b.Path, nc.exeName())
+	log.Printf("Launching (%s) from (%s)", b.Version, exePath)
+	cmd := exec.Command(exePath, args...)
+	cmd.Env = rungame.EnvWithoutOverlayPreload()
+	return cmd.Start()
 }
 
 func (nc *nativeCore) ErrorDialog(err error) {

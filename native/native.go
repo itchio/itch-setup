@@ -24,4 +24,9 @@ type Core interface {
 
 	// Shows info in CLI and quit
 	Info()
+
+	// Launches an installed itch.io game headlessly through the app's
+	// butler, waiting for it to exit; hands the launch to the app when
+	// butler can't serve it.
+	RunGame(gameID int64) error
 }

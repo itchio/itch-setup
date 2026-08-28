@@ -16,6 +16,7 @@ import (
 
 	"github.com/itchio/itch-setup/cl"
 	"github.com/itchio/itch-setup/native/nwin"
+	"github.com/itchio/itch-setup/rungame"
 	"github.com/itchio/itch-setup/setup"
 	"github.com/lxn/walk"
 	ui "github.com/lxn/walk/declarative"
@@ -879,6 +880,43 @@ func (nc *nativeCore) shortcutName() string {
 
 func (nc *nativeCore) exeName() string {
 	return fmt.Sprintf("%s.exe", nc.cli.AppName)
+}
+
+func (nc *nativeCore) RunGame(gameID int64) error {
+	return rungame.Run(rungame.Params{
+		AppName:     nc.cli.AppName,
+		UserDataDir: nc.userDataPath(),
+		ProfileID:   nc.cli.ProfileID,
+		LaunchApp:   nc.launchAppDetached,
+	}, gameID)
+}
+
+// launchAppDetached starts the installed app without waiting for it and
+// without exiting the process, unlike tryLaunchCurrent.
+func (nc *nativeCore) launchAppDetached(appArgs []string) error {
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+
+	if mv.HasReadyPending() {
+		if err := mv.MakeReadyCurrent(); err != nil {
+			log.Printf("Could not make ready current: %+v", err)
+		} else if build := mv.GetCurrentVersion(); build != nil {
+			nc.syncUninstallRegistryEntry(build.Version)
+		}
+	}
+
+	build := mv.GetCurrentVersion()
+	if build == nil {
+		return fmt.Errorf("No valid version of %s found installed", nc.cli.AppName)
+	}
+
+	exePath := filepath.Join(build.Path, nc.exeName())
+	log.Printf("Launching (%s) from (%s)", build.Version, exePath)
+	cmd := exec.Command(exePath, appArgs...)
+	cmd.Env = rungame.EnvWithoutOverlayPreload()
+	return cmd.Start()
 }
 
 func (nc *nativeCore) newMultiverse() (setup.Multiverse, error) {
