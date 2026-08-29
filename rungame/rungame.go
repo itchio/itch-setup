@@ -43,8 +43,8 @@ type Params struct {
 	ProfileID int64
 
 	// LaunchApp starts the installed app with the given arguments and
-	// returns without waiting for it.
-	LaunchApp func(args []string) error
+	// extra environment, and returns without waiting for it.
+	LaunchApp func(args []string, extraEnv []string) error
 }
 
 func Run(params Params, gameID int64) error {
@@ -82,6 +82,7 @@ func Run(params Params, gameID int64) error {
 		// the baked profile logged out since the shortcut was created;
 		// keep the launch headless, only session attribution is lost
 		log.Printf("Profile (%d) no longer exists, retrying without it", params.ProfileID)
+		params.ProfileID = 0
 		res, err = runButler(butlerExe, baseArgs)
 		if err != nil {
 			return err
@@ -194,19 +195,27 @@ type AppNotInstalledError struct {
 func (e *AppNotInstalledError) Error() string { return e.err.Error() }
 func (e *AppNotInstalledError) Unwrap() error { return e.err }
 
-// InstallAndLaunchURL is the itch:// URL that makes the app install the
-// game if needed and launch it.
-func InstallAndLaunchURL(gameID int64, uploadID int64) string {
+// InstallAndLaunchURL is the URL that makes the app install the game if
+// needed and launch it. The scheme follows the app: kitch only handles
+// kitch:// urls.
+func InstallAndLaunchURL(appName string, gameID int64, uploadID int64) string {
 	if uploadID != 0 {
-		return fmt.Sprintf("itch://install?game_id=%d&upload_id=%d&launch", gameID, uploadID)
+		return fmt.Sprintf("%s://install?game_id=%d&upload_id=%d&launch", appName, gameID, uploadID)
 	}
-	return fmt.Sprintf("itch://install?game_id=%d&launch", gameID)
+	return fmt.Sprintf("%s://install?game_id=%d&launch", appName, gameID)
 }
 
 func launchApp(params Params, gameID int64, uploadID int64) error {
-	url := InstallAndLaunchURL(gameID, uploadID)
+	url := InstallAndLaunchURL(params.AppName, gameID, uploadID)
 	log.Printf("Handing launch to the app: %s", url)
-	err := params.LaunchApp([]string{url})
+	var extraEnv []string
+	if params.ProfileID != 0 {
+		// a freshly booted app logs into this saved profile instead of
+		// showing the gate; env can't reach an already-running app, which
+		// keeps whatever profile state it has
+		extraEnv = append(extraEnv, fmt.Sprintf("ITCH_PROFILE_ID=%d", params.ProfileID))
+	}
+	err := params.LaunchApp([]string{url}, extraEnv)
 	if errors.Is(err, ErrAppNotInstalled) {
 		return &AppNotInstalledError{URL: url, err: err}
 	}

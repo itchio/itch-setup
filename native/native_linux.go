@@ -373,7 +373,7 @@ func (nc *nativeCore) SyncLauncher() error {
 
 // launchAppDetached starts the installed app without waiting for it and
 // without exiting the process, unlike tryLaunchCurrent.
-func (nc *nativeCore) launchAppDetached(appArgs []string) error {
+func (nc *nativeCore) launchAppDetached(appArgs []string, extraEnv []string) error {
 	mv, err := nc.newMultiverse()
 	if err != nil {
 		return err
@@ -402,7 +402,7 @@ func (nc *nativeCore) launchAppDetached(appArgs []string) error {
 	}
 	log.Printf("Launching (%s) from (%s)", b.Version, exePath)
 	cmd := exec.Command(exePath, args...)
-	cmd.Env = rungame.EnvWithoutOverlayPreload()
+	cmd.Env = append(rungame.EnvWithoutOverlayPreload(), extraEnv...)
 	return cmd.Start()
 }
 
