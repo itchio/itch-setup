@@ -209,6 +209,17 @@ func (nc *nativeCore) migrateStaleShortcuts(setupLocalPath string, shortcutArgum
 		filepath.Join(nc.folders.Programs, nc.shortcutName()),
 	}
 
+	// Taskbar pins made while no shortcut of ours carried an
+	// AppUserModelId: the shell could not match the window to a shortcut,
+	// so it wrote its own, pointing at the running executable.
+	implicitPattern := filepath.Join(nc.folders.RoamingAppData, "Microsoft", "Internet Explorer", "Quick Launch", "ImplicitAppShortcuts", "*", "*.lnk")
+	implicit, err := filepath.Glob(implicitPattern)
+	if err != nil {
+		log.Printf("Could not list implicit app shortcuts (%s): %+v", implicitPattern, err)
+	} else {
+		candidates = append(candidates, implicit...)
+	}
+
 	for _, lnkPath := range candidates {
 		if _, err := os.Stat(lnkPath); err != nil {
 			continue
