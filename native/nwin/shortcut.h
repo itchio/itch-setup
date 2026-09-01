@@ -13,4 +13,10 @@ HRESULT CreateShortcutWithAppId(
     const wchar_t *appUserModelId
 );
 
+HRESULT GetShortcutTarget(
+    const wchar_t *shortcutPath,
+    wchar_t *targetOut,
+    int targetOutLen
+);
+
 #endif

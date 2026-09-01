@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -81,4 +82,44 @@ func CreateShortcut(settings ShortcutSettings) error {
 	}
 
 	return nil
+}
+
+// GetShortcutTarget reads the target path of an existing .lnk file.
+// Returns an empty string (and no error) if the link stores no target.
+func GetShortcutTarget(shortcutFilePath string) (string, error) {
+	if !filepath.IsAbs(shortcutFilePath) {
+		return "", fmt.Errorf("Shortcut file path is not absolute: %q", shortcutFilePath)
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	shortcutPath := windows.StringToUTF16Ptr(shortcutFilePath)
+	buf := make([]uint16, windows.MAX_LONG_PATH)
+
+	hr := C.GetShortcutTarget(
+		(*C.wchar_t)(unsafe.Pointer(shortcutPath)),
+		(*C.wchar_t)(unsafe.Pointer(&buf[0])),
+		C.int(len(buf)),
+	)
+	if hr < 0 {
+		return "", fmt.Errorf("GetShortcutTarget(%q) failed with HRESULT 0x%08X", shortcutFilePath, uint32(hr))
+	}
+
+	target := windows.UTF16ToString(buf)
+
+	// some links store targets with unexpanded environment variables
+	if strings.Contains(target, "%") {
+		expanded := make([]uint16, windows.MAX_LONG_PATH)
+		n, err := windows.ExpandEnvironmentStrings(
+			windows.StringToUTF16Ptr(target),
+			&expanded[0],
+			uint32(len(expanded)),
+		)
+		if err == nil && n > 0 {
+			target = windows.UTF16ToString(expanded)
+		}
+	}
+
+	return target, nil
 }

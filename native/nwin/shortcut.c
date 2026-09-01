@@ -107,3 +107,50 @@ cleanup_com:
     CoUninitialize();
     return hr;
 }
+
+// GetShortcutTarget reads the target path stored in a .lnk file into
+// targetOut (UTF-16, targetOutLen in wchar_t units). Returns HRESULT;
+// S_FALSE means the link has no target path.
+HRESULT GetShortcutTarget(
+    const wchar_t *shortcutPath,
+    wchar_t *targetOut,
+    int targetOutLen
+) {
+    HRESULT hr;
+
+    if (targetOutLen > 0) {
+        targetOut[0] = L'\0';
+    }
+
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
+        return hr;
+    }
+
+    IShellLinkW *psl = NULL;
+    hr = CoCreateInstance(
+        &CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
+        &IID_IShellLinkW, (void **)&psl
+    );
+    if (FAILED(hr)) {
+        goto read_cleanup_com;
+    }
+
+    {
+        IPersistFile *ppf = NULL;
+        hr = IShellLinkW_QueryInterface(psl, &IID_IPersistFile, (void **)&ppf);
+        if (FAILED(hr)) goto read_cleanup_sl;
+
+        hr = IPersistFile_Load(ppf, shortcutPath, STGM_READ);
+        IPersistFile_Release(ppf);
+        if (FAILED(hr)) goto read_cleanup_sl;
+    }
+
+    hr = IShellLinkW_GetPath(psl, targetOut, targetOutLen, NULL, 0);
+
+read_cleanup_sl:
+    IShellLinkW_Release(psl);
+read_cleanup_com:
+    CoUninitialize();
+    return hr;
+}

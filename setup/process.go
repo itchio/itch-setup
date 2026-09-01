@@ -8,18 +8,27 @@ import (
 	ps "github.com/mitchellh/go-ps"
 )
 
-func WaitForProcessToExit(ctx context.Context, pid int) {
+// WaitForProcessToExit waits for the process with the given PID to exit.
+// It returns nil once the process is gone, or the context's error if the
+// context is cancelled first.
+//
+// The ReadyToRelaunch message is emitted immediately: the app waits for it
+// before quitting, so it must not depend on us successfully observing the
+// process first.
+func WaitForProcessToExit(ctx context.Context, pid int) error {
 	retryDuration := 1 * time.Second
-	sentReady := false
 
 	log.Printf("Looking for PID %d", pid)
 	EnableJSON()
 	defer DisableJSON()
 
+	Emit(ReadyToRelaunch{})
+
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Wait cancelled!")
+			log.Printf("Giving up waiting for PID %d: %v", pid, ctx.Err())
+			return ctx.Err()
 		default:
 			// keep waiting
 		}
@@ -34,14 +43,10 @@ func WaitForProcessToExit(ctx context.Context, pid int) {
 
 		if proc == nil {
 			log.Printf("Process exited!")
-			return
+			return nil
 		}
 
 		log.Printf("Process still exists (%s)", proc.Executable())
-		if !sentReady {
-			Emit(ReadyToRelaunch{})
-			sentReady = true
-		}
 		log.Printf("Retrying in %s", retryDuration)
 		time.Sleep(retryDuration)
 	}

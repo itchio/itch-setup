@@ -149,6 +149,12 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 		return err
 	}
 
+	err = nwin.RegisterURLProtocols(cli, setupLocalPath)
+	if err != nil {
+		log.Printf("While registering URL protocols: %+v", err)
+		log.Printf("Ignoring protocol registration error and continuing...")
+	}
+
 	shortcutArguments := fmt.Sprintf("--prefer-launch --appname %s", cli.AppName)
 
 	for _, spec := range nc.shortcutSpecs() {
@@ -171,7 +177,53 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 		}
 	}
 
+	nc.migrateStaleShortcuts(setupLocalPath, shortcutArguments)
+
 	return nil
+}
+
+// migrateStaleShortcuts repairs shortcuts, outside the set we manage, that
+// point directly at a versioned app-X.Y.Z executable in our install root.
+// Windows shell registration/pinning can materialize those, and they keep
+// launching an obsolete build after a self-update. Only shortcuts whose
+// resolved target is <installDir>\app-<version>\<appname>.exe are touched.
+func (nc *nativeCore) migrateStaleShortcuts(setupLocalPath string, shortcutArguments string) {
+	candidates := []string{
+		// created by Windows shell app registration, not by us
+		filepath.Join(nc.folders.Programs, nc.shortcutName()),
+	}
+
+	for _, lnkPath := range candidates {
+		if _, err := os.Stat(lnkPath); err != nil {
+			continue
+		}
+
+		target, err := nwin.GetShortcutTarget(lnkPath)
+		if err != nil {
+			log.Printf("Could not inspect shortcut (%s), leaving it alone: %+v", lnkPath, err)
+			continue
+		}
+
+		if !setup.IsStaleAppShortcutTarget(target, nc.baseDir, nc.exeName()) {
+			log.Printf("Shortcut (%s) -> (%s) is not ours to fix, leaving it alone", lnkPath, target)
+			continue
+		}
+
+		log.Printf("Migrating stale shortcut (%s) -> (%s) to the launcher", lnkPath, target)
+		err = nwin.CreateShortcut(nwin.ShortcutSettings{
+			ShortcutFilePath: lnkPath,
+			TargetPath:       setupLocalPath,
+			Arguments:        shortcutArguments,
+			Description:      "The best way to play your itch.io games",
+			IconLocation:     filepath.Join(nc.baseDir, "app.ico"),
+			WorkingDirectory: filepath.Join(nc.baseDir),
+			AppUserModelId:   "io.itch.itch",
+		})
+		if err != nil {
+			log.Printf("While migrating shortcut: %+v", err)
+			log.Printf("Ignoring shortcut migration error and continuing...")
+		}
+	}
 }
 
 func (nc *nativeCore) syncUninstallRegistryEntry(version string) {
@@ -192,7 +244,29 @@ func (nc *nativeCore) Relaunch() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	setup.WaitForProcessToExit(ctx, cli.RelaunchPID)
+	err = setup.WaitForProcessToExit(ctx, cli.RelaunchPID)
+	if err != nil {
+		log.Printf("Giving up on PID %d: %+v", cli.RelaunchPID, err)
+		log.Printf("Attempting to launch anyway...")
+	}
+
+	// The main process exiting isn't enough: renderer/GPU/crash-handler
+	// children, or games holding the overlay DLL, can still keep files in
+	// the current version's folder mapped, which makes the promotion
+	// rename fail. Draining is only worth the wait when there is a build
+	// to promote and the main process is actually gone; otherwise
+	// tryLaunchCurrent skips promotion on its own.
+	if build := mv.GetCurrentVersion(); err == nil && mv.HasReadyPending() && build != nil {
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer drainCancel()
+		err = setup.WaitForDirQuiescence(drainCtx, nwin.ListProcessModulePaths, build.Path, os.Getpid())
+		if err != nil {
+			// still launch: the user asked for a restart, and promotion
+			// failing just relaunches the version they were already on
+			log.Printf("%+v", err)
+			log.Printf("Promotion will likely fail; launching whatever is current")
+		}
+	}
 
 	err = nc.tryLaunchCurrent(mv, nil)
 	if err != nil {
@@ -417,16 +491,43 @@ func readdirnames(name string) ([]string, error) {
 	return f.Readdirnames(0) // all dirs, please
 }
 
+// canPromoteSafely returns false if some running process holds files
+// inside the current version's folder, which would make the promotion
+// rename fail (and needlessly stall on rename retries).
+func (nc *nativeCore) canPromoteSafely(mv setup.Multiverse) bool {
+	build := mv.GetCurrentVersion()
+	if build == nil {
+		return true
+	}
+
+	blockers, err := setup.FindBlockingProcesses(nwin.ListProcessModulePaths, build.Path, os.Getpid())
+	if err != nil {
+		log.Printf("Could not check for processes using (%s): %+v", build.Path, err)
+		// don't block promotion on enumeration problems; the rename has
+		// its own retries
+		return true
+	}
+
+	for _, b := range blockers {
+		log.Printf("Current version is in use by PID %d (%s)", b.PID, strings.Join(b.Paths, ", "))
+	}
+	return len(blockers) == 0
+}
+
 // returns true if it successfully launched
 func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessFunc) error {
 	didPromoteReady := false
 	if mv.HasReadyPending() {
-		log.Printf("Has ready pending, trying to make it current...")
-		err := mv.MakeReadyCurrent()
-		if err != nil {
-			log.Printf("Could not make ready current: %+v", err)
+		if !nc.canPromoteSafely(mv) {
+			log.Printf("Has ready pending, but current version is in use; skipping promotion")
 		} else {
-			didPromoteReady = true
+			log.Printf("Has ready pending, trying to make it current...")
+			err := mv.MakeReadyCurrent()
+			if err != nil {
+				log.Printf("Could not make ready current: %+v", err)
+			} else {
+				didPromoteReady = true
+			}
 		}
 	}
 
@@ -907,7 +1008,9 @@ func (nc *nativeCore) launchAppDetached(appArgs []string, extraEnv []string) err
 	}
 
 	if mv.HasReadyPending() {
-		if err := mv.MakeReadyCurrent(); err != nil {
+		if !nc.canPromoteSafely(mv) {
+			log.Printf("Has ready pending, but current version is in use; skipping promotion")
+		} else if err := mv.MakeReadyCurrent(); err != nil {
 			log.Printf("Could not make ready current: %+v", err)
 		} else if build := mv.GetCurrentVersion(); build != nil {
 			nc.syncUninstallRegistryEntry(build.Version)

@@ -219,7 +219,11 @@ func (nc *nativeCore) Relaunch() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	setup.WaitForProcessToExit(ctx, pid)
+	err := setup.WaitForProcessToExit(ctx, pid)
+	if err != nil {
+		log.Printf("Giving up on PID %d: %+v", pid, err)
+		log.Printf("Attempting to launch anyway...")
+	}
 
 	mv, err := nc.newMultiverse()
 	if err != nil {
