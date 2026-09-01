@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -346,6 +347,54 @@ func Test_StateLock_ContentionTimesOut(t *testing.T) {
 		t.Fatalf("expected acquisition to succeed after release, got: %v", err)
 	}
 	lock2.release()
+}
+
+func Test_MakeReadyCurrent_BlockedByOwnWorkingDirectory(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("only Windows refuses to rename a process's working directory")
+	}
+
+	mv, baseDir := makeTestMultiverse(t, "1.0.0", "2.0.0")
+
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origWd)
+
+	// sitting inside the current version's folder holds a handle that
+	// blocks the promotion rename; expect failure after the retries
+	// (this leg takes ~10s of rename retries on Windows)
+	if err := os.Chdir(filepath.Join(baseDir, "app-1.0.0")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mv.MakeReadyCurrent(); err == nil {
+		t.Fatal("expected promotion to fail while our working directory is inside the current version folder")
+	}
+
+	state := readTestState(t, baseDir)
+	if state.Current != "1.0.0" || state.Ready != "2.0.0" {
+		t.Errorf("expected state unchanged {1.0.0, 2.0.0}, got {%s, %s}", state.Current, state.Ready)
+	}
+
+	// moving to the install root releases the handle and promotion works
+	if err := os.Chdir(baseDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := mv.MakeReadyCurrent(); err != nil {
+		t.Fatalf("expected promotion to succeed after leaving the version folder, got: %v", err)
+	}
+
+	state = readTestState(t, baseDir)
+	if state.Current != "2.0.0" || state.Ready != "" {
+		t.Errorf("expected state {2.0.0, \"\"}, got {%s, %s}", state.Current, state.Ready)
+	}
+	if dirExists(filepath.Join(baseDir, "app-1.0.0")) {
+		t.Error("expected old current app-1.0.0 to be cleaned up")
+	}
+	if !dirExists(filepath.Join(baseDir, "app-2.0.0")) {
+		t.Error("expected promoted app-2.0.0 to exist")
+	}
 }
 
 func Test_ClearReady_NoReadyIsANoOp(t *testing.T) {

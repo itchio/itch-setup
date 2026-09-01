@@ -61,6 +61,22 @@ func NewCore(cli cl.CLI) (Core, error) {
 	log.Printf("Initial base dir: (%s)", baseDir)
 	nc.baseDir = baseDir
 
+	// Our working directory may be a versioned app folder, inherited from
+	// a stale shortcut via the app that spawned us. Windows refuses to
+	// rename a directory any process is sitting in, and that rename is
+	// how updates get promoted, so move somewhere stable. If this fails,
+	// keep going: promotion has its own failure handling, and our
+	// directory may well have been safe already.
+	if _, err := os.Stat(baseDir); err == nil {
+		previous, _ := os.Getwd()
+		err := os.Chdir(baseDir)
+		if err != nil {
+			log.Printf("Could not change working directory from (%s) to (%s): %v", previous, baseDir, err)
+		} else {
+			log.Printf("Changed working directory from (%s) to (%s)", previous, baseDir)
+		}
+	}
+
 	return nc, nil
 }
 
@@ -278,6 +294,13 @@ func (nc *nativeCore) Relaunch() error {
 
 func (nc *nativeCore) Uninstall() error {
 	log.Printf("Uninstall was requested...")
+
+	// our stable working directory is the install root itself, which
+	// would block removing it below
+	if err := os.Chdir(os.TempDir()); err != nil {
+		log.Printf("Could not leave install directory: %v", err)
+	}
+
 	mv, err := nc.newMultiverse()
 	if err != nil {
 		return err
@@ -493,6 +516,15 @@ func readdirnames(name string) ([]string, error) {
 	return f.Readdirnames(0) // all dirs, please
 }
 
+// appCommand prepares a command to launch the installed app with a
+// stable working directory: passing down a versioned directory would
+// block future update promotions from renaming it.
+func (nc *nativeCore) appCommand(exePath string, args ...string) *exec.Cmd {
+	cmd := exec.Command(exePath, args...)
+	cmd.Dir = nc.baseDir
+	return cmd
+}
+
 // canPromoteSafely returns false if some running process holds files
 // inside the current version's folder, which would make the promotion
 // rename fail (and needlessly stall on rename retries).
@@ -545,7 +577,7 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessF
 
 	log.Printf("Launching (%s) from (%s)", build.Version, build.Path)
 
-	cmd := exec.Command(filepath.Join(build.Path, nc.exeName()), nc.cli.Args...)
+	cmd := nc.appCommand(filepath.Join(build.Path, nc.exeName()), nc.cli.Args...)
 
 	err := cmd.Start()
 	if err != nil {
@@ -1030,7 +1062,7 @@ func (nc *nativeCore) launchAppDetached(appArgs []string, extraEnv []string) err
 		return fmt.Errorf("missing app executable (%s): %w", exePath, rungame.ErrAppNotInstalled)
 	}
 	log.Printf("Launching (%s) from (%s)", build.Version, exePath)
-	cmd := exec.Command(exePath, append(appArgs, nc.cli.Args...)...)
+	cmd := nc.appCommand(exePath, append(appArgs, nc.cli.Args...)...)
 	cmd.Env = append(rungame.EnvWithoutOverlayPreload(), extraEnv...)
 	return cmd.Start()
 }
