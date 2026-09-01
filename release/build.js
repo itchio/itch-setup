@@ -192,8 +192,8 @@ async function main(args) {
   }
 
   if (opts.os === "darwin") {
-    // arm64 requires macOS 11.0+, x86_64 can target 10.10+
-    let minVersion = opts.arch === "arm64" ? "11.0" : "10.10";
+    const minVersion = "12.0";
+    setenv(`MACOSX_DEPLOYMENT_TARGET`, minVersion);
     setenv(`CGO_CFLAGS`, `-mmacosx-version-min=${minVersion}`);
     setenv(`CGO_LDFLAGS`, `-mmacosx-version-min=${minVersion}`);
   }

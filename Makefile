@@ -32,13 +32,9 @@ endif
 
 # macOS-specific CGO flags
 ifeq ($(GOOS),darwin)
-	ifeq ($(GOARCH),arm64)
-		export CGO_CFLAGS = -mmacosx-version-min=11.0
-		export CGO_LDFLAGS = -mmacosx-version-min=11.0
-	else
-		export CGO_CFLAGS = -mmacosx-version-min=10.10
-		export CGO_LDFLAGS = -mmacosx-version-min=10.10
-	endif
+	export MACOSX_DEPLOYMENT_TARGET = 12.0
+	export CGO_CFLAGS = -mmacosx-version-min=12.0
+	export CGO_LDFLAGS = -mmacosx-version-min=12.0
 endif
 
 .PHONY: build clean
