@@ -1,10 +1,10 @@
 package nwin
 
 import (
+	"bytes"
 	"fmt"
-	"io/ioutil"
+	"image/png"
 	"log"
-	"os"
 	"unsafe"
 
 	"github.com/itchio/itch-setup/cl"
@@ -51,35 +51,40 @@ func CenterWindow(mw *walk.FormBase) {
 	}
 }
 
+// Pre-scaled variants of the installer image, see data/installer-*@*.png
+var installerImageScales = []int{100, 150, 200}
+
 func SetInstallerImage(cli cl.CLI, imageView *walk.ImageView) {
-	imageBytes, err := data.Asset(fmt.Sprintf("data/installer-%s.png", cli.AppName))
+	dpi := imageView.DPI()
+	wantScale := dpi * 100 / 96
+	scale := installerImageScales[len(installerImageScales)-1]
+	for _, s := range installerImageScales {
+		if s >= wantScale {
+			scale = s
+			break
+		}
+	}
+
+	name := fmt.Sprintf("data/installer-%s.png", cli.AppName)
+	if scale != 100 {
+		name = fmt.Sprintf("data/installer-%s@%d.png", cli.AppName, scale)
+	}
+
+	imageBytes, err := data.Asset(name)
 	if err != nil {
 		log.Printf("Installer image not found :()")
 		return
 	}
 
-	tf, err := ioutil.TempFile("", "img")
+	src, err := png.Decode(bytes.NewReader(imageBytes))
 	if err != nil {
-		log.Printf("Could not create temp file for installer image")
-		return
-	}
-	defer os.Remove(tf.Name())
-
-	_, err = tf.Write(imageBytes)
-	if err != nil {
-		log.Printf("Could not write installer image to temp file")
+		log.Printf("Could not decode installer image: %s", err)
 		return
 	}
 
-	err = tf.Close()
+	img, err := walk.NewBitmapFromImageForDPI(src, scale*96/100)
 	if err != nil {
-		log.Printf("Could not finish writing installer image to temp file")
-		return
-	}
-
-	img, err := walk.NewImageFromFile(tf.Name())
-	if err != nil {
-		log.Printf("Could not load installer image to temp file")
+		log.Printf("Could not create installer bitmap: %s", err)
 		return
 	}
 
