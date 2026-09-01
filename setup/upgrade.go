@@ -98,18 +98,33 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 
 	if ls.version == rs.version {
 		log.Printf("We're up-to-date!")
+		if mv.HasReadyPending() {
+			// promoting it on the next launch would replace a current
+			// that is already the latest
+			log.Printf("Discarding stale ready version (%s)", mv.GetReadyVersion())
+			err := mv.ClearReady()
+			if err != nil {
+				// don't claim all is well while a downgrade candidate is
+				// still pending
+				err = fmt.Errorf("discarding stale ready version: %w", err)
+				Emit(UpdateFailed{Message: fmt.Sprintf("%+v", err)})
+				return nil, err
+			}
+		}
 		Emit(NoUpdateAvailable{})
 		return res, nil
 	}
 
 	if mv.HasReadyPending() {
-		log.Printf("Current is behind, but we have a ready version...")
 		if mv.ReadyPendingIs(rs.version) {
-			log.Printf("...and it is the latest! (%s)", rs.version)
+			log.Printf("The latest version (%s) is already ready", rs.version)
+			Emit(UpdateReady{Version: rs.version})
+			res.DidUpgrade = true
+			return res, nil
 		}
-		Emit(UpdateReady{Version: rs.version})
-		res.DidUpgrade = true
-		return res, nil
+		// continue through the normal upgrade path: QueueReady replaces
+		// the staged build with the latest one
+		log.Printf("Ready version (%s) is not the latest, superseding it with (%s)", mv.GetReadyVersion(), rs.version)
 	}
 
 	var pp *patchPlan
@@ -220,6 +235,16 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 	err = i.applyArchive(mv, rs, ap)
 	if err != nil {
 		Emit(UpdateFailed{Message: fmt.Sprintf("%+v", err)})
+		// a build staged before this attempt may still be valid; report
+		// it (from durable state, which a concurrent promotion may have
+		// changed) so the caller ends up in a truthful ready state
+		readyVersion, readyErr := mv.ReloadReadyVersion()
+		if readyErr != nil {
+			log.Printf("Could not determine surviving ready version: %+v", readyErr)
+		} else if readyVersion != "" {
+			log.Printf("Previously staged version (%s) is still ready", readyVersion)
+			Emit(UpdateReady{Version: readyVersion})
+		}
 		return nil, err
 	}
 

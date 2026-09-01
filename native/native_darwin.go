@@ -143,6 +143,8 @@ func (nc *nativeCore) Uninstall() error {
 		deleteMap := map[string]bool{
 			// installed version state
 			"state.json": true,
+			// cross-process state transition lock
+			"state.lock": true,
 			// staging directory
 			"staging": true,
 		}

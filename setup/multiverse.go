@@ -50,6 +50,18 @@ type Multiverse interface {
 	// Returns true if the ready pending version is 'version'
 	ReadyPendingIs(version string) bool
 
+	// Returns the version of the ready build pending, or "" if none
+	GetReadyVersion() string
+
+	// Re-reads durable state and returns the ready version pending, or
+	// "" if none. For reporting after long operations, where in-memory
+	// state may be stale.
+	ReloadReadyVersion() (string, error)
+
+	// Discard the ready build, removing its folder unless it doubles as
+	// the current version's folder
+	ClearReady() error
+
 	// Make the ready build current.
 	MakeReadyCurrent() error
 
@@ -145,9 +157,24 @@ func (mv *multiverse) CleanStagingFolder() error {
 }
 
 func (mv *multiverse) QueueReady(build *BuildFolder) error {
+	return mv.withStateLock(func() error {
+		return mv.queueReady(build)
+	})
+}
+
+func (mv *multiverse) queueReady(build *BuildFolder) error {
+	// another process may have changed state.json since we read it, e.g.
+	// a relaunch promoting the previous ready build while we downloaded.
+	// If we can't read the durable state, don't rename or delete
+	// anything based on the cached view.
+	if err := mv.refreshState(); err != nil {
+		return fmt.Errorf("re-reading multiverse state: %w", err)
+	}
+
 	s := mv.state
-	if s.Ready != "" {
-		log.Printf("Replacing ready (%s) with (%s)", s.Ready, build.Version)
+	oldReady := s.Ready
+	if oldReady != "" {
+		log.Printf("Replacing ready (%s) with (%s)", oldReady, build.Version)
 	} else {
 		log.Printf("Queuing ready (%s)", build.Version)
 	}
@@ -172,7 +199,19 @@ func (mv *multiverse) QueueReady(build *BuildFolder) error {
 	s.Ready = build.Version
 	err = mv.saveState()
 	if err != nil {
+		// keep the in-memory state matching the durable one, so callers
+		// reporting the ready version don't report an uncommitted value
+		s.Ready = oldReady
 		return fmt.Errorf("updating multiverse state with new ready: %w", err)
+	}
+
+	if oldReady != "" && oldReady != build.Version && oldReady != s.Current {
+		oldReadyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(oldReady))
+		log.Printf("Removing superseded ready (%s)", oldReadyPath)
+		err := os.RemoveAll(oldReadyPath)
+		if err != nil {
+			log.Printf("Could not remove superseded ready: %v", err)
+		}
 	}
 
 	return nil
@@ -189,7 +228,111 @@ func (mv *multiverse) ReadyPendingIs(version string) bool {
 	return mv.state.Ready == version
 }
 
+func (mv *multiverse) GetReadyVersion() string {
+	return mv.state.Ready
+}
+
+func (mv *multiverse) ReloadReadyVersion() (string, error) {
+	var version string
+	err := mv.withStateLock(func() error {
+		err := mv.refreshState()
+		if err != nil {
+			return err
+		}
+		version = mv.state.Ready
+		return nil
+	})
+	return version, err
+}
+
+func (mv *multiverse) ClearReady() error {
+	return mv.withStateLock(mv.clearReady)
+}
+
+func (mv *multiverse) clearReady() error {
+	if err := mv.refreshState(); err != nil {
+		return fmt.Errorf("re-reading multiverse state: %w", err)
+	}
+
+	s := mv.state
+	if s.Ready == "" {
+		return nil
+	}
+
+	oldReady := s.Ready
+	log.Printf("Discarding ready (%s)", oldReady)
+
+	// clear the state pointer first: a state referencing a missing folder
+	// is worse than an orphaned folder
+	s.Ready = ""
+	err := mv.saveState()
+	if err != nil {
+		s.Ready = oldReady
+		return fmt.Errorf("clearing ready from multiverse state: %w", err)
+	}
+
+	if oldReady != s.Current {
+		oldReadyPath := filepath.Join(mv.params.BaseDir, mv.versionToBasename(oldReady))
+		log.Printf("Removing discarded ready (%s)", oldReadyPath)
+		err := os.RemoveAll(oldReadyPath)
+		if err != nil {
+			log.Printf("Could not remove discarded ready: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// withStateLock runs fn holding the cross-process state lock, so state
+// transitions (queueing, promoting, clearing ready) can't interleave
+// between processes.
+func (mv *multiverse) withStateLock(fn func() error) error {
+	lock, err := acquireStateLock(mv.params.BaseDir)
+	if err != nil {
+		return err
+	}
+	if lock == nil {
+		log.Printf("Proceeding without state lock")
+		return fn()
+	}
+	defer lock.release()
+	return fn()
+}
+
+// refreshState re-reads state.json, which another process may have
+// modified. A missing or corrupt file keeps the in-memory state: there
+// is no valid durable state to defer to, and rewriting the file is how a
+// corrupt one heals. An I/O error is returned, as valid state may exist
+// that we just can't see, and transitions must not run on a stale view.
+func (mv *multiverse) refreshState() error {
+	err := mv.readState()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	var syntaxErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &syntaxErr) || errors.As(err, &typeErr) {
+		log.Printf("State file is corrupt, proceeding with in-memory state: %v", err)
+		return nil
+	}
+	return err
+}
+
 func (mv *multiverse) MakeReadyCurrent() error {
+	return mv.withStateLock(mv.makeReadyCurrent)
+}
+
+func (mv *multiverse) makeReadyCurrent() error {
+	// a long-running upgrade may have superseded the ready build we read
+	// at startup; promote what state.json says now, or nothing at all if
+	// the durable state can't be read
+	if err := mv.refreshState(); err != nil {
+		return fmt.Errorf("re-reading multiverse state: %w", err)
+	}
+
 	s := mv.state
 	if s.Ready == "" {
 		return fmt.Errorf("No ready to make current")

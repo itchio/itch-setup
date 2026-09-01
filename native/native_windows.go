@@ -333,6 +333,8 @@ func (nc *nativeCore) Uninstall() error {
 			nc.visualElementsManifestName(): true,
 			// installed version state
 			"state.json": true,
+			// cross-process state transition lock
+			"state.lock": true,
 		}
 
 		for _, name := range names {

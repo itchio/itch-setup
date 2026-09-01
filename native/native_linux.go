@@ -175,6 +175,8 @@ func (nc *nativeCore) Uninstall() error {
 			"itch-setup": true,
 			// installed version state
 			"state.json": true,
+			// cross-process state transition lock
+			"state.lock": true,
 			// launcher script
 			nc.cli.AppName: true,
 		}
