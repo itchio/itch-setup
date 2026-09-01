@@ -20,6 +20,14 @@ type CLI struct {
 	ProfileID    int64
 	SyncLauncher bool
 
+	// Re-exec with administrator rights before running the verb
+	// (Windows only). Used by the app when the install folder isn't
+	// writable by the current user.
+	Elevate bool
+	// Mirror JSON-lines messages to this file. An elevated process can't
+	// inherit the app's stdout, so this is how it reports back.
+	LogFile string
+
 	Silent     bool
 	NoFallback bool
 	Args       []string

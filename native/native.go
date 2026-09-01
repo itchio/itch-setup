@@ -18,6 +18,15 @@ type Core interface {
 	// launching
 	Relaunch() error
 
+	// Upgrade followed by Relaunch in one process, so that an
+	// elevated run (see RelaunchElevated) needs a single UAC prompt
+	UpgradeAndRelaunch() error
+
+	// Re-executes itch-setup with administrator rights and the same
+	// arguments. Returns true if that happened and this process should
+	// exit. Only meaningful on Windows.
+	RelaunchElevated() (bool, error)
+
 	// Shows an error dialog (with stack trace and repo link)
 	// and exits afterwards.
 	ErrorDialog(err error)

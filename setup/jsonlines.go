@@ -19,6 +19,25 @@ type message struct {
 
 var jsonEnabled = false
 var jsonLock sync.Mutex
+var jsonLogFile *os.File
+
+// SetLogFile mirrors every emitted message to path (appending), for
+// callers that can't read our stdout, such as the app after we've
+// re-executed ourselves elevated.
+func SetLogFile(path string) error {
+	jsonLock.Lock()
+	defer jsonLock.Unlock()
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	if jsonLogFile != nil {
+		jsonLogFile.Close()
+	}
+	jsonLogFile = f
+	return nil
+}
 
 func EnableJSON() {
 	jsonLock.Lock()
@@ -54,6 +73,10 @@ func Emit(p Payload) {
 	}
 
 	fmt.Fprintf(os.Stdout, "%s\n", string(bs))
+	if jsonLogFile != nil {
+		fmt.Fprintf(jsonLogFile, "%s\n", string(bs))
+		jsonLogFile.Sync()
+	}
 }
 
 //-------------------------------
@@ -96,6 +119,16 @@ func (p UpdateReady) GetType() string { return "update-ready" }
 type NoUpdateAvailable struct{}
 
 func (p NoUpdateAvailable) GetType() string { return "no-update-available" }
+
+//-------------------------------
+
+// An update is available but the install folder isn't writable by the
+// current user; applying it needs an elevated run (--elevate).
+type UpdateRequiresElevation struct {
+	Version string `json:"version"`
+}
+
+func (p UpdateRequiresElevation) GetType() string { return "update-requires-elevation" }
 
 //-------------------------------
 

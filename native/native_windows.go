@@ -3,6 +3,7 @@ package native
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -121,6 +122,15 @@ func (nc *nativeCore) Upgrade() error {
 		AppName:    cli.AppName,
 		NoFallback: cli.NoFallback,
 	})
+
+	// Program Files and friends: the app runs us as the plain user, and
+	// nothing below would succeed. Report what's available and let the
+	// app come back with --elevate.
+	if !nc.isWritableInstallDir(nc.baseDir) {
+		log.Printf("Install folder (%s) isn't writable, only checking for updates", nc.baseDir)
+		return installer.CheckUpgrade(mv)
+	}
+
 	res, err := installer.Upgrade(mv)
 	if err != nil {
 		return err
@@ -135,6 +145,30 @@ func (nc *nativeCore) Upgrade() error {
 		}
 	}
 	return nil
+}
+
+func (nc *nativeCore) UpgradeAndRelaunch() error {
+	err := nc.Upgrade()
+	if err != nil {
+		return err
+	}
+	return nc.Relaunch()
+}
+
+func (nc *nativeCore) RelaunchElevated() (bool, error) {
+	if nwin.IsElevated() {
+		log.Printf("Already elevated, not re-executing")
+		return false, nil
+	}
+
+	// --elevate stays on the command line: the elevated copy lands in
+	// the "already elevated" case above, and it tells startApp that the
+	// app must be handed back to the desktop user
+	err := nwin.RelaunchElevated(os.Args[1:])
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type PostInstallParams struct {
@@ -296,6 +330,16 @@ func (nc *nativeCore) Relaunch() error {
 	}
 
 	err = nc.tryLaunchCurrent(mv, nil)
+	if errors.Is(err, errLaunchAsUser) {
+		log.Printf("%+v", err)
+		setup.EnableJSON()
+		setup.Emit(setup.Log{Level: "error", Message: fmt.Sprintf("%+v", err)})
+		setup.DisableJSON()
+
+		msg := fmt.Sprintf("The update to %s was installed, but the app could not be started automatically.\nPlease start %s again from the Start menu.", nc.cli.AppName, nc.cli.AppName)
+		walk.MsgBox(nil, "Update installed", msg, walk.MsgBoxOK|walk.MsgBoxIconInformation)
+		return nil
+	}
 	if err != nil {
 		nc.ErrorDialog(err)
 	}
@@ -504,7 +548,7 @@ func (nc *nativeCore) killAllPrevious() {
 	for _, appDir := range appDirs {
 		err := scanAppDir(appDir)
 		if err != nil {
-			log.Printf("Skipping dir (%s): %+v", appDir)
+			log.Printf("Skipping dir (%s): %+v", appDir, err)
 			continue
 		}
 	}
@@ -535,6 +579,26 @@ func (nc *nativeCore) appCommand(exePath string, args ...string) *exec.Cmd {
 	cmd.Dir = nc.baseDir
 	return cmd
 }
+
+// The desktop-user launch is only for elevation we asked for: users who
+// are elevated on their own (UAC off, or running as administrator on
+// purpose) keep the plain launch. When it fails there is no fallback to
+// our administrator token, since that would elevate butler, every game
+// and every file the app writes for the whole session; the update is
+// already applied, so the next normal launch picks it up.
+func (nc *nativeCore) startApp(exePath string, args []string) error {
+	if nc.cli.Elevate && nwin.IsElevated() {
+		log.Printf("Running elevated, launching app as desktop user")
+		err := nwin.StartProcessAsDesktopUser(exePath, args, nc.baseDir)
+		if err != nil {
+			return fmt.Errorf("%w: %v", errLaunchAsUser, err)
+		}
+		return nil
+	}
+	return nc.appCommand(exePath, args...).Start()
+}
+
+var errLaunchAsUser = fmt.Errorf("could not launch as the desktop user")
 
 // canPromoteSafely returns false if some running process holds files
 // inside the current version's folder, which would make the promotion
@@ -588,11 +652,9 @@ func (nc *nativeCore) tryLaunchCurrent(mv setup.Multiverse, onSuccess onSuccessF
 
 	log.Printf("Launching (%s) from (%s)", build.Version, build.Path)
 
-	cmd := nc.appCommand(filepath.Join(build.Path, nc.exeName()), nc.cli.Args...)
-
-	err := cmd.Start()
+	err := nc.startApp(filepath.Join(build.Path, nc.exeName()), nc.cli.Args)
 	if err != nil {
-		nc.ErrorDialog(fmt.Errorf("Encountered a problem while launching %s: %w", nc.cli.AppName, err))
+		return fmt.Errorf("encountered a problem while launching %s: %w", nc.cli.AppName, err)
 	}
 
 	if onSuccess != nil {
@@ -1157,6 +1219,21 @@ func (nc *nativeCore) ensureWritable(dir string, installDirLineEdit *walk.LineEd
 		msg := fmt.Sprintf("You do not have permission to install to folder \"%s\".\nThe install location has been reset to the default.", dir)
 		walk.MsgBox(nc.mainWindow, "Error", msg, walk.MsgBoxOK)
 		return false
+	}
+
+	// The check above ran with our own token. If we're elevated it says
+	// nothing about the account that will run updates later.
+	if nwin.IsElevated() {
+		userCanWrite, err := nwin.DesktopUserCanWrite(dir)
+		if err != nil {
+			log.Printf("Could not check whether the desktop user can write to (%s): %+v", dir, err)
+		} else if !userCanWrite {
+			msg := fmt.Sprintf("Your user account cannot write to \"%s\".\n\n%s will install there, but every update will ask for administrator approval.\n\nInstall here anyway?", dir, nc.cli.AppName)
+			if walk.MsgBox(nc.mainWindow, "Install location", msg, walk.MsgBoxYesNo|walk.MsgBoxIconWarning) != walk.DlgCmdYes {
+				installDirLineEdit.SetText(nc.baseDir)
+				return false
+			}
+		}
 	}
 
 	return true

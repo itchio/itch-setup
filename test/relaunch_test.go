@@ -1,8 +1,11 @@
 package test
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,5 +135,52 @@ func TestRelaunch_InvalidPID(t *testing.T) {
 	// Should fail with non-zero exit code
 	if result.ExitCode == 0 {
 		t.Errorf("Expected non-zero exit code for invalid PID")
+	}
+}
+
+func TestRelaunch_LogFile(t *testing.T) {
+	h := harness.New(t)
+	defer h.Cleanup()
+
+	mv := harness.NewMultiverseSetup(t, h.TempDir(), "itch")
+	mv.CreateFullSetup("1.0.0")
+
+	cmd := exec.Command("true")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Failed to start process: %v", err)
+	}
+	pid := cmd.Process.Pid
+	cmd.Wait()
+
+	logFile := filepath.Join(h.TempDir(), "relaunch.jsonl")
+
+	resultChan := make(chan *harness.Result, 1)
+	go func() {
+		resultChan <- h.Run(
+			"--appname", "itch",
+			"--relaunch",
+			"--relaunch-pid", strconv.Itoa(pid),
+			"--log-file", logFile,
+		)
+	}()
+
+	select {
+	case result := <-resultChan:
+		t.Logf("Exit code: %d", result.ExitCode)
+		if !result.HasMessageType(harness.TypeReadyToRelaunch) {
+			t.Errorf("Expected ready-to-relaunch on stdout, got messages: %v", result.Messages)
+		}
+
+		// the same messages must land in the log file, which is how the
+		// app hears back from an elevated itch-setup that has no stdout
+		contents, err := os.ReadFile(logFile)
+		if err != nil {
+			t.Fatalf("Could not read log file: %v", err)
+		}
+		if !strings.Contains(string(contents), `"type":"ready-to-relaunch"`) {
+			t.Errorf("Expected ready-to-relaunch in log file, got:\n%s", contents)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Test timed out")
 	}
 }

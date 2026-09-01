@@ -52,16 +52,10 @@ type UpgradeResult struct {
 	DidUpgrade bool
 }
 
-func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
-	EnableJSON()
-	defer DisableJSON()
-
-	res := &UpgradeResult{}
-
+func (i *Installer) fetchStates(ctx context.Context, mv Multiverse) (*localState, *remoteState, error) {
 	var ls *localState
 	var rs *remoteState
 
-	ctx := context.Background()
 	err := taskgroup.Do(ctx,
 		// check latest version
 		func() error {
@@ -90,11 +84,50 @@ func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Printf("Installed %s", ls.version)
 	log.Printf("Latest    %s", rs.version)
+	return ls, rs, nil
+}
+
+// CheckUpgrade only compares versions, without writing anything to the
+// install folder. It's the --upgrade behavior when the install folder
+// isn't writable by the current user: an available update is reported as
+// requiring elevation, and a pending ready build isn't promoted either
+// since the promotion rename would fail the same way.
+func (i *Installer) CheckUpgrade(mv Multiverse) error {
+	EnableJSON()
+	defer DisableJSON()
+
+	ls, rs, err := i.fetchStates(context.Background(), mv)
+	if err != nil {
+		return err
+	}
+
+	if ls.version == rs.version {
+		log.Printf("We're up-to-date!")
+		Emit(NoUpdateAvailable{})
+		return nil
+	}
+
+	log.Printf("Update to (%s) is available but install folder isn't writable, elevation required", rs.version)
+	Emit(UpdateRequiresElevation{Version: rs.version})
+	return nil
+}
+
+func (i *Installer) Upgrade(mv Multiverse) (*UpgradeResult, error) {
+	EnableJSON()
+	defer DisableJSON()
+
+	res := &UpgradeResult{}
+
+	ctx := context.Background()
+	ls, rs, err := i.fetchStates(ctx, mv)
+	if err != nil {
+		return nil, err
+	}
 
 	if ls.version == rs.version {
 		log.Printf("We're up-to-date!")

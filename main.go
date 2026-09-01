@@ -18,6 +18,7 @@ import (
 	"github.com/itchio/itch-setup/localize"
 	"github.com/itchio/itch-setup/native"
 	"github.com/itchio/itch-setup/rungame"
+	"github.com/itchio/itch-setup/setup"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -47,6 +48,8 @@ func init() {
 	app.Flag("run-game", "Launch an installed itch.io game by its game ID (headlessly through butler when possible)").Int64Var(&cli.RunGameID)
 	app.Flag("profile-id", "itch.io user ID to attribute play sessions to (used with --run-game)").Int64Var(&cli.ProfileID)
 	app.Flag("sync-launcher", "Refresh the launcher copy of itch-setup and desktop integration from this binary").BoolVar(&cli.SyncLauncher)
+	app.Flag("elevate", "Re-run with administrator rights first (Windows only)").BoolVar(&cli.Elevate)
+	app.Flag("log-file", "Also write JSON-lines messages to this file").StringVar(&cli.LogFile)
 
 	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
 
@@ -203,17 +206,44 @@ func main() {
 		cli.Silent = true
 	}
 
+	if cli.LogFile != "" {
+		err = setup.SetLogFile(cli.LogFile)
+		if err != nil {
+			// the caller reads our outcome from this file; going on
+			// (and in particular prompting for elevation) without it
+			// would leave them waiting
+			jsonlBail(fmt.Errorf("Could not open --log-file (%s): %w", cli.LogFile, err))
+		}
+	}
+
 	nc, err := native.NewCore(cli)
 	if err != nil {
 		panic(err)
 	}
 
+	if cli.Elevate {
+		relaunched, err := nc.RelaunchElevated()
+		if err != nil {
+			// the app is waiting on the log file for an outcome
+			setup.EnableJSON()
+			setup.Emit(setup.UpdateFailed{Message: fmt.Sprintf("%+v", err)})
+			setup.DisableJSON()
+			jsonlBail(fmt.Errorf("Could not elevate: %w", err))
+		}
+		if relaunched {
+			log.Printf("Elevated copy started, getting out of the way")
+			return
+		}
+	}
+
 	var verbs []string
 
-	if cli.Upgrade {
+	if cli.Upgrade && cli.Relaunch {
+		// download then restart in one process, one elevation prompt
+		verbs = append(verbs, "upgrade-relaunch")
+	} else if cli.Upgrade {
 		verbs = append(verbs, "upgrade")
-	}
-	if cli.Relaunch {
+	} else if cli.Relaunch {
 		verbs = append(verbs, "relaunch")
 	}
 	if cli.Uninstall {
@@ -256,6 +286,15 @@ func main() {
 		err = nc.Relaunch()
 		if err != nil {
 			jsonlBail(fmt.Errorf("Fatal relaunch error: %w", err))
+		}
+	case "upgrade-relaunch":
+		if cli.RelaunchPID <= 0 {
+			jsonlBail(fmt.Errorf("--relaunch needs a valid --relaunch-pid (got %d)", cli.RelaunchPID))
+		}
+
+		err = nc.UpgradeAndRelaunch()
+		if err != nil {
+			jsonlBail(fmt.Errorf("Fatal upgrade error: %w", err))
 		}
 	case "uninstall":
 		err = nc.Uninstall()

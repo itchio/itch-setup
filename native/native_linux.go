@@ -256,6 +256,18 @@ func (nc *nativeCore) Upgrade() error {
 	return nil
 }
 
+func (nc *nativeCore) UpgradeAndRelaunch() error {
+	err := nc.Upgrade()
+	if err != nil {
+		return err
+	}
+	return nc.Relaunch()
+}
+
+func (nc *nativeCore) RelaunchElevated() (bool, error) {
+	return false, nil
+}
+
 func (nc *nativeCore) Relaunch() error {
 	pid := nc.cli.RelaunchPID
 
