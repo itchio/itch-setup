@@ -181,7 +181,14 @@ async function main(args) {
   }
 
   if (opts.os === "windows") {
-    $("windres -o itch-setup.syso itch-setup.rc");
+    // Embed the version in the PE VERSIONINFO resource so Explorer's
+    // Properties > Details tab shows the real version instead of 1.0.0.0
+    const semver = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
+    let rcDefines = `-DVER_STRING=${version.replace(/^v/, "")}`;
+    if (semver) {
+      rcDefines += ` -DVER_MAJOR=${semver[1]} -DVER_MINOR=${semver[2]} -DVER_PATCH=${semver[3]}`;
+    }
+    $(`windres ${rcDefines} -o itch-setup.syso itch-setup.rc`);
     $("file itch-setup.syso");
   }
 

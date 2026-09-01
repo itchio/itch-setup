@@ -20,9 +20,14 @@ endif
 # Base ldflags
 LDFLAGS = -X main.version=$(VERSION) -X main.builtAt=$(BUILT_AT) -X main.commit=$(COMMIT) -w -s
 
-# Windows-specific ldflags
+# Windows-specific ldflags and VERSIONINFO resource defines
 ifeq ($(GOOS),windows)
 	LDFLAGS += -H windowsgui -extldflags=-static
+	VER_NUMS = $(subst ., ,$(patsubst v%,%,$(VERSION)))
+	RC_DEFINES = -DVER_STRING=$(patsubst v%,%,$(VERSION))
+	ifeq ($(words $(VER_NUMS)),3)
+		RC_DEFINES += -DVER_MAJOR=$(word 1,$(VER_NUMS)) -DVER_MINOR=$(word 2,$(VER_NUMS)) -DVER_PATCH=$(word 3,$(VER_NUMS))
+	endif
 endif
 
 # Linux-specific build tags (GTK compatibility)
@@ -42,7 +47,7 @@ endif
 build: export CGO_ENABLED = 1
 build:
 ifeq ($(GOOS),windows)
-	windres -o itch-setup.syso itch-setup.rc
+	windres $(RC_DEFINES) -o itch-setup.syso itch-setup.rc
 endif
 	go build -a -ldflags "$(LDFLAGS)" $(GO_TAGS) -o $(BINARY)
 	@echo "Built $(BINARY)"
