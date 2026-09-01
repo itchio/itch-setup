@@ -50,6 +50,7 @@ func init() {
 	app.Flag("sync-launcher", "Refresh the launcher copy of itch-setup and desktop integration from this binary").BoolVar(&cli.SyncLauncher)
 	app.Flag("elevate", "Re-run with administrator rights first (Windows only)").BoolVar(&cli.Elevate)
 	app.Flag("log-file", "Also write JSON-lines messages to this file").StringVar(&cli.LogFile)
+	app.Flag("install-dir", "Use this install folder instead of looking it up (Windows only)").StringVar(&cli.InstallDir)
 
 	app.Flag("appname", "Application name (itch or kitch)").StringVar(&cli.AppName)
 
@@ -218,7 +219,7 @@ func main() {
 
 	nc, err := native.NewCore(cli)
 	if err != nil {
-		panic(err)
+		jsonlBail(fmt.Errorf("Could not initialize: %w", err))
 	}
 
 	if cli.Elevate {

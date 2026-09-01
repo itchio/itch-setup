@@ -19,12 +19,18 @@ func URLProtocols(appName string) []string {
 // RegisterURLProtocols registers the app's URL schemes (per-user) to open
 // through the stable launcher rather than a versioned app-X.Y.Z executable,
 // which would go stale on the next self-update.
-func RegisterURLProtocols(cli cl.CLI, launcherPath string) error {
+func RegisterURLProtocols(cli cl.CLI, user *UserProfile, launcherPath string) error {
 	command := fmt.Sprintf(`"%s" --prefer-launch --appname %s -- "%%1"`, launcherPath, cli.AppName)
 
+	classes, err := user.classesHive()
+	if err != nil {
+		return err
+	}
+	defer classes.Close()
+
 	for _, proto := range URLProtocols(cli.AppName) {
-		log.Printf("Registering URL protocol (%s:) -> %s", proto, command)
-		err := registerURLProtocol(proto, launcherPath, command)
+		log.Printf("Registering URL protocol (%s:) -> %s for %s", proto, command, user)
+		err := registerURLProtocol(classes, proto, launcherPath, command)
 		if err != nil {
 			return fmt.Errorf("registering %s: protocol: %w", proto, err)
 		}
@@ -32,10 +38,10 @@ func RegisterURLProtocols(cli cl.CLI, launcherPath string) error {
 	return nil
 }
 
-func registerURLProtocol(proto string, launcherPath string, command string) error {
-	base := fmt.Sprintf(`Software\Classes\%s`, proto)
+func registerURLProtocol(classes registry.Key, proto string, launcherPath string, command string) error {
+	base := proto
 
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, base, registry.WRITE)
+	k, _, err := registry.CreateKey(classes, base, registry.WRITE)
 	if err != nil {
 		return err
 	}
@@ -50,7 +56,7 @@ func registerURLProtocol(proto string, launcherPath string, command string) erro
 		return err
 	}
 
-	ik, _, err := registry.CreateKey(registry.CURRENT_USER, base+`\DefaultIcon`, registry.WRITE)
+	ik, _, err := registry.CreateKey(classes, base+`\DefaultIcon`, registry.WRITE)
 	if err != nil {
 		return err
 	}
@@ -60,7 +66,7 @@ func registerURLProtocol(proto string, launcherPath string, command string) erro
 		return err
 	}
 
-	ck, _, err := registry.CreateKey(registry.CURRENT_USER, base+`\shell\open\command`, registry.WRITE)
+	ck, _, err := registry.CreateKey(classes, base+`\shell\open\command`, registry.WRITE)
 	if err != nil {
 		return err
 	}

@@ -143,6 +143,12 @@ re-runs itch-setup with `--elevate` (Windows only) to perform the update with
 administrator rights. On the app side, the outcome of these headless runs is
 read from the JSON-lines messages written to `--log-file`.
 
+The elevated copy may run under a different account than the one that asked
+(a standard user entering an administrator's credentials at the UAC prompt).
+It still updates the original install and writes shortcuts, the uninstall
+entry and protocol handlers to the interactive desktop user's profile, then
+starts the app as that user.
+
 ### Broth
 
 [Broth](https://broth.itch.zone) is itch.io's package distribution service. itch-setup fetches packages from Broth at URLs like:
@@ -293,6 +299,7 @@ On Windows, the `itch-setup.exe` binary cannot delete itself while running, so i
 | `--profile-id <id>` | itch.io user ID to attribute play sessions to (used with `--run-game`) |
 | `--sync-launcher` | Refresh the launcher copy of itch-setup and the desktop integration (shortcuts, protocol handlers) from the binary being run. Used by the app after a self-update; no-op on macOS |
 | `--elevate` | Re-run itch-setup with administrator rights before doing anything else (Windows only). Used with `--upgrade` when the install folder isn't writable |
+| `--install-dir <path>` | Internal. Absolute install folder to use instead of looking it up (Windows only); the `--elevate` re-run passes its own down |
 | `--log-file <path>` | Also write JSON-lines status messages to this file, so a caller can read the outcome of `--upgrade` / `--relaunch` |
 | `-- <args...>` | Everything after `--` is passed through to the itch app's command line (Linux and Windows only) |
 

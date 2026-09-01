@@ -29,8 +29,14 @@ type DWORDValue struct {
 
 const uninstallRegPrefix = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
 
-func GetRegistryInstallDir(cli cl.CLI) (string, error) {
-	pk, err := registry.OpenKey(registry.CURRENT_USER, uninstallRegPrefix, registry.ENUMERATE_SUB_KEYS)
+func GetRegistryInstallDir(cli cl.CLI, user *UserProfile) (string, error) {
+	hive, err := user.hive()
+	if err != nil {
+		return "", err
+	}
+	defer hive.Close()
+
+	pk, err := registry.OpenKey(hive, uninstallRegPrefix, registry.ENUMERATE_SUB_KEYS)
 	if err != nil {
 		return "", err
 	}
@@ -52,10 +58,16 @@ func GetRegistryInstallDir(cli cl.CLI) (string, error) {
 
 // CreateUninstallRegistryEntry creates all registry entries required to
 // have the app show up in Add or Remove software and be uninstalled by the user
-func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, version string) error {
-	log.Printf("Creating uninstall key under (%s\\%s)", uninstallRegPrefix, cli.AppName)
+func CreateUninstallRegistryEntry(cli cl.CLI, user *UserProfile, installDir string, version string) error {
+	log.Printf("Creating uninstall key under (%s\\%s) for %s", uninstallRegPrefix, cli.AppName, user)
 
-	pk, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallRegPrefix, registry.CREATE_SUB_KEY)
+	hive, err := user.hive()
+	if err != nil {
+		return err
+	}
+	defer hive.Close()
+
+	pk, _, err := registry.CreateKey(hive, uninstallRegPrefix, registry.CREATE_SUB_KEY)
 	if err != nil {
 		return err
 	}
@@ -128,8 +140,14 @@ func CreateUninstallRegistryEntry(cli cl.CLI, installDir string, version string)
 	return nil
 }
 
-func RemoveUninstallerRegistryKey(cli cl.CLI) error {
-	pk, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallRegPrefix, registry.WRITE)
+func RemoveUninstallerRegistryKey(cli cl.CLI, user *UserProfile) error {
+	hive, err := user.hive()
+	if err != nil {
+		return err
+	}
+	defer hive.Close()
+
+	pk, _, err := registry.CreateKey(hive, uninstallRegPrefix, registry.WRITE)
 	if err != nil {
 		return err
 	}

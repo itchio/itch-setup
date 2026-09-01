@@ -24,6 +24,10 @@ type CLI struct {
 	// (Windows only). Used by the app when the install folder isn't
 	// writable by the current user.
 	Elevate bool
+	// Install root resolved by the caller, for the elevated re-exec:
+	// under another administrator's account, its own lookup would
+	// land in that account's profile.
+	InstallDir string
 	// Mirror JSON-lines messages to this file. An elevated process can't
 	// inherit the app's stdout, so this is how it reports back.
 	LogFile string

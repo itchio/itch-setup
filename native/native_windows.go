@@ -30,13 +30,30 @@ type nativeCore struct {
 	mainWindow *walk.MainWindow
 	folders    nwin.Folders
 	baseDir    string
+	user       *nwin.UserProfile
 }
 
 // NewCore returns a windows-specific Core implementation
 func NewCore(cli cl.CLI) (Core, error) {
-	nc := &nativeCore{cli: cli}
+	nc := &nativeCore{cli: cli, user: nwin.CurrentUserProfile()}
 
-	folders, err := nwin.GetFolders()
+	// The elevated copy may run under a different administrator's
+	// account (a standard user typing someone else's credentials at the
+	// UAC prompt). Folders, shortcuts and HKCU keys still belong to the
+	// user who asked.
+	// No falling back to our own profile: that would put everything in
+	// the wrong account, and the app couldn't be started as the desktop
+	// user afterwards anyway.
+	if cli.Elevate && nwin.IsElevated() {
+		user, err := nwin.DesktopUserProfile()
+		if err != nil {
+			return nil, fmt.Errorf("resolving the desktop user to update for: %w", err)
+		}
+		nc.user = user
+	}
+	log.Printf("Per-user integration goes to: %s", nc.user)
+
+	folders, err := nc.user.Folders()
 	if err != nil {
 		return nil, fmt.Errorf("During setup initialization: %w", err)
 	}
@@ -46,7 +63,7 @@ func NewCore(cli cl.CLI) (Core, error) {
 	defaultBaseDir := filepath.Join(folders.LocalAppData, cli.AppName)
 	baseDir := defaultBaseDir
 
-	registryBaseDir, err := nwin.GetRegistryInstallDir(cli)
+	registryBaseDir, err := nwin.GetRegistryInstallDir(cli, nc.user)
 	if err != nil {
 		log.Printf("Could not get registry base dir: %+v", err)
 	} else {
@@ -58,6 +75,15 @@ func NewCore(cli cl.CLI) (Core, error) {
 			log.Printf("Strays from defaults, taking it into account")
 			baseDir = registryBaseDir
 		}
+	}
+	if cli.InstallDir != "" {
+		// resolved by the caller as the right user; our own lookup
+		// above may have run under someone else's profile
+		if !filepath.IsAbs(cli.InstallDir) {
+			return nil, fmt.Errorf("--install-dir must be an absolute path, got (%s)", cli.InstallDir)
+		}
+		log.Printf("Install dir from command line: (%s)", cli.InstallDir)
+		baseDir = filepath.Clean(cli.InstallDir)
 	}
 	log.Printf("Initial base dir: (%s)", baseDir)
 	nc.baseDir = baseDir
@@ -163,8 +189,13 @@ func (nc *nativeCore) RelaunchElevated() (bool, error) {
 
 	// --elevate stays on the command line: the elevated copy lands in
 	// the "already elevated" case above, and it tells startApp that the
-	// app must be handed back to the desktop user
-	err := nwin.RelaunchElevated(os.Args[1:])
+	// app must be handed back to the desktop user. The install dir goes
+	// along too, since the elevated copy may not share our profile.
+	args := os.Args[1:]
+	if nc.cli.InstallDir == "" {
+		args = append([]string{"--install-dir", nc.baseDir}, args...)
+	}
+	err := nwin.RelaunchElevated(args)
 	if err != nil {
 		return false, err
 	}
@@ -199,7 +230,7 @@ func (nc *nativeCore) doPostInstall(mv setup.Multiverse, params PostInstallParam
 		return err
 	}
 
-	err = nwin.RegisterURLProtocols(cli, setupLocalPath)
+	err = nwin.RegisterURLProtocols(cli, nc.user, setupLocalPath)
 	if err != nil {
 		log.Printf("While registering URL protocols: %+v", err)
 		log.Printf("Ignoring protocol registration error and continuing...")
@@ -288,7 +319,7 @@ func (nc *nativeCore) migrateStaleShortcuts(setupLocalPath string, shortcutArgum
 }
 
 func (nc *nativeCore) syncUninstallRegistryEntry(version string) {
-	err := nwin.CreateUninstallRegistryEntry(nc.cli, nc.baseDir, version)
+	err := nwin.CreateUninstallRegistryEntry(nc.cli, nc.user, nc.baseDir, version)
 	if err != nil {
 		log.Printf("While creating registry entry: %+v", err)
 		log.Printf("Ignoring uninstall registry entry creation error and continuing...")
@@ -455,7 +486,7 @@ func (nc *nativeCore) Uninstall() error {
 	}
 
 	log.Printf("Removing uninstaller entry...")
-	err = nwin.RemoveUninstallerRegistryKey(cli)
+	err = nwin.RemoveUninstallerRegistryKey(cli, nc.user)
 	if err != nil {
 		log.Printf("While removing uninstaller entry: %+v", err)
 		log.Printf("(Note: these aren't critical)")
