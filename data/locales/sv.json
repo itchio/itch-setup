@@ -1,6 +1,6 @@
 {
   "setup.window.title": "{{app_name}} Inställningar",
-  "setup.window.welcome": "Välkommen till {{app_name}} installationen! Hämta något att dricka, välj installationsställe och gå vidare till nästa steg.",
+  "setup.window.welcome": "Välkommen till {{app_name}} installationen! Välj installationsställe och gå vidare till nästa steg.",
   "setup.tooltip.location": "Klicka för att ändra installationsställe",
   "setup.action.browse": "Bläddra",
   "setup.action.install": "Installera nu",

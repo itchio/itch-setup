@@ -1,6 +1,6 @@
 {
   "setup.window.title": "{{app_name}} asennus",
-  "setup.window.welcome": "Tervetuloa ohjelman {{app_name}} asennukseen! Nappaa juoma, valitse asennussijainti ja mene eteenpäin.",
+  "setup.window.welcome": "Tervetuloa ohjelman {{app_name}} asennukseen! Valitse asennussijainti ja mene eteenpäin.",
   "setup.tooltip.location": "Napsauta vaihtaaksesi asennussijainti",
   "setup.action.browse": "Selaa",
   "setup.action.install": "Asenna nyt",

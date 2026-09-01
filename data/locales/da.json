@@ -1,6 +1,6 @@
 {
   "setup.window.title": "{{app_name}} Setup",
-  "setup.window.welcome": "Velkommen til {{app_name}}-installationen. Snup en bajer, vælg en installationslokation, og fortsæt.",
+  "setup.window.welcome": "Velkommen til {{app_name}}-installationen. Vælg en installationslokation, og fortsæt.",
   "setup.tooltip.location": "Klik for at ændre installationslokationen",
   "setup.action.browse": "Gennemse",
   "setup.action.install": "Installer nu",

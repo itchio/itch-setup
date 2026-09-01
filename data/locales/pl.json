@@ -1,6 +1,6 @@
 {
   "setup.window.title": "Konfiguracja {{app_name}}",
-  "setup.window.welcome": "Witaj w instalatorze {{app_name}}! Nalej sobie coś do picia, wybierz ścieżkę instalacji i do dzieła.",
+  "setup.window.welcome": "Witaj w instalatorze {{app_name}}! Wybierz ścieżkę instalacji i do dzieła.",
   "setup.tooltip.location": "Kliknij aby zmienić ścieżkę instalacji",
   "setup.action.browse": "Przeglądaj",
   "setup.action.install": "Instaluj teraz",

@@ -1,6 +1,6 @@
 {
   "setup.window.title": "Instalo de {{app_name}}",
-  "setup.window.welcome": "Bonvenon en la instalo {{app_name}}! Prenu trinkaĵon, elektu instalan lokon kaj daŭrigi.",
+  "setup.window.welcome": "Bonvenon en la instalo {{app_name}}! Elektu instalan lokon kaj daŭrigu.",
   "setup.tooltip.location": "Alklaku por ŝanĝi la instalan lokon",
   "setup.action.browse": "Foliumi",
   "setup.action.install": "Instali nun",

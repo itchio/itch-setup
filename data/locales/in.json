@@ -1,6 +1,6 @@
 {
   "setup.window.title": "Penyiapan {{app_name}}",
-  "setup.window.welcome": "Selamat datang di installer {{app_name}}! Ambil minum, tentukan lokasi install dan lanjut.",
+  "setup.window.welcome": "Selamat datang di installer {{app_name}}! Tentukan lokasi install dan lanjut.",
   "setup.tooltip.location": "Klik untuk mengganti lokasi install",
   "setup.action.install": "Install sekarang",
   "setup.status.preparing": "Pemanasan...",

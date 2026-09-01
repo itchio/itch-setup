@@ -1,6 +1,6 @@
 {
   "setup.window.title": "Установка {{app_name}}",
-  "setup.window.welcome": "Вас приветствует установщик {{app_name}}! Располагайтесь поудобнее, выбирайте папку для установки и нажмите Установить.",
+  "setup.window.welcome": "Вас приветствует установщик {{app_name}}! Выберите папку для установки и нажмите Установить.",
   "setup.tooltip.location": "Изменить папку для установки",
   "setup.action.browse": "Обзор",
   "setup.action.install": "Установить",

@@ -1,6 +1,6 @@
 {
   "setup.window.title": "{{app_name}}-installatie",
-  "setup.window.welcome": "Welkom bij de installatie van {{app_name}}! Pak iets te drinken, kies een installeerlocatie en ga verder.",
+  "setup.window.welcome": "Welkom bij de installatie van {{app_name}}! Kies een installeerlocatie en ga verder.",
   "setup.tooltip.location": "Klik om de installeerlocatie te veranderen",
   "setup.action.browse": "Bladeren",
   "setup.action.install": "Nu installeren",

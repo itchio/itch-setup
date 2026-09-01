@@ -1,6 +1,6 @@
 {
   "setup.window.title": "{{app_name}} のセットアップ",
-  "setup.window.welcome": "{{app_name}} のインストーラーにようこそ!  一杯やってから、インストール先を選んで続行してね。",
+  "setup.window.welcome": "{{app_name}} のインストーラーにようこそ! インストール先を選んで続行してね。",
   "setup.tooltip.location": "クリックしてインストール先を変更",
   "setup.action.browse": "閲覧",
   "setup.action.install": "今すぐインストールします",

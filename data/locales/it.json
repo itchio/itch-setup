@@ -1,6 +1,6 @@
 {
   "setup.window.title": "Setup di {{app_name}}",
-  "setup.window.welcome": "Benvenuto nell'installazione di {{app_name}}! Prenditi un aperitivo, punta ad una destinazione di installazione e procedi.",
+  "setup.window.welcome": "Benvenuto nell'installazione di {{app_name}}! Scegli una destinazione di installazione e procedi.",
   "setup.tooltip.location": "Clicca per modificare la posizione di installazione",
   "setup.action.browse": "Sfoglia",
   "setup.action.install": "Installa ora",
