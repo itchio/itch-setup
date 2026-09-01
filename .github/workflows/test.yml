@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: Integration tests
+  test-linux:
+    name: Tests (linux)
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout
@@ -17,5 +17,35 @@ jobs:
       with:
         go-version-file: 'go.mod'
 
+    - name: Linux dependencies
+      run: sudo apt-get install -y libpango1.0-dev libpangocairo-1.0-0 libgdk-pixbuf2.0-dev libgtk-3-dev
+
     - name: Run tests
-      run: go test -v -count=1 -timeout 120s ./test/...
+      run: go test -v -count=1 -timeout 300s ./...
+
+  test-portable:
+    # The integration harness (./test/...) builds the full binary and only
+    # works on Linux; these run the portable unit tests, notably the
+    # multiverse state transitions and the cross-process state lock, on
+    # the platforms where they matter most.
+    name: Unit tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Run tests
+      run: go test -v -count=1 -timeout 300s ./setup/... ./rungame/...
