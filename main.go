@@ -224,10 +224,6 @@ func main() {
 	if cli.Elevate {
 		relaunched, err := nc.RelaunchElevated()
 		if err != nil {
-			// the app is waiting on the log file for an outcome
-			setup.EnableJSON()
-			setup.Emit(setup.UpdateFailed{Message: fmt.Sprintf("%+v", err)})
-			setup.DisableJSON()
 			jsonlBail(fmt.Errorf("Could not elevate: %w", err))
 		}
 		if relaunched {
@@ -335,7 +331,12 @@ func main() {
 	}
 }
 
+// jsonlBail reports a fatal error on the JSON channel before exiting, so
+// the app gets an outcome even when it can't see our stderr (an elevated
+// run only has the --log-file).
 func jsonlBail(err error) {
-	// TODO: use json-lines
+	setup.EnableJSON()
+	setup.Emit(setup.UpdateFailed{Message: fmt.Sprintf("%+v", err)})
+	setup.DisableJSON()
 	log.Fatalf("%+v", err)
 }
