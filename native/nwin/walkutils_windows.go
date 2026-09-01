@@ -40,9 +40,9 @@ func CenterWindow(mw *walk.FormBase) {
 		mon := RectangleFromRECT(mi.RcWork)
 		mon.Height -= int(win.GetSystemMetrics(win.SM_CYCAPTION))
 
-		size := mw.Size()
+		size := mw.SizePixels()
 
-		mw.SetBounds(walk.Rectangle{
+		mw.SetBoundsPixels(walk.Rectangle{
 			X:      mon.X + (mon.Width-size.Width)/2,
 			Y:      mon.Y + (mon.Height-size.Height)/2,
 			Width:  size.Width,

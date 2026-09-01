@@ -23,7 +23,7 @@
     </application>
   </compatibility>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
-    <security>"
+    <security>
       <requestedPrivileges>
         <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
@@ -32,6 +32,8 @@
   <asmv3:application>
     <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
       <longPathAware>true</longPathAware>
+      <dpiAwareness>PerMonitorV2, PerMonitor</dpiAwareness>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">True</dpiAware>
     </asmv3:windowsSettings>
   </asmv3:application>
 </assembly>
