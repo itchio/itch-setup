@@ -1,12 +1,12 @@
 module github.com/itchio/itch-setup
 
-go 1.25.0
+go 1.25.3
 
 require (
 	github.com/Xuanwo/go-locale v1.1.3
 	github.com/dchest/safefile v0.0.0-20151022103144-855e8d98f185
 	github.com/google/uuid v1.6.0
-	github.com/gotk3/gotk3 v0.6.1
+	github.com/gotk3/gotk3 v0.6.3
 	github.com/itchio/go-itchio v0.0.0-20260722142243-6e0c1ede75c4
 	github.com/itchio/headway v0.0.0-20251229214354-da882c8b5dd4
 	github.com/itchio/httpkit v0.0.0-20260213231528-25109ada88c9
@@ -17,15 +17,14 @@ require (
 	github.com/lxn/walk v0.0.0-20191128110447-55ccb3a9f5c1
 	github.com/lxn/win v0.0.0-20191128105842-2da648fda5b4
 	github.com/mitchellh/go-ps v1.0.0
-	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e
+	github.com/scjalliance/comshim v0.0.0-20260808212102-9fa4e0fd1400
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	golang.org/x/sys v0.47.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
-	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/certifi/gocertifi v0.0.0-20210507211836-431795d63e8d // indirect
@@ -43,7 +42,7 @@ require (
 	github.com/getlantern/ops v0.0.0-20231025133620-f368ab734534 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
