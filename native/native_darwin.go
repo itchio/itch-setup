@@ -370,6 +370,26 @@ func (nc *nativeCore) RunGame(gameID int64) error {
 	return fmt.Errorf("--run-game is not supported on macOS")
 }
 
+// The bundle's executable is run directly: LaunchBundle can't forward
+// arguments, and the app forwards --shutdown to the running instance
+// through its single-instance lock.
+func (nc *nativeCore) Shutdown() error {
+	mv, err := nc.newMultiverse()
+	if err != nil {
+		return err
+	}
+	b := mv.GetCurrentVersion()
+	if b == nil {
+		log.Printf("No installed %s, nothing to shut down", nc.cli.AppName)
+		return nil
+	}
+	exePath := filepath.Join(b.Path, "Contents", "MacOS", nc.cli.AppName)
+	if _, err := os.Stat(exePath); err != nil {
+		return fmt.Errorf("missing app executable (%s)", exePath)
+	}
+	return exec.Command(exePath, "--shutdown").Start()
+}
+
 // macOS has no launcher copy: the app bundle path is stable.
 func (nc *nativeCore) SyncLauncher() error {
 	log.Printf("nativeCore.SyncLauncher() on Darwin is a no-op")

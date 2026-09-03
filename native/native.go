@@ -45,4 +45,8 @@ type Core interface {
 	// only thing that propagates a new itch-setup to the paths shims
 	// and shortcuts point at.
 	SyncLauncher() error
+
+	// Asks a running app to quit, through the app's own --shutdown
+	// flag. A no-op when no app is installed.
+	Shutdown() error
 }

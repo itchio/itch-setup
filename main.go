@@ -48,6 +48,7 @@ func init() {
 	app.Flag("run-game", "Launch an installed itch.io game by its game ID (headlessly through butler when possible)").Int64Var(&cli.RunGameID)
 	app.Flag("profile-id", "itch.io user ID to attribute play sessions to (used with --run-game)").Int64Var(&cli.ProfileID)
 	app.Flag("sync-launcher", "Refresh the launcher copy of itch-setup and desktop integration from this binary").BoolVar(&cli.SyncLauncher)
+	app.Flag("shutdown", "Ask the running itch app to quit (does nothing when it isn't installed)").BoolVar(&cli.Shutdown)
 	app.Flag("elevate", "Re-run with administrator rights first (Windows only)").BoolVar(&cli.Elevate)
 	app.Flag("log-file", "Also write JSON-lines messages to this file").StringVar(&cli.LogFile)
 	app.Flag("install-dir", "Use this install folder instead of looking it up (Windows only)").StringVar(&cli.InstallDir)
@@ -255,6 +256,9 @@ func main() {
 	if cli.SyncLauncher {
 		verbs = append(verbs, "sync-launcher")
 	}
+	if cli.Shutdown {
+		verbs = append(verbs, "shutdown")
+	}
 
 	if len(verbs) > 1 {
 		nc.ErrorDialog(fmt.Errorf("Cannot specify more than one verb: got %s", strings.Join(verbs, ", ")))
@@ -328,6 +332,11 @@ func main() {
 		err = nc.SyncLauncher()
 		if err != nil {
 			jsonlBail(fmt.Errorf("Fatal sync-launcher error: %w", err))
+		}
+	case "shutdown":
+		err = nc.Shutdown()
+		if err != nil {
+			jsonlBail(fmt.Errorf("Fatal shutdown error: %w", err))
 		}
 	}
 }

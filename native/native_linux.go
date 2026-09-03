@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -375,6 +376,18 @@ func (nc *nativeCore) RunGame(gameID int64) error {
 		ProfileID:   nc.cli.ProfileID,
 		LaunchApp:   nc.launchAppDetached,
 	}, gameID)
+}
+
+// Shutdown asks a running app to quit by starting a second instance
+// with --shutdown, which the app forwards to the running one through
+// its single-instance lock. Returns as soon as the request is sent.
+func (nc *nativeCore) Shutdown() error {
+	err := nc.launchAppDetached([]string{"--shutdown"}, nil)
+	if errors.Is(err, rungame.ErrAppNotInstalled) {
+		log.Printf("No installed %s, nothing to shut down", nc.cli.AppName)
+		return nil
+	}
+	return err
 }
 
 func (nc *nativeCore) SyncLauncher() error {

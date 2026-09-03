@@ -19,6 +19,7 @@ type CLI struct {
 	RunGameID    int64
 	ProfileID    int64
 	SyncLauncher bool
+	Shutdown     bool
 
 	// Re-exec with administrator rights before running the verb
 	// (Windows only). Used by the app when the install folder isn't
