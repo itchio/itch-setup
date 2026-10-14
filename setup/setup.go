@@ -188,7 +188,7 @@ func (i *Installer) doInstall(mv Multiverse, installSource InstallSource) error 
 	signatureURL := i.buildBrothURL(nil, "%s/signature/default", version)
 	archiveURL := i.buildBrothURL(nil, "%s/archive/default", version)
 
-	sigSource, err := filesource.Open(signatureURL, option.WithConsumer(i.consumer))
+	sigSource, err := filesource.Open(ctx, signatureURL, option.WithConsumer(i.consumer))
 	if err != nil {
 		return fmt.Errorf("while opening remote signature file: %w", err)
 	}

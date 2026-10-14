@@ -297,14 +297,14 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		log.Printf("☁ %s", signatureURL)
 
 		consumer := newConsumer()
-		sigSource, err := filesource.Open(signatureURL, option.WithConsumer(consumer))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		sigSource, err := filesource.Open(ctx, signatureURL, option.WithConsumer(consumer))
 		if err != nil {
 			return err
 		}
 		defer sigSource.Close()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 		sigInfo, err := pwr.ReadSignature(ctx, sigSource)
 		if err != nil {
 			return err
@@ -347,7 +347,10 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		patchURL := i.buildBrothURL(nil, "%s/patch/%s", bp.Version, f.SubType)
 		log.Printf("☁ %s", patchURL)
 
-		patchSource, err := filesource.Open(patchURL, option.WithConsumer(consumer))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		patchSource, err := filesource.Open(ctx, patchURL, option.WithConsumer(consumer))
 		if err != nil {
 			return err
 		}
@@ -359,9 +362,6 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 			},
 		})
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
 		p, err := patcher.New(patchSource, consumer)
 		if err != nil {
 			return err
@@ -369,6 +369,7 @@ func (i *Installer) applyPatches(mv Multiverse, ls *localState, pp *patchPlan) e
 		startPrintingProgress(ctx, tracker)
 
 		targetPool := fspool.New(p.GetTargetContainer(), targetDir)
+		defer targetPool.Close()
 
 		bwl, err := bowl.NewFreshBowl(bowl.FreshBowlParams{
 			TargetContainer: p.GetTargetContainer(),
@@ -427,7 +428,10 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 
 	consumer := newConsumer()
 
-	archiveFile, err := eos.Open(archiveURL, option.WithConsumer(i.consumer))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	archiveFile, err := eos.Open(ctx, archiveURL, option.WithConsumer(i.consumer))
 	if err != nil {
 		return err
 	}
@@ -441,9 +445,6 @@ func (i *Installer) applyArchive(mv Multiverse, rs *remoteState, ap *archivePlan
 	if err != nil {
 		return err
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	tracker := tracker.New(tracker.Opts{
 		ByteAmount: &tracker.ByteAmount{Value: archiveStats.Size()},
